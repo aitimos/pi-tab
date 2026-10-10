@@ -11,7 +11,7 @@ Drag Pi Tab to your bookmarks bar, open a webpage, and click the bookmark. Use t
 ### → [Open the Pi Tab installer](https://xred-team.github.io/pi-tab/)
 
 1. Open the installer above in Chrome. You can also download the [HTML file](pi-bookmarklet-chat-install.html) and open it locally.
-2. Enter any **API protocol, Base URL, API Key, and model name** you want to save, then click **生成书签** (Generate bookmark). You can leave all fields blank or save only some of them.
+2. Select the **API protocol** and enter the **Base URL and API Key** in the chat panel. Models are discovered automatically; choose a model and thinking level, then click **保存并开始** (Save and start). You can try it immediately, and the bookmark will use the saved settings. You can also save an unconfigured bookmark and set it up later.
 3. Show the bookmarks bar (Windows: `Ctrl+Shift+B`; macOS: `⌘+Shift+B`), then drag the **Pi Tab** button onto it.
 4. Open the webpage you want to work with and click **Pi Tab**.
 5. If the saved configuration is complete, enter a task directly. Otherwise, fill in the missing settings in the floating window and click **保存并开始** (Save and start).
@@ -28,11 +28,11 @@ Press `Enter` to send or `Shift+Enter` for a new line. You can drag or minimize 
 
 Use a model that supports tool calling. Enter the API address and model name supplied by your provider.
 
-| API protocol | Base URL |
-| --- | --- |
-| `openai-completions` | The root URL of a Chat Completions-compatible API, usually ending in `/v1` |
-| `openai-responses` | The root URL of a Responses API, usually ending in `/v1` |
-| `anthropic-messages` | The root URL of an Anthropic API; the official endpoint is `https://api.anthropic.com` |
+API types, endpoint suggestions, model metadata, and thinking levels come from the installed Pi SDK. Models are fetched from your service automatically. Retry with **获取模型** (Fetch models), or enter a model ID manually. Models labeled **目录参考** come from Pi's catalog and are not confirmed available for your account.
+
+Use the controls below the composer to search and switch models or adjust thinking without clearing the conversation. Switching is disabled while a task runs. Thinking levels use Pi's original values and supported options.
+
+`google-vertex` uses a Vertex Express API key; `bedrock-converse-stream` uses a Bedrock API key; `openai-codex-responses` needs a valid Codex OAuth access token. Obtain credentials from the respective service; this page does not perform OAuth login or refresh.
 
 The bookmark contains all the code and does not download external scripts at runtime. Model requests still connect to the API you configure.
 
@@ -65,6 +65,6 @@ npm install
 npm run build
 ```
 
-The source entry point is `src/plugin.js`. This command generates the Console plugin and Console bookmark installer under `dist/`. It does not update the floating chat bookmark installer in the repository root.
+The source entry point is `src/plugin.js`. This command generates the Console plugin and Console bookmark installer under `dist/`, and updates the runtime in the floating chat bookmark installer in the repository root. Run `npm test` to check model discovery and Pi model settings.
 
 If your model API does not allow CORS, run `npm start` to start the local relay. Then pass the `proxyUrl` and `proxyToken` printed in the terminal to `pi.configure()` in the current page’s Console. The page must still allow connections to the local address.

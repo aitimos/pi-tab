@@ -11,7 +11,7 @@
 ### → [打开 Pi Tab 安装页](https://xred-team.github.io/pi-tab/)
 
 1. 用 Chrome 打开上面的安装页。也可以下载 [HTML 文件](pi-bookmarklet-chat-install.html) 后在本地打开。
-2. 在安装页填写想保存在书签中的 **接口类型、接口地址（Base URL）、密钥（API Key）和模型名称**，点击「生成书签」。可以全部留空或只填部分内容。
+2. 在聊天窗口选择 **接口类型**，填写 **接口地址（Base URL）和密钥（API Key）**。模型列表会自动获取，选好模型和思考档位后点击「保存并开始」。可以直接试用，书签也会自动使用这份设置；也可以先保存空白书签，在使用时配置。
 3. 显示书签栏（Windows：`Ctrl+Shift+B`；macOS：`⌘+Shift+B`），把 **Pi Tab** 按钮拖到书签栏。
 4. 打开想操作的网页，点击 **Pi Tab**。
 5. 配置齐全时直接输入任务；未填写完整时，在悬浮窗补全缺少的配置，点击「保存并开始」。
@@ -28,11 +28,11 @@
 
 使用支持工具调用的模型，地址和模型名按你的服务商提供的信息填写。
 
-| API 协议 | Base URL |
-| --- | --- |
-| `openai-completions` | Chat Completions 兼容接口根地址，通常以 `/v1` 结尾 |
-| `openai-responses` | Responses 接口根地址，通常以 `/v1` 结尾 |
-| `anthropic-messages` | Anthropic 接口根地址，官方地址为 `https://api.anthropic.com` |
+接口类型、已知服务地址、模型参数和思考档位来自项目安装的 Pi SDK。填写地址后会自动获取服务的模型列表，也可点击「获取模型」重试；获取失败时可以手动填写模型名称。标为「目录参考」的模型来自 Pi 内置目录，是否可用取决于你的服务和账号权限。
+
+对话输入框下方可以搜索和切换模型、调整思考档位，已有对话会保留。当前任务运行时不能切换。思考档位显示 Pi 的原始值，只列出当前模型支持的选项；不在目录中的模型可手动启用思考能力。
+
+`google-vertex` 使用 Vertex Express API Key，`bedrock-converse-stream` 使用 Bedrock API Key，`openai-codex-responses` 需要有效的 Codex OAuth Access Token。这些凭据由相应服务提供，页面不包含 OAuth 登录或凭据刷新流程。
 
 书签包含完整代码，运行时不下载外部脚本；模型请求仍会访问你填写的 API。
 
@@ -65,6 +65,6 @@ npm install
 npm run build
 ```
 
-源码入口为 `src/plugin.js`。此命令生成 `dist/` 下的 Console 插件及 Console 书签安装页，不会更新根目录的悬浮聊天书签安装页。
+源码入口为 `src/plugin.js`。此命令生成 `dist/` 下的 Console 插件及书签安装页，并同步更新根目录聊天安装页的内嵌运行时和 Pi 模型目录。`npm test` 检查模型发现、接口请求和思考能力。
 
 如果模型接口没有开放 CORS，可以运行 `npm start` 启动本机转发服务，再在当前网页的 Console 中将终端打印的 `proxyUrl` 和 `proxyToken` 传给 `pi.configure()`。页面仍需允许连接本机地址。

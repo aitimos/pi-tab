@@ -6,7 +6,8 @@
   "scripts": {
     "build": "node build.mjs",
     "bookmarklet": "node make-bookmarklet.mjs",
-    "start": "node relay.mjs"
+    "start": "node relay.mjs",
+    "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {
     "@earendil-works/chord": "1.1.0",
