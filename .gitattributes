@@ -1,0 +1,3 @@
+* text=auto eol=lf
+# Generated bundle contains template literals with intentional whitespace.
+dist/*.js -whitespace

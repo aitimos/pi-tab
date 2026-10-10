@@ -1,0 +1,21 @@
+{
+  "name": "pi-tab",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "bookmarklet": "node make-bookmarklet.mjs",
+    "start": "node relay.mjs"
+  },
+  "dependencies": {
+    "@earendil-works/chord": "1.1.0",
+    "@earendil-works/pi-ai": "1.1.0",
+    "@earendil-works/pi-durable": "1.1.0",
+    "sval": "0.6.12",
+    "typebox": "1.3.27"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12"
+  }
+}

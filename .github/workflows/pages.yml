@@ -1,0 +1,38 @@
+name: Deploy Pi Tab to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - pi-bookmarklet-chat-install.html
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/configure-pages@v5
+      - name: Prepare installer
+        run: |
+          mkdir -p _site
+          cp pi-bookmarklet-chat-install.html _site/index.html
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
