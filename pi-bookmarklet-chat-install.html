@@ -33,8 +33,8 @@
 <section class="card save-card" id="save-card" aria-labelledby="save-title" data-ready="true">
 <div class="card-heading"><span class="step-number" aria-hidden="true">02</span><h2 id="save-title">保存到书签栏</h2><span class="install-state" id="install-state">可保存</span></div>
 <p class="intro">请在电脑浏览器中完成以下步骤。</p>
-<div class="drop-area"><a id="pi-bookmarklet" draggable="true" tabindex="0" aria-describedby="status">Pi Tab</a><div class="drag-hint" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 3 14 9-7 1-3 7Z"/></svg>拖到浏览器顶部的书签栏</div><p class="status" id="status" role="status" aria-live="polite"></p></div>
-<ol class="instructions"><li><div><strong>显示浏览器书签栏</strong><div class="shortcuts"><span>Mac <kbd>⌘ ⇧ B</kbd></span><span>Windows <kbd>Ctrl Shift B</kbd></span></div></div></li><li><div><strong>拖动上方按钮，保存书签</strong><p>将按钮拖到浏览器书签栏后松开。</p></div></li><li><div><strong>打开网页，点击书签</strong><p>按提示补全模型信息，就能在对话窗口中提问或描述任务。</p></div></li></ol>
+<div class="drop-area"><a id="pi-bookmarklet" draggable="true" tabindex="0" aria-describedby="bookmark-hint status" title="点击在当前页打开，或拖到书签栏">Pi Tab</a><div class="drag-hint" id="bookmark-hint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 3 14 9-7 1-3 7Z"/></svg>拖到书签栏保存，或点击在本页试用</div><p class="status" id="status" role="status" aria-live="polite"></p></div>
+<ol class="instructions"><li><div><strong>显示浏览器书签栏</strong><div class="shortcuts"><span>Mac <kbd>⌘ ⇧ B</kbd></span><span>Windows <kbd>Ctrl Shift B</kbd></span></div></div></li><li><div><strong>拖动上方按钮，保存书签</strong><p>将按钮拖到浏览器书签栏后松开。也可点击按钮，在本页打开聊天窗口。</p></div></li><li><div><strong>打开网页，点击书签</strong><p>按提示补全模型信息，就能在对话窗口中提问或描述任务。</p></div></li></ol>
 <p class="small update-note">修改设置后，请重新生成书签，并替换浏览器中的旧书签。</p>
 <details class="manual"><summary>手动添加书签</summary><div class="manual-content"><p>复制下方地址，在浏览器的书签管理器中新建书签。填写名称，将地址粘贴到新书签的“网址”栏，再保存。</p><button class="secondary" id="copy-bookmark" type="button">复制书签地址</button><p id="copy-status" role="status" aria-live="polite"></p><textarea id="bookmark-url" readonly aria-label="书签地址" spellcheck="false" hidden></textarea></div></details>
 </section>
@@ -1160,10 +1160,9 @@ bookmark.addEventListener('keydown', event => {
   }
 });
 bookmark.addEventListener('click', event => {
+  if (bookmark.hasAttribute('href')) return;
   event.preventDefault();
-  statusNode.textContent = bookmark.hasAttribute('href')
-    ? '请将按钮拖到浏览器书签栏，再打开网页点击保存的书签。'
-    : '请先点击“生成书签”。';
+  statusNode.textContent = '请先点击“生成书签”。';
 });
 bookmark.addEventListener('dragstart', event => {
   if (!bookmark.hasAttribute('href')) event.preventDefault();
