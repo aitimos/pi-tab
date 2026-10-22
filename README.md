@@ -8,7 +8,7 @@
 
 ## 开始使用
 
-### → [打开 Pi Tab 安装页](https://xred-team.github.io/pi-tab/)
+### → [打开 Pi Tab 安装页](https://aitimos.github.io/pi-tab/)
 
 1. 用 Chrome 打开上面的安装页。也可以下载 [HTML 文件](pi-bookmarklet-chat-install.html) 后在本地打开。
 2. 在聊天窗口选择 **接口类型**，填写 **接口地址（Base URL）和密钥（API Key）**。模型列表会自动获取，选好模型和思考档位后点击「保存并开始」。可以直接试用，书签也会自动使用这份设置；也可以先保存空白书签，在使用时配置。
