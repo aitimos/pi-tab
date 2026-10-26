@@ -12,6 +12,15 @@ test('thinking choices exactly follow the installed Pi catalog',()=>{
  for(const model of models)assert.deepEqual(service.describe({api:model.api,baseUrl:model.baseUrl,model:model.id,modelInfo:model}).thinkingLevels,getSupportedThinkingLevels(model));
  assert.deepEqual(service.describe({api:'openai-completions',model:'unknown-model'}).thinkingLevels,['off']);
 });
+test('model metadata belongs to the selected API and endpoint',()=>{
+ const another=models.find(model=>model.reasoning);
+ assert.ok(another);
+ const selected=service.describe({api:'openai-completions',baseUrl:'https://api.deepseek.com',model:another.id});
+ assert.equal(selected.reasoning,false);
+ assert.deepEqual(selected.thinkingLevels,['off']);
+ const stale=service.describe({api:'openai-completions',baseUrl:'https://api.deepseek.com',model:another.id,modelInfo:another});
+ assert.equal(stale.reasoning,false);
+});
 test('URLs are validated before a credential-bearing request',async()=>{
  for(const value of ['javascript:alert(1)','https://user:pass@host/v1','https://host/v1?q=1','https://host/v1#secret'])assert.throws(()=>normalizeBaseUrl(value));
  let called=false;await assert.rejects(service.discover({api:'openai-completions',baseUrl:'https://host/?key=secret'},{fetch:()=>{called=true;}}));assert.equal(called,false);

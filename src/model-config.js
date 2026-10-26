@@ -9,11 +9,10 @@ export function normalizeBaseUrl(value) {
 }
 export function createModelConfig({ models:catalog = [], apis = [] } = {}) {
   function describe({ api, baseUrl, model, modelInfo = {}, reasoning, thinking = 'off' }) {
-    const matches = catalog.filter(item => item.id === model || item.id === model?.split('/').at(-1));
-    matches.sort((a,b) => Number(b.api === api) - Number(a.api === api) || Number(b.baseUrl === baseUrl) - Number(a.baseUrl === baseUrl));
+    const matches = catalog.filter(item => item.api === api && (!baseUrl || item.baseUrl?.replace(/\/+$/, '') === baseUrl.replace(/\/+$/, '')) && (item.id === model || item.id === model?.split('/').at(-1)));
     const ref = matches[0];
     const info = { id:model, name:model, api, baseUrl, reasoning:false, input:['text'], contextWindow:128000, maxTokens:16384, cost:{input:0,output:0,cacheRead:0,cacheWrite:0} };
-    for (const source of [ref, modelInfo]) if (source) for (const key of safeKeys) {
+    for (const source of [ref, modelInfo?.api && (modelInfo.api !== api || modelInfo.baseUrl?.replace(/\/+$/, '') !== baseUrl?.replace(/\/+$/, '')) ? null : modelInfo]) if (source) for (const key of safeKeys) {
       if (source[key] !== undefined && (key !== 'compat' || !source.api || source.api === api)) info[key] = source[key];
     }
     if (reasoning !== undefined) info.reasoning = reasoning;
@@ -22,8 +21,7 @@ export function createModelConfig({ models:catalog = [], apis = [] } = {}) {
     return info;
   }
   function fallback(api, baseUrl) {
-    const host = new URL(baseUrl).hostname;
-    return catalog.filter(item => item.api === api && (() => { try { return new URL(item.baseUrl).hostname === host; } catch { return false; } })());
+    return catalog.filter(item => item.api === api && item.baseUrl?.replace(/\/+$/, '') === baseUrl);
   }
   async function discover(config, { fetch:request = globalThis.fetch, signal } = {}) {
     const { api, apiKey = '' } = config;

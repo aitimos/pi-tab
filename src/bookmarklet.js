@@ -1,10 +1,28 @@
 export function createBookmarklet(source, { openChat, config } = {}) {
   const code = `void(async()=>{try{
-    if(!window.pi?.__piConsolePlugin){${source}\n}
-    if(!window.pi?.__piConsolePlugin)throw new Error('无法载入 Pi Tab，页面可能限制了脚本运行。');
-    await window.pi.ready;
+    let pi=window.pi?.__piConsolePlugin?window.pi:window.__piTabAgent?.__piConsolePlugin?window.__piTabAgent:null;
+    if(!pi){
+      const deferred=globalThis.__piTabDeferredInstall;
+      globalThis.__piTabDeferredInstall=true;
+      try{${source}\n}finally{
+        if(deferred===undefined)delete globalThis.__piTabDeferredInstall;
+        else globalThis.__piTabDeferredInstall=deferred;
+      }
+      pi=PiConsolePlugin.install({globalName:'pi' in window?'__piTabAgent':'pi'});
+    }
+    await pi.ready;
     ${openChat ? `(${openChat.toString()})(${JSON.stringify(config || {})});` : ''}
-  }catch(error){console.error('[Pi Tab]',error);window.alert('Pi Tab 无法启动：'+(error.message||error));}})();`;
+  }catch(error){
+    console.error('[Pi Tab]',error);
+    const notice=document.createElement('div');
+    notice.setAttribute('role','alert');
+    notice.style.cssText='position:fixed;right:16px;bottom:16px;z-index:2147483647;max-width:min(400px,calc(100vw - 32px));padding:12px 14px;border:.5px solid #484848;border-radius:10px;background:#191919;color:#eeeeee;font:13px/1.5 system-ui,sans-serif';
+    notice.textContent='Pi Tab 无法启动：'+String(error?.message||error).slice(0,240);
+    const close=document.createElement('button');
+    close.type='button';close.textContent='关闭';close.style.cssText='margin-left:12px;padding:4px 8px;border:.5px solid #484848;border-radius:6px;background:#2a2a2a;color:#eeeeee;cursor:pointer';
+    close.onclick=()=>notice.remove();notice.append(close);
+    (document.body||document.documentElement).append(notice);
+  }})()`;
   // Keep the script in the URL's opaque path: a raw "?" makes the browser treat
   // the rest as a query and apply additional escaping, inflating its stored size.
   // Escape literal percent signs too, so "%xx" in strings survives execution.

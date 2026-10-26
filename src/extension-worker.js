@@ -1,0 +1,116 @@
+const activeKey = tabId => `active:${tabId}`;
+const siteOf = url => {
+  const parsed = new URL(url);
+  if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Pi Tab 只能在普通网页使用。');
+  return parsed.hostname.toLowerCase();
+};
+let openingEngine;
+
+async function ensureEngine() {
+  if (await chrome.offscreen.hasDocument()) return;
+  openingEngine ??= chrome.offscreen.createDocument({url:'engine.html',reasons:['WORKERS'],justification:'让网页刷新和跳转后，Pi agent 继续运行。'}).finally(() => { openingEngine=null; });
+  await openingEngine;
+}
+
+async function engineCall(site, tabId, method, args, chatId, name) {
+  await ensureEngine();
+  const response=await chrome.runtime.sendMessage({target:'engine',site,tabId,method,args,chatId,name});
+  if(!response?.ok)throw new Error(response?.error||'Pi agent 没有响应。');
+  return response.value;
+}
+
+async function activate(tabId) {
+  await chrome.storage.session.set({[activeKey(tabId)]:true});
+  try { await chrome.tabs.sendMessage(tabId,{type:'activate'}); } catch { /* The page may still be loading. */ }
+}
+
+chrome.action.onClicked.addListener(tab => { if(tab.id)void activate(tab.id); });
+chrome.tabs.onRemoved.addListener(tabId => { void chrome.storage.session.remove(activeKey(tabId)); });
+chrome.tabs.onUpdated.addListener((tabId,change) => {
+  if(change.status!=='complete')return;
+  void chrome.storage.session.get(activeKey(tabId)).then(saved=>{if(saved[activeKey(tabId)])return activate(tabId);});
+});
+
+chrome.runtime.onMessage.addListener((message,sender,respond) => {
+  if(message.target==='engine'||message.type==='shared-config-updated')return false;
+  (async()=>{
+    if(message.type==='shared-config'){
+      if(message.operation==='get')return chrome.storage.local.get(['profiles','providers']);
+      const saved=await chrome.storage.local.get(['profiles','providers']);
+      if(message.operation==='profile-save'){
+        saved.profiles=[...(saved.profiles||[]).filter(item=>item.id!==message.profile.id),message.profile];
+      }else if(message.operation==='provider-save'){
+        saved.providers=[...(saved.providers||[]).filter(item=>item.id!==message.provider.id),message.provider];
+      }else throw new Error('未知设置操作。');
+      await chrome.storage.local.set(saved);
+      await chrome.runtime.sendMessage({type:'shared-config-updated',profiles:saved.profiles||[],providers:saved.providers||[]});
+      return true;
+    }
+    if(message.type==='identity'){
+      const tabId=sender.tab?.id;
+      if(!tabId)throw new Error('无法确定当前标签页。');
+      const saved=await chrome.storage.session.get(activeKey(tabId));
+      return {tabId,site:siteOf(sender.tab.url),active:Boolean(saved[activeKey(tabId)])};
+    }
+    if(message.type==='engine-call'){
+      const tabId=sender.tab?.id;
+      if(!tabId)throw new Error('无法确定当前标签页。');
+      return engineCall(siteOf(sender.tab.url),tabId,message.method,message.args,message.chatId,message.name);
+    }
+    if(message.type==='page-tool'){
+      const tabs=await chrome.tabs.query({});
+      const candidates=tabs.filter(tab=>tab.id&&tab.url&&(()=>{try{return siteOf(tab.url)===message.site;}catch{return false;}})());
+      const ordered=[...candidates.filter(tab=>tab.id===message.tabId),...candidates.filter(tab=>tab.id!==message.tabId)];
+      if(!ordered.length)throw new Error('当前站点没有可用的网页。');
+      let failure;
+      for(const tab of ordered){
+        for(let attempt=0;attempt<20;attempt++){
+          try{
+            const response=await chrome.tabs.sendMessage(tab.id,{type:'execute-tool',name:message.name,args:message.args});
+            if(!response?.ok)throw new Error(response?.error||'网页工具执行失败。');
+            return response.value;
+          }catch(error){
+            if(!/Receiving end does not exist|Could not establish connection|message port closed/i.test(error.message))throw error;
+            failure=error;
+            if(attempt<19)await new Promise(resolve=>setTimeout(resolve,300));
+          }
+        }
+      }
+      throw failure;
+    }
+    if(message.type==='engine-event'){
+      const tabs=await chrome.tabs.query({});
+      await Promise.all(tabs.filter(tab=>tab.id&&tab.url&&(()=>{try{return siteOf(tab.url)===message.site;}catch{return false;}})())
+        .map(tab=>chrome.tabs.sendMessage(tab.id,{type:'engine-event',event:message.event}).catch(()=>{})));
+      return true;
+    }
+    if(message.type==='tabs-list'){
+      const tabs=await chrome.tabs.query({});
+      const listed=[];
+      for(const tab of tabs){
+        if(!tab.id||!tab.url)continue;
+        let site;try{site=siteOf(tab.url);}catch{continue;}
+        const saved=await chrome.storage.session.get(activeKey(tab.id));
+        if(!saved[activeKey(tab.id)])continue;
+        listed.push({tabId:tab.id,title:tab.title,url:tab.url,agents:await engineCall(site,tab.id,'listChats')});
+      }
+      return {tabs:listed};
+    }
+    if(message.type==='tabs-open'){
+      const url=new URL(message.url);
+      siteOf(url.href);
+      const tab=await chrome.tabs.create({url:url.href,active:false});
+      await chrome.storage.session.set({[activeKey(tab.id)]:true});
+      return {tabId:tab.id,url:tab.url,loading:true};
+    }
+    if(message.type==='tabs-send'||message.type==='tabs-read'){
+      const tab=await chrome.tabs.get(message.tabId);
+      const site=siteOf(tab.url);
+      await activate(tab.id);
+      return engineCall(site,tab.id,message.type==='tabs-send'?'receiveFromTab':'readAgent',
+        message.type==='tabs-send'?[message.text,`标签页 ${sender.tab?.id||'其他'} 的 agent ${message.fromChatId}`]:[message.limit],message.chatId);
+    }
+    throw new Error('未知扩展消息。');
+  })().then(value=>respond({ok:true,value}),error=>respond({ok:false,error:error.message||String(error)}));
+  return true;
+});

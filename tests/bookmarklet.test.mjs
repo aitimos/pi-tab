@@ -5,7 +5,7 @@ import { runInNewContext } from 'node:vm';
 import { createBookmarklet } from '../src/bookmarklet.js';
 
 test('bookmark runs once, awaits startup and preserves URL-sensitive config', { timeout:2000 }, async () => {
-  const source = `window.loads=(window.loads||0)+1;window.pi={__piConsolePlugin:true,ready:Promise.resolve().then(()=>window.started=true)};`;
+  const source = `var PiConsolePlugin={install(){window.loads=(window.loads||0)+1;return window.pi={__piConsolePlugin:true,ready:Promise.resolve().then(()=>window.started=true)};}};`;
   const config = { api:'openai-completions', model:'模型 "test"', apiKey:'test-only-\n-<&%20?#😀-key' };
   const url = createBookmarklet(source, {
     config,
@@ -25,14 +25,31 @@ test('bookmark runs once, awaits startup and preserves URL-sensitive config', { 
   }
 });
 
-test('startup errors are shown instead of failing silently', { timeout:2000 }, async () => {
+test('startup errors show a dismissible page notice without a browser alert', async () => {
   const source = 'throw new Error("启动测试");';
-  const result = new Promise(resolve => {
-    runInNewContext(decodeURIComponent(createBookmarklet(source).slice(11)), {
-      window:{ alert:resolve }, console:{error() {}},
-    });
+  const notices = [];
+  runInNewContext(decodeURIComponent(createBookmarklet(source).slice(11)), {
+    window:{ alert() { throw new Error('不应弹出浏览器 alert'); } },
+    document:{
+      createElement(tag) { return {tag,style:{},children:[],setAttribute(){},append(child){this.children.push(child);},remove(){this.removed=true;}}; },
+      body:{append(node){notices.push(node);}},
+    },
+    console:{error() {}},
   });
-  assert.equal(await result, 'Pi Tab 无法启动：启动测试');
+  assert.equal(notices[0].textContent, 'Pi Tab 无法启动：启动测试');
+  assert.equal(notices[0].children[0].textContent, '关闭');
+  notices[0].children[0].onclick();
+  assert.equal(notices[0].removed, true);
+});
+
+test('a page using window.pi can still start Pi Tab', async () => {
+  const source = `var PiConsolePlugin={install({globalName}){const pi={__piConsolePlugin:true,ready:Promise.resolve()};window[globalName]=pi;return pi;}};`;
+  const page = {pi:{pageOwned:true}};
+  const opened = new Promise(resolve => { page.opened=resolve; });
+  const url = createBookmarklet(source, {openChat:function() { window.opened(window.__piTabAgent); }});
+  runInNewContext(decodeURIComponent(url.slice(11)), {window:page,console:{error() {}}});
+  assert.equal((await opened).__piConsolePlugin, true);
+  assert.equal(page.pi.pageOwned, true);
 });
 
 test('oversized bookmarks are rejected before they can be saved', () => {
