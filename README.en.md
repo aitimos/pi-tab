@@ -2,124 +2,70 @@
 
 [简体中文](README.md) | English
 
-**Harness in Browser**
+**Run Pi Agent in your browser.**
 
-Pi Tab runs Pi Agent in your browser using Pi Durable. Open it with a bookmark or Chrome extension to read pages, click buttons, fill forms, run JavaScript, and save conversations. The extension shares conversations across tabs on the same hostname, restores windows after reloads, and supports collaboration across tabs.
+Built on Pi Durable, Pi Tab brings an agent into the webpage you are browsing. Open it with a bookmark or Chrome extension to read the page, interact with elements, run JavaScript, and save conversations, without setting up a separate automation environment.
 
-## Get started
+[Get started](https://aitimos.github.io/pi-tab/) | [Download extension](https://github.com/aitimos/pi-tab/releases/latest/download/pi-tab-extension.zip) | [Changelog](CHANGELOG.md)
 
-### → [Open the Pi Tab installer](https://aitimos.github.io/pi-tab/)
+## Highlights
 
-1. Open the installer above in Chrome. You can also download the [standalone HTML file](https://github.com/aitimos/pi-tab/releases/latest/download/pi-bookmarklet-chat-install.html) and open it locally.
-2. Select the **API protocol** and enter the **Base URL and API Key** in the chat panel. Models are discovered automatically; choose a model and thinking level, then click **保存并开始** (Save and start). You can try it immediately, and the bookmark will use the saved settings. You can also save an unconfigured bookmark and set it up later.
-3. Show the bookmarks bar (Windows: `Ctrl+Shift+B`; macOS: `⌘+Shift+B`), then drag the **Pi Tab** button onto it.
-4. Open the webpage you want to work with and click **Pi Tab**.
-5. If the saved configuration is complete, enter a task directly. Otherwise, fill in the missing settings in the floating window and click **保存并开始** (Save and start).
+- **Open with a click**: the bookmark contains the complete runtime and needs no extension or server deployment. A Chrome extension is also available.
+- **Work directly on the page**: use page content and the DOM to analyze, click, fill forms, and debug JavaScript in your current browser context.
+- **Keep your conversations**: history stays on your device and can be reopened. Pi Durable supports unfinished task recovery; extension background runs survive webpage reloads.
+- **Choose your models**: add multiple providers and models, switch from the composer, and set thinking levels supported by each model.
 
-Try these prompts:
+## Features
 
-- “Summarize the main points of this page.”
-- “Convert the table on this page to CSV.”
-- “Find out why this page scrolls horizontally and fix it.”
+| Feature | What you can do |
+| --- | --- |
+| Reading and extraction | Summarize pages, extract tables and lists, and organize data as JSON or CSV |
+| Page interaction and debugging | Click, fill forms, inspect DOM and styles, and execute JavaScript |
+| Files and images | Attach text and code files, drop files, or paste images with a vision-capable model |
+| Follow-up messages | Add tasks while a reply is running, edit the queue, or send a message directly to steer the current task |
+| Conversation management | Generate titles automatically, see running status, switch or delete conversations, and open another task in a new window |
+| Agent collaboration | Exchange messages between agents on the same page; the extension can also open tabs, send tasks, and read results |
+| Appearance and preferences | Follow the page or system theme, or choose light or dark; drag, resize, minimize, and dock windows at the edge |
 
-At desktop widths, press `Enter` to send or `Shift+Enter` for a new line; use the send button on narrow screens. Messages sent during a reply enter a queue. Hold or right-click the send button and choose **直接发送** to steer the current task. Queued messages can be edited, canceled, or promoted to steering messages.
+Try: “Summarize this page,” “Turn this table into CSV,” or “Find out why this page scrolls horizontally.”
 
-The top **新对话** button starts a blank conversation in the current window. **新开窗口** opens another blank conversation with the same model configuration. You can switch conversations while tasks run; a ring on the right marks running conversations. To remove a conversation, click its trash icon, then **确认删除**. Stop running tasks first. Deleting the current conversation switches to another; deleting the last one creates a blank conversation.
+## Quick start
 
-Windows support dragging, resizing, snapping to the left or right edge, and minimizing. Windows snap only when released within 20px of either side; positions in the middle stay where you place them. Docked windows remain at the edge when the browser resizes. In **Pi 设置**, choose **跟随** (follow), **浅色** (light), or **深色** (dark). Follow is the default: it uses the page’s CSS color scheme or background, falling back to the browser or system preference. Settings are grouped into General, Instructions, and Execution, with a fixed save button. They include a restore-built-in-instructions action, automatic context compaction, retries, tool execution, and queue options. Model controls are below the composer.
+You need a model that supports tool calling, its Base URL, API key, and model name.
 
-## Install the Chrome extension
+### Bookmark
 
-Use the extension when you want active tasks to resume automatically after a reload or agents in different tabs to collaborate.
+1. Open the [installer](https://aitimos.github.io/pi-tab/), configure your model, and try it out.
+2. Drag the **Pi Tab** button to your bookmarks bar.
+3. Open a webpage, click the bookmark, and enter a task.
 
-1. Download and extract the [Pi Tab extension](https://github.com/aitimos/pi-tab/releases/latest/download/pi-tab-extension.zip).
-2. Open `chrome://extensions`, enable Developer mode, click **Load unpacked**, and select the extracted `pi-tab-extension` folder.
-3. On a regular webpage, click the Pi Tab toolbar icon to enable that tab. Configure a model and start working. The tab will restore automatically after a reload.
+No extension is required. You can also save the bookmark first and configure it when you use it.
 
-Bookmark mode uses `agent_spawn` to create a conversation on the same page. Installing the extension does not add extension tools to a bookmark session; start from the Chrome toolbar icon for cross-tab work.
+### Chrome extension
 
-The extension provides `tab_list`, `tab_open`, `tab_send`, and `tab_read`. `tab_open` opens a new tab with its own conversation, including on the same hostname, and returns `tabId` and `chatId` for sending tasks and reading results. Conversations are grouped by exact hostname: paths, query parameters, and tabs on `www.bilibili.com` share a list, while `search.bilibili.com` has a separate list. Saved models and providers are shared across websites. The extension supports ordinary HTTP and HTTPS pages, not browser internal pages, extension stores or other pages that prohibit injection, or local `file://` pages.
-
-## Configure your model
-
-Use a model that supports tool calling. Enter the API address and model name supplied by your provider.
-
-API types, endpoint suggestions, model metadata, and thinking levels come from the installed Pi SDK. Models are fetched from your service automatically. Retry with **获取模型** (Fetch models), or enter a model ID manually. Models labeled **目录参考** come from Pi's catalog and are not confirmed available for your account.
-
-After the first reply, the current model generates a short conversation title in the background. It is saved and updated in the list without blocking input. Failed attempts keep the temporary title and retry after a later completed reply.
-
-The lightweight model dropdown below the composer lists saved models and discovered models from the current provider. Choose **添加模型** (Add model) to select a provider inside the window. Use **添加提供商** (Add provider) beside the provider field to add a connection. Providers store a name, API type, URL, and key. Adding a model reuses a provider and offers model discovery, search, or a manually entered ID, with its own thinking settings. Changing models preserves the conversation. Model and thinking changes are disabled while that conversation runs, but you can switch conversations. Only supported thinking levels are listed; unknown models can have reasoning enabled manually. New conversations inherit the source conversation's model and thinking settings; there is no separate global default-model setting.
-
-`google-vertex` uses a Vertex Express API key; `bedrock-converse-stream` uses a Bedrock API key; `openai-codex-responses` needs a valid Codex OAuth access token. Obtain credentials from the respective service; this page does not perform OAuth login or refresh.
-
-The bookmark contains all the code and does not download external scripts at runtime. Model requests still connect to the API you configure.
-
-## Files and images
-
-Use the attachment button, drop files into the composer, or paste images. Supported formats are UTF-8 text, source code, Markdown, JSON, CSV, and PNG/JPEG/WebP/GIF images. Images require a vision-capable model; custom models can enable image input under Model capabilities when the service supports it. PDF, Word, Excel, audio/video, and archives are not parsed.
-
-Up to 8 attachments are allowed, with 5 MB per file and 10 MB total. Attachments are sent to the configured model service and saved with sent messages. Editing a queued message preserves its attachments. Switching conversations within a window retains separate drafts and pending attachments; unsent drafts do not survive a page reload.
-
-## Conversation storage and recovery
+1. [Download the extension](https://github.com/aitimos/pi-tab/releases/latest/download/pi-tab-extension.zip) and extract it.
+2. Open `chrome://extensions`, enable Developer mode, select **Load unpacked**, and choose the `pi-tab-extension` folder.
+3. Click the Pi Tab toolbar icon on a webpage, configure a model, and start working.
 
 | | Bookmark | Chrome extension |
 | --- | --- | --- |
-| Storage | IndexedDB in the webpage's origin | Extension IndexedDB, grouped by exact hostname |
-| Multiple tabs | Concurrent tabs may use separate stores; a shared list is not guaranteed | Tabs on the same hostname share a conversation list |
-| Reload and navigation | Click again to open a blank conversation, or resume an unfinished task; previous conversations remain in the list | Enabled tabs are reinjected; background runs survive webpage reloads |
-| Model settings | Separate webpage storage; the bookmark carries its saved configuration | Saved models and providers are shared across websites |
+| Launch | Click the bookmark to inject it into the page | Click the browser toolbar icon |
+| After a reload | Click again for a blank conversation, or to resume an unfinished task | Enabled tabs restore automatically; background tasks keep running |
+| Conversations and settings | Stored within the webpage origin; concurrent tabs may use separate records | Conversations shared by exact hostname; model settings shared across websites |
+| Collaboration | Multiple agents on the current page | Tasks across browser tabs |
 
-Continuing page operations requires an available tab on the target website. Task continuity is not guaranteed after closing the browser, uninstalling the extension, or clearing storage. Bookmark mode also depends on the page's CSP, same-origin restrictions, and storage permissions. Neither mode provides cloud conversation sync or automatically merges records with the other mode.
+The two modes keep separate conversation records. Start from the extension icon for cross-tab tools; installing the extension does not add those tools to bookmark sessions.
 
-Deleting a conversation removes its list entry and resets its active context. Saved models and providers remain. Pi Durable's underlying history log is retained in local storage; this is not a disk data erasure feature.
+## Before you start
 
-## Scope and limitations
+- Inference uses your configured service. Page content and attachments needed for a task are sent to that API. Bookmarks may contain API keys; do not share bookmarks containing credentials.
+- Page security policies may block bookmark execution or model connections. The extension supports ordinary HTTP/HTTPS webpages, not browser internal pages or other pages that prohibit injection.
+- Conversations stay on your device, with no cloud sync. To update, save a new bookmark from the installer or replace and reload the extension files.
 
-- AI works within the current webpage. It can read content and element styles, click, fill out forms, run JavaScript, and inspect Console logs and fetch request summaries recorded after injection.
-- The standalone installer needs no Node.js or server. Bookmark URLs include the saved model configuration and API key and may sync with browser bookmarks. Save the bookmark again after changing installer settings. Do not share bookmarks containing keys.
-- Bookmark tools run in the webpage environment and can access exposed JavaScript globals. Extension tools run in an isolated environment: they can operate on the DOM but cannot directly access the page scripts' globals. Console and fetch capture only covers the tools' execution environment, not the complete DevTools Console or Network panel.
-- Bookmark requests require the model API to allow cross-origin browser requests (CORS), and page policies may block scripts or connections. The extension sends model requests from its background environment rather than the webpage origin; valid credentials and a reachable API are still required.
-- Stopping a task does not undo changes already made to the page or interrupt synchronous JavaScript that blocks the page.
+See the [user guide](docs/usage.en.md) for detailed controls, attachment formats, storage, and recovery behavior.
 
-## Development and debugging
+## Contribute
 
-For everyday use, the bookmark installer above is all you need. To work from the browser’s developer Console, you can also paste the [complete plugin](dist/pi-console.js), then run:
-
-```js
-await pi.configure({
-  api: 'openai-completions',
-  baseUrl: 'https://your-model-provider/v1',
-  apiKey: 'your API key',
-  model: 'your model name',
-});
-await pi.prompt('Check this page for layout issues');
-pi.help(); // Show tools, configuration, and control methods
-```
-
-Use Node.js 24. From the repository root:
-
-```bash
-npm ci
-npm run build
-npm test
-```
-
-The plugin source entry point is `src/plugin.js`, and the installer source is `src/install-template.html`. This command generates the Console plugin, bookmark installer, and Chrome extension folder and ZIP under `dist/`, and updates the runtime in the floating chat bookmark installer in the repository root. `npm test` covers model discovery, API requests, thinking settings, bookmark packaging, and extension message routing.
-
-Extension window regression tests use `agent-browser` in a separate Chrome for Testing session. After building, set `PI_TAB_TEST_CHROME` to the full executable path and run `npm run test:extension` to verify startup, window operations, conversation creation and deletion, running indicators, themes, and repeated injection. Run `npm run test:tabs` to drive actual tool calls through a local model protocol server and verify opening, listing, messaging, page execution, and reading results across same-host and cross-host tabs. It also checks the tool list sent to the model. `npm run test:bookmarklet` clicks the actual bookmark in a separate browser without an extension to verify messaging, blank conversations after reload, history selection, inherited models, and unfinished task recovery. These scripts use a local model protocol server and do not replace end-to-end testing with a real model service.
-
-If your model API does not allow CORS, run `npm start` to start the local relay. Then pass the `proxyUrl` and `proxyToken` printed in the terminal to `pi.configure()` in the current page’s Console. The page must still allow connections to the local address.
-
-### Automated extension releases
-
-Pull requests and pushes to main build and test the extension. To release, update the versions in `package.json`, `package-lock.json`, and `extension/manifest.json`, add a `CHANGELOG.md` entry, commit, then push the matching `vX.Y.Z` tag. GitHub Actions checks the versions, builds and tests, then publishes the extension ZIP and standalone installer together. The installer download button points to the latest Release.
-
-Unpacked extensions require replacing the files in the original directory, reloading in `chrome://extensions`, and refreshing the webpage. GitHub Releases do not automatically update installed browser extensions.
-
-## Community
-
-[Issues and feature requests](https://github.com/aitimos/pi-tab/issues/new/choose) | [Contributing](CONTRIBUTING.md) | [Code of conduct](CODE_OF_CONDUCT.md) | [Security policy](SECURITY.md)
-
-## License
+[Issues and suggestions](https://github.com/aitimos/pi-tab/issues/new/choose) | [Development and contributing](CONTRIBUTING.md) | [Code of conduct](CODE_OF_CONDUCT.md) | [Security reports](SECURITY.md)
 
 Licensed under the [Apache License 2.0](LICENSE).
