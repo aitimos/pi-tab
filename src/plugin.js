@@ -188,6 +188,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     }
     await watchConversation(created.id);
     if (activate) { conversation = created; configuration = inherited ?? null; }
+    emit({ type:'chat_created', conversationId:inheritFrom, chatId:created.id });
     return created.id;
   }
 

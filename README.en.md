@@ -26,7 +26,7 @@ At desktop widths, press `Enter` to send or `Shift+Enter` for a new line; use th
 
 The top **新对话** button starts a blank conversation in the current window. **新开窗口** opens another blank conversation with the same model configuration. You can switch conversations while tasks run; a ring on the right marks running conversations. To remove a conversation, click its trash icon, then **确认删除**. Stop running tasks first. Deleting the current conversation switches to another; deleting the last one creates a blank conversation.
 
-Windows support dragging, resizing, edge snapping, and minimizing. The top **Pi 设置** panel contains the theme, built-in instructions, automatic context compaction, retries, tool execution, and queue options. Model controls are below the composer.
+Windows support dragging, resizing, snapping to the left or right edge, and minimizing. Release position and drag velocity determine the docked side, which is preserved when the browser resizes. In **Pi 设置**, choose **跟随** (follow), **浅色** (light), or **深色** (dark). Follow is the default: it uses the page’s CSS color scheme or background, falling back to the browser or system preference. The same panel contains built-in instructions, automatic context compaction, retries, tool execution, and queue options. Model controls are below the composer.
 
 ## Install the Chrome extension
 

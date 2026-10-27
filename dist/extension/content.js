@@ -217,7 +217,7 @@ js_eval \u7684 code \u662F async \u51FD\u6570\u4F53\uFF0C\u652F\u6301 await\uFF0
 \u540C\u4E00\u7F51\u9875\u53EF\u4EE5\u6709\u591A\u4E2A Pi Tab agent\u3002\u9700\u8981\u534F\u4F5C\u65F6\u7528 agent_list \u67E5\u627E agent\uFF0C\u7528 agent_spawn \u521B\u5EFA agent \u5E76\u4EA4\u7ED9\u5B83\u4EFB\u52A1\uFF0C\u7528 agent_send \u53D1\u540E\u7EED\u6D88\u606F\uFF0C\u7528 agent_read \u67E5\u770B\u7ED3\u679C\u3002\u6D4F\u89C8\u5668\u6269\u5C55\u542F\u7528\u540E\uFF0C\u8FD8\u53EF\u4EE5\u7528 tab_list\u3001tab_open\u3001tab_send \u548C tab_read \u64CD\u4F5C\u5176\u4ED6\u6807\u7B7E\u9875\u3002`;function GN(e,t=24e3){let r=new WeakSet,n;try{n=JSON.stringify(e,(o,s)=>{if(typeof s=="bigint")return`${s}n`;if(typeof s=="function")return`[Function ${s.name||"anonymous"}]`;if(s instanceof Error)return{name:s.name,message:s.message,stack:s.stack};if(s instanceof Element)return{tag:s.tagName,html:s.outerHTML.slice(0,6e3)};if(s===window)return"[Window]";if(s===document)return"[Document]";if(s&&typeof s=="object"){if(r.has(s))return"[Circular]";r.add(s)}return s},2)}catch(o){n=String(e)+`
 [\u5E8F\u5217\u5316\u5931\u8D25: ${o.message}]`}return n??="undefined",n.length>t?n.slice(0,t)+`
 [\u7ED3\u679C\u5DF2\u622A\u65AD]`:n}function glt(e){return{output:[{type:"text",text:typeof e=="string"?e.slice(0,24e3):GN(e)}]}}function _3(e){let t=document.querySelector(e);if(!t)throw new Error(`\u6CA1\u6709\u627E\u5230\u5143\u7D20: ${e}`);return t}function ylt(e){let t=getComputedStyle(e),r=e.getBoundingClientRect();return{tag:e.tagName.toLowerCase(),id:e.id,classes:e.className,text:e.textContent?.slice(0,1600),attributes:Object.fromEntries(Array.from(e.attributes).map(n=>[n.name,n.value])),styles:Object.fromEntries(["display","visibility","opacity","color","backgroundColor","position","zIndex","pointerEvents","overflow","fontSize"].map(n=>[n,t[n]])),bounds:{x:r.x,y:r.y,width:r.width,height:r.height},disabled:"disabled"in e?e.disabled:void 0,html:e.outerHTML.slice(0,4e3)}}function HEe({globalName:e="pi",log:t=!0,storageName:r,storageFactory:n,deferResume:o=!1,toolOnly:s=!1,pageContext:i=()=>({url:location.href,title:document.title})}={}){if(window[e]?.__piConsolePlugin)return window[e];if(e in window)throw new Error(`window.${e} \u5DF2\u88AB\u7F51\u9875\u5360\u7528\u3002\u8BF7\u7528 PiConsolePlugin.install({ globalName: 'piAgent' })\u3002`);let a=r===void 0;a&&(r=sessionStorage.getItem("pi-tab-storage-name"));let c,u={},l=window.fetch.bind(window),d=Object.fromEntries(["log","info","warn","error","debug"].map($=>[$,console[$].bind(console)])),p=kz(),h=X3(),y=new Map,_=new Set,w=[],x=[],I=[],b,v,P,C=!1,D,B,O=new Map,q=new Map,ee=new Map,re=new Map,Q=new Map,G=new Map,se=$v,J=new Map,z=new Map,oe=300,ue=($,j)=>{$.push(j),$.length>oe&&$.shift()};function xe($){ue(w,$);for(let j of _)try{j($)}catch(te){d.warn("[pi] \u4E8B\u4EF6\u76D1\u542C\u5668\u51FA\u9519",te)}if(t){if($.type==="tool_execution_start"&&d.info(`[pi \u2192 ${$.toolName}]`,$.args),$.type==="tool_execution_end"&&d.info(`[pi \u2190 ${$.toolName}]`,$.entry?.model?.[0]?.content??$.entry??"\u5B8C\u6210"),$.type==="message_end"){for(let j of $.entry.model??[])if(j.role==="assistant"){let te=j.content.filter(W=>W.type==="text").map(W=>W.text).join(`
-`);te&&d.info("[pi]",te),j.errorMessage&&d.error("[pi]",j.errorMessage)}}($.type==="auto_retry_start"||$.type==="task_failed")&&d.warn("[pi]",$)}}async function tn($){if(q.has($))return;let j=await vz(b,$,Ce);q.set($,j),re.set($,!!j.snapshot.run),j.start(async te=>{for(let W of te)W.type==="run_start"&&re.set($,!0),W.type==="run_end"&&re.set($,!1),W.type==="snapshot"&&re.set($,!!W.snapshot?.run),xe({...W,conversationId:$})})}async function ct(){return await Re.ready,Nr(),((await b.snapshot(jr,Ce))?.chats??[]).map(j=>({...j,active:j.id===v.id,busy:Re.busyFor(j.id)}))}async function Xr($){if(await Re.ready,Nr(),!(await b.snapshot(jr,Ce))?.chats.some(W=>W.id===$))throw new Error("\u5BF9\u8BDD\u4E0D\u5B58\u5728\u3002");let te=await b.conversation($,Ce);if(!te)throw new Error("\u5BF9\u8BDD\u4E0D\u5B58\u5728\u3002");return v=te,await b.commit(async W=>{(await W.doc(jr)).activeId=$},Ce),P=ee.get($)??null,ct()}async function Or({activate:$=!1,inheritFrom:j=v.id}={}){await Re.ready,Nr();let te=await b.createConversation({ownership:{kind:"session"}},Ce);await b.commit(async Ie=>{let De=await Ie.doc(jr);De.chats.push({id:te.id,title:"\u65B0\u5BF9\u8BDD"}),$&&(De.activeId=te.id)},Ce);let W=ee.get(j);return W&&(await b.commit(async Ie=>{(await Ie.doc(jr)).chatConfigs[te.id]=W.profileId},Ce),ee.set(te.id,W),await te.configure({model:{provider:`page-${W.profileId}`,modelId:W.model},thinkingLevel:W.thinking},Ce)),await tn(te.id),$&&(v=te,P=W??null),te.id}async function Ir(){return await Or({activate:!0}),ct()}for(let $ of Object.keys(d)){z.set($,console[$]);let j=(...te)=>{ue(x,{time:new Date().toISOString(),level:$,text:te.map(W=>typeof W=="string"?W:GN(W,4e3)).join(" ")}),d[$](...te)};J.set($,j),console[$]=j}let jn=$=>ue(x,{time:new Date().toISOString(),level:"error",text:$.message||GN($.reason)});window.addEventListener("error",jn),window.addEventListener("unhandledrejection",jn);let ei=async(...$)=>{let j=performance.now(),te=$[0],W={time:new Date().toISOString(),url:String(te instanceof Request?te.url:te),method:$[1]?.method??(te instanceof Request?te.method:"GET")};try{let Ie=await l(...$);return ue(I,{...W,status:Ie.status,durationMs:Math.round(performance.now()-j)}),Ie}catch(Ie){throw ue(I,{...W,error:Ie.message,durationMs:Math.round(performance.now()-j)}),Ie}},Is=window.fetch;window.fetch=ei;let mo=()=>{!b||C||b.close(Ce).then(()=>D?.(),$=>{D?.(),d.warn("[pi] \u5173\u95ED\u5B58\u50A8\u5931\u8D25",$)})};window.addEventListener("pagehide",mo);function Es(){p.install({name:"browser-page",tools:[...y.values()],sections:[Iz("page-debugger",()=>{let $=i();return $?`${se}
+`);te&&d.info("[pi]",te),j.errorMessage&&d.error("[pi]",j.errorMessage)}}($.type==="auto_retry_start"||$.type==="task_failed")&&d.warn("[pi]",$)}}async function tn($){if(q.has($))return;let j=await vz(b,$,Ce);q.set($,j),re.set($,!!j.snapshot.run),j.start(async te=>{for(let W of te)W.type==="run_start"&&re.set($,!0),W.type==="run_end"&&re.set($,!1),W.type==="snapshot"&&re.set($,!!W.snapshot?.run),xe({...W,conversationId:$})})}async function ct(){return await Re.ready,Nr(),((await b.snapshot(jr,Ce))?.chats??[]).map(j=>({...j,active:j.id===v.id,busy:Re.busyFor(j.id)}))}async function Xr($){if(await Re.ready,Nr(),!(await b.snapshot(jr,Ce))?.chats.some(W=>W.id===$))throw new Error("\u5BF9\u8BDD\u4E0D\u5B58\u5728\u3002");let te=await b.conversation($,Ce);if(!te)throw new Error("\u5BF9\u8BDD\u4E0D\u5B58\u5728\u3002");return v=te,await b.commit(async W=>{(await W.doc(jr)).activeId=$},Ce),P=ee.get($)??null,ct()}async function Or({activate:$=!1,inheritFrom:j=v.id}={}){await Re.ready,Nr();let te=await b.createConversation({ownership:{kind:"session"}},Ce);await b.commit(async Ie=>{let De=await Ie.doc(jr);De.chats.push({id:te.id,title:"\u65B0\u5BF9\u8BDD"}),$&&(De.activeId=te.id)},Ce);let W=ee.get(j);return W&&(await b.commit(async Ie=>{(await Ie.doc(jr)).chatConfigs[te.id]=W.profileId},Ce),ee.set(te.id,W),await te.configure({model:{provider:`page-${W.profileId}`,modelId:W.model},thinkingLevel:W.thinking},Ce)),await tn(te.id),$&&(v=te,P=W??null),xe({type:"chat_created",conversationId:j,chatId:te.id}),te.id}async function Ir(){return await Or({activate:!0}),ct()}for(let $ of Object.keys(d)){z.set($,console[$]);let j=(...te)=>{ue(x,{time:new Date().toISOString(),level:$,text:te.map(W=>typeof W=="string"?W:GN(W,4e3)).join(" ")}),d[$](...te)};J.set($,j),console[$]=j}let jn=$=>ue(x,{time:new Date().toISOString(),level:"error",text:$.message||GN($.reason)});window.addEventListener("error",jn),window.addEventListener("unhandledrejection",jn);let ei=async(...$)=>{let j=performance.now(),te=$[0],W={time:new Date().toISOString(),url:String(te instanceof Request?te.url:te),method:$[1]?.method??(te instanceof Request?te.method:"GET")};try{let Ie=await l(...$);return ue(I,{...W,status:Ie.status,durationMs:Math.round(performance.now()-j)}),Ie}catch(Ie){throw ue(I,{...W,error:Ie.message,durationMs:Math.round(performance.now()-j)}),Ie}},Is=window.fetch;window.fetch=ei;let mo=()=>{!b||C||b.close(Ce).then(()=>D?.(),$=>{D?.(),d.warn("[pi] \u5173\u95ED\u5B58\u50A8\u5931\u8D25",$)})};window.addEventListener("pagehide",mo);function Es(){p.install({name:"browser-page",tools:[...y.values()],sections:[Iz("page-debugger",()=>{let $=i();return $?`${se}
 \u5F53\u524D\u9875\u9762: ${$.url}
 \u6807\u9898: ${$.title}`:se},{tag:!1})]})}function Er($){if(C)throw new Error("pi \u5DF2\u5173\u95ED\uFF0C\u8BF7\u91CD\u65B0\u7C98\u8D34\u5B89\u88C5\u4EE3\u7801\u3002");if(!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test($.name??"")||!$.description||!$.parameters||typeof $.execute!="function")throw new TypeError("\u5DE5\u5177\u9700\u8981 name\u3001description\u3001parameters\uFF08JSON Schema\uFF09\u548C execute(args)\u3002");let j={name:$.name,description:$.description,parameters:$.parameters,replay:$.replay??"unsafe",executionMode:"sequential",execute:async(te,W,Ie)=>{let De=await $.execute(te,W,Ie);return De&&Array.isArray(De.output)?De:glt(De)}};return y.set(j.name,j),Es(),{name:j.name,registered:!0}}Er({name:"page_snapshot",description:"\u8BFB\u53D6\u5F53\u524D\u9875\u9762\u7684 URL\u3001\u6807\u9898\u3001\u53EF\u89C1\u6587\u5B57\u548C\u4EA4\u4E92\u5143\u7D20\uFF0C\u5148\u7528\u5B83\u4E86\u89E3\u9875\u9762\u3002",replay:"safe",parameters:pt.Object({selector:pt.Optional(pt.String()),limit:pt.Optional(pt.Integer({minimum:1,maximum:100}))}),execute:({selector:$="body",limit:j=50})=>{let te=_3($);return{url:location.href,title:document.title,text:(te.innerText??te.textContent).slice(0,14e3),elements:[...te.querySelectorAll('button,a,input,textarea,select,[role="button"]')].slice(0,j).map(W=>({tag:W.tagName.toLowerCase(),id:W.id,type:W.getAttribute("type"),role:W.getAttribute("role"),text:(W.innerText??"").slice(0,120),name:W.getAttribute("name"),ariaLabel:W.getAttribute("aria-label"),placeholder:W.getAttribute("placeholder")}))}}}),Er({name:"inspect_dom",description:"\u7528 CSS \u9009\u62E9\u5668\u8BFB\u53D6\u5143\u7D20 HTML\u3001\u5C5E\u6027\u3001\u8BA1\u7B97\u540E\u6837\u5F0F\u548C\u4F4D\u7F6E\u5C3A\u5BF8\u3002",replay:"safe",parameters:pt.Object({selector:pt.String(),limit:pt.Optional(pt.Integer({minimum:1,maximum:30}))}),execute:({selector:$,limit:j=10})=>{let te=document.querySelectorAll($);return{count:te.length,elements:[...te].slice(0,j).map(ylt)}}}),Er({name:"js_eval",description:"\u5728\u5F53\u524D\u7F51\u9875\u6267\u884C JavaScript\u3002code \u662F async \u51FD\u6570\u4F53\uFF0C\u652F\u6301 await\uFF1B\u7528 return \u8FD4\u56DE\u7ED3\u679C\u3002\u80FD\u8BFB\u53D6 window\u3001document\u3001\u5168\u5C40\u72B6\u6001\uFF0C\u4E5F\u80FD\u4FEE\u6539\u7F51\u9875\u3002",parameters:pt.Object({code:pt.String(),timeoutMs:pt.Optional(pt.Integer({minimum:100,maximum:6e4}))}),execute:async({code:$,timeoutMs:j=15e3},te,W)=>{let Ie=Object.getPrototypeOf(async function(){}).constructor,De=ee.get(te.conversationId)?.jsEngine??"auto",Qt;if(De!=="interpreter")try{Qt=new Ie($)}catch(To){if(De==="native"||!(To instanceof EvalError||/unsafe-eval|Content Security Policy/.test(To.message)))throw To}let ho=Qt?Qt.call(window):new Promise((To,jo)=>{let Uf=new GEe({ecmaVer:"latest",sandBox:!1});Uf.exports.resolve=To,Uf.exports.reject=jo,Uf.run(`(async function(){
 ${$}
@@ -274,9 +274,9 @@ function openChat(initialConfig, options = {}) {
   const style = document.createElement('style');
   style.textContent = `
     :host { all:initial; color-scheme:dark; }
-    *, *::before, *::after { box-sizing:border-box; }
+    *, *::before, *::after { box-sizing:border-box; overscroll-behavior:contain; }
     [hidden] { display:none!important; }
-    #shell { position:relative; --bg:#191919; --surface:#222222; --raised:#2a2a2a; --line:#484848; --text:#eeeeee; --muted:#b4b4b4; --accent:#9eb1ff; width:min(var(--window-width,420px),calc(100vw - 24px)); height:min(var(--window-height,660px),calc(100dvh - 24px)); display:flex; flex-direction:column; overflow:hidden; border-radius:24px; background:var(--bg); color:var(--text); border:.5px solid var(--line); font:13px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif; text-align:left; color-scheme:dark; }
+    #shell { position:relative; --bg:#191919; --surface:#222222; --raised:#2a2a2a; --line:#484848; --text:#eeeeee; --muted:#b4b4b4; --accent:#9eb1ff; width:min(var(--window-width,420px),calc(100vw - 24px)); height:min(var(--window-height,660px),calc(100dvh - 24px)); display:flex; flex-direction:column; overflow:hidden; border-radius:16px; background:var(--bg); color:var(--text); border:.5px solid var(--line); font:13px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif; text-align:left; color-scheme:dark; }
     #shell[data-theme=light] { --bg:#fcfcfc; --surface:#f9f9f9; --raised:#f0f0f0; --line:#cecece; --text:#202020; --muted:#646464; --accent:#3a5bc7; color-scheme:light; }
     #shell { background:color-mix(in srgb,var(--bg) 96%,transparent); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); box-shadow:0 16px 48px rgba(0,0,0,.4),0 2px 8px rgba(0,0,0,.15); }
     #shell[data-theme=light] { box-shadow:0 16px 48px rgba(0,0,0,.15),0 2px 8px rgba(0,0,0,.05); }
@@ -300,7 +300,7 @@ function openChat(initialConfig, options = {}) {
     #chat-ball .pi-icon { width:22px; height:22px; }
     #shell.minimized #chat-ball:active { cursor:grabbing; }
     #shell[data-busy=true] #chat-ball::after { content:''; position:absolute; right:2px; bottom:2px; width:10px; height:10px; border:2px solid var(--bg); border-radius:50%; background:#b4b4b4; }
-    #top { cursor:move; touch-action:none; user-select:none; display:flex; align-items:center; gap:8px; flex:none; height:48px; padding:6px 10px 6px 14px; border-bottom:.5px solid var(--line); }
+    #top { cursor:move; touch-action:none; user-select:none; display:flex; align-items:center; gap:8px; flex:none; height:48px; padding:8px; border-bottom:.5px solid var(--line); }
     #mark,.welcome-mark { display:grid; place-items:center; flex:none; } #mark .pi-icon { width:22px; height:22px; } .welcome-mark .pi-icon { width:45px; height:45px; }
     #mark { width:24px; height:24px; }
     #brand { min-width:0; }
@@ -312,7 +312,7 @@ function openChat(initialConfig, options = {}) {
     button:disabled { opacity:.4; cursor:default; }
     button:focus-visible,summary:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
     svg { width:16px; height:16px; flex:none; vertical-align:middle; }
-    .icon-button { width:32px; height:36px; padding:0; display:grid; place-items:center; background:transparent; border:0; border-radius:8px; color:var(--muted); }
+    .icon-button { width:32px; height:32px; padding:0; display:grid; place-items:center; background:transparent; border:0; border-radius:8px; color:var(--muted); }
     .actions svg { width:18px; height:18px; }
     .actions .github-link svg { width:17px; height:17px; }
     .icon-button:hover:not(:disabled) { background:var(--raised); color:var(--text); }
@@ -418,7 +418,7 @@ function openChat(initialConfig, options = {}) {
     .answer-actions { display:flex; align-items:center; gap:6px; color:var(--muted); }
     .answer-actions .icon-button { width:26px; height:26px; }
     .answer-action-status { font-size:12px; }
-    #shell #chat-list { display:none; position:absolute; z-index:2; top:48px; right:10px; width:min(300px,calc(100% - 20px)); max-height:55%; overflow:auto; padding:6px; background:var(--bg); border:.5px solid var(--line); border-radius:10px; }
+    #shell #chat-list { display:none; position:absolute; z-index:2; top:48px; right:clamp(10px,var(--chat-menu-offset,10px),calc(100% - 310px)); width:min(300px,calc(100% - 20px)); max-height:55%; overflow:auto; padding:6px; background:var(--bg); border:.5px solid var(--line); border-radius:10px; }
     #shell #chat-list[data-open=true] { display:flex; flex-direction:column; gap:4px; }
     #chat-entries { display:flex; flex-direction:column; gap:4px; }
     #chat-list button { display:block; width:100%; padding:9px 10px; background:transparent; border:0; border-radius:6px; color:var(--text); text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
@@ -482,7 +482,7 @@ function openChat(initialConfig, options = {}) {
     .pixel-loader i:nth-child(3n+1) { animation-delay:-.4s; }
     .pixel-loader i:nth-child(3n+2) { animation-delay:-.8s; }
     @keyframes pulse { 50% { opacity:.3; } }
-    #composer { position:relative; flex:none; margin:8px 12px 12px; padding:8px 0 2px; border:.5px solid var(--line); border-radius:12px; background:var(--surface); box-shadow:0 5px 18px rgba(0,0,0,.15); transition:border-color .25s ease-out; }
+    #composer { position:relative; flex:none; margin:8px; padding:8px 0 2px; border:.5px solid var(--line); border-radius:8px; background:var(--surface); box-shadow:0 5px 18px rgba(0,0,0,.15); transition:border-color .25s ease-out; }
     #shell[data-theme=light] #composer { box-shadow:0 5px 18px rgba(0,0,0,.05); }
     #composer:focus-within { border-color:var(--accent); }
     #message-input { display:block; width:calc(100% - 36px); margin:0 18px; resize:none; min-height:40px; max-height:180px; padding:4px 0; border:0; border-radius:0; background:transparent; font-size:14px; line-height:1.6; scrollbar-width:thin; }
@@ -522,11 +522,11 @@ function openChat(initialConfig, options = {}) {
     @media(max-width:760px) {
       #shell.embedded { height:min(720px,calc(var(--chat-viewport-height,100dvh) - 24px)); }
       #shell input,#shell select,#shell textarea { font-size:16px; }
-      #shell .icon-button { width:40px; height:40px; }
+      #shell .icon-button { width:32px; height:32px; }
       #send,#abort { width:40px; height:40px; }
       #setup { padding:20px; }
       #chat-messages { padding-left:16px; padding-right:16px; }
-      #shell.embedded #top { height:48px; padding:6px 10px 6px 14px; }
+      #shell.embedded #top { height:48px; padding:8px; }
     }
   `;
   root.appendChild(style);
@@ -617,7 +617,7 @@ function openChat(initialConfig, options = {}) {
       </section>
       <form id="preferences" aria-label="Pi 设置">
         <h2>Pi 设置</h2>
-        <label><span>主题</span><select id="theme"><option value="light">浅色</option><option value="dark">深色</option></select></label>
+        <label><span>主题</span><select id="theme"><option value="auto">跟随</option><option value="light">浅色</option><option value="dark">深色</option></select></label>
         <label><span>指令</span><textarea id="setting-prompt" maxlength="12000"></textarea></label>
         <label class="setting-check"><input id="setting-compact" type="checkbox" checked>自动压缩上下文</label>
         <label><span>模型失败后重试</span><select id="setting-retries"><option value="0">不重试</option><option value="1">1 次</option><option value="2">2 次</option><option value="3">3 次</option></select></label>
@@ -667,12 +667,26 @@ function openChat(initialConfig, options = {}) {
   (options.mount || document.documentElement || document.body).appendChild(host);
   const byId = id => root.getElementById(id);
   let agent;
-  function rememberWindow(previousId, nextId) {
+  function rememberWindow() {
     if (options.mount) return;
-    const open = JSON.parse(sessionStorage.getItem('pi-tab-open-chats') || '[]').filter(id => id !== previousId);
-    if (nextId != null && !open.includes(nextId)) open.push(nextId);
+    const open = [...new Set([...manager.instances.values()].filter(instance => instance.visible && instance.id != null).map(instance => instance.id))];
     sessionStorage.setItem('pi-tab-open-chats', JSON.stringify(open));
   }
+  // Keep editor events inside the overlay without cancelling typing, IME or shortcuts.
+  for (const type of ['keydown','keyup','keypress','beforeinput','input','change','paste','copy','cut']) {
+    root.addEventListener(type, event => event.stopPropagation());
+  }
+  root.addEventListener('wheel', event => {
+    if (options.mount || event.ctrlKey) return;
+    event.stopPropagation();
+    const canScroll = event.composedPath().some(element => {
+      if (!(element instanceof Element) || element.getRootNode() !== root) return false;
+      const css = getComputedStyle(element);
+      return (/auto|scroll/.test(css.overflowY) && (event.deltaY < 0 ? element.scrollTop > 0 : event.deltaY > 0 && element.scrollTop + element.clientHeight < element.scrollHeight - 1)) ||
+        (/auto|scroll/.test(css.overflowX) && (event.deltaX < 0 ? element.scrollLeft > 0 : event.deltaX > 0 && element.scrollLeft + element.clientWidth < element.scrollWidth - 1));
+    });
+    if (!canScroll) event.preventDefault();
+  }, { passive:false });
   const state = { busy: false, pending:0, pendingByChat:new Map(), historyVersion:0, connected: false, minimized: false, configuring: false, unsubscribe: null, started: false, bookmarkConfig: null, tools: new Map(), stream: null, runStarted: 0, timer: null, selectedTool: null, trace: null, traces: [], activeConfig:null, profiles:[], providers:[], selectedProviderId:null, candidates:[], candidateProvider:null, selectedModel:null, discovery:null, discoveryTimer:null, discoveryVersion:0, modelDialogMode:'setup' };
 
   function sameProvider(a,b) { return Boolean(a && b && a.api === b.api && a.baseUrl?.replace(/\/+$/, '') === b.baseUrl?.replace(/\/+$/, '')); }
@@ -1622,7 +1636,6 @@ function openChat(initialConfig, options = {}) {
     state.unsubscribe = runtimePi.onEvent(event => {
       if (event.type === 'chat_deleted') {
         byId('chat-entries').querySelector(`[data-chat-id="${event.conversationId}"]`)?.remove();
-        rememberWindow(event.conversationId, null);
         if (pi.id === event.conversationId) void switchConversation(event.replacementId).catch(error => message('system', error.message));
         return;
       }
@@ -1717,7 +1730,7 @@ function openChat(initialConfig, options = {}) {
       const chatId = options.chatId || (options.newAgent ? await pi.createChat({ inheritFrom: options.inheritFrom || pi.conversation.id }) : pi.conversation.id);
       agent = pi.agent(chatId);
       byId('settings').disabled = false;
-      rememberWindow(null, chatId);
+      rememberWindow();
       state.activeConfig = await agent.savedConfig();
       state.profiles = await agent.listModels();
       state.bookmarkConfig = initialConfig ? JSON.stringify(initialConfig) : null;
@@ -1876,9 +1889,8 @@ function openChat(initialConfig, options = {}) {
     closeChatMenu();
     byId('new-chat').disabled = true;
     try {
-      const previousId = agent.id;
       await agent.newChat();
-      rememberWindow(previousId, agent.id);
+      rememberWindow();
       state.pending = state.pendingByChat.get(agent.id) || 0;
       state.activeConfig = await agent.savedConfig();
       subscribeEvents();
@@ -1905,9 +1917,8 @@ function openChat(initialConfig, options = {}) {
     byId('chat-switch').setAttribute('aria-expanded', 'false');
   }
   async function switchConversation(id) {
-    const previousId = agent.id;
     await agent.selectChat(id);
-    rememberWindow(previousId, agent.id);
+    rememberWindow();
     state.pending = state.pendingByChat.get(agent.id) || 0;
     state.activeConfig = await agent.savedConfig();
     if (state.activeConfig) syncModelControls(state.activeConfig);
@@ -1928,7 +1939,7 @@ function openChat(initialConfig, options = {}) {
     menu.dataset.open = String(open);
     byId('chat-switch').setAttribute('aria-expanded', String(open));
     if (!open) return;
-    menu.style.right = `${Math.max(10, shell.getBoundingClientRect().right - byId('chat-switch').getBoundingClientRect().right)}px`;
+    menu.style.setProperty('--chat-menu-offset', `${shell.getBoundingClientRect().right - byId('chat-switch').getBoundingClientRect().right}px`);
     const entries = byId('chat-entries');
     entries.replaceChildren();
     byId('chat-menu-error').hidden = true;
@@ -1993,22 +2004,47 @@ function openChat(initialConfig, options = {}) {
     }
   });
   const themeKey = 'pi-tab-theme';
-  const savedTheme = localStorage.getItem(themeKey);
-  shell.dataset.theme = savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light';
-  byId('theme').value = shell.dataset.theme;
-  byId('theme').addEventListener('change', () => {
-    const theme = byId('theme').value;
-    for (const overlay of document.querySelectorAll('[data-pi-overlay]')) {
-      const otherShell = overlay.shadowRoot?.getElementById('shell');
-      if (otherShell) {
-        otherShell.dataset.theme = theme;
-        overlay.shadowRoot.getElementById('theme').value = theme;
+  const systemTheme = matchMedia('(prefers-color-scheme:dark)');
+  function syncTheme() {
+    const saved = localStorage.getItem(themeKey);
+    const mode = saved === 'light' || saved === 'dark' ? saved : 'auto';
+    let theme = mode === 'auto' ? (systemTheme.matches ? 'dark' : 'light') : mode;
+    if (mode === 'auto' && !options.mount) {
+      // Prefer the page's declared color scheme, then its visible background.
+      const elements = [document.body, document.documentElement].filter(Boolean);
+      const scheme = elements.map(element => getComputedStyle(element).colorScheme).find(value => value === 'dark' || value === 'light');
+      if (scheme) theme = scheme;
+      else {
+        for (const element of elements) {
+          const color = getComputedStyle(element).backgroundColor.match(/^rgba?\(([^)]+)\)/)?.[1].split(/[,\s]+/).map(Number);
+          if (!color || (color.length === 4 && color[3] < .8)) continue;
+          theme = (color[0]*.2126 + color[1]*.7152 + color[2]*.0722) < 128 ? 'dark' : 'light';
+          break;
+        }
       }
     }
-    localStorage.setItem(themeKey, theme);
-    if (options.mount) document.documentElement.dataset.theme = theme;
-    closeChatMenu();
+    shell.dataset.theme = theme;
+    host.style.colorScheme = theme;
+    byId('theme').value = mode;
+    if (options.mount) {
+      if (document.documentElement.dataset.theme !== theme) document.documentElement.dataset.theme = theme;
+      document.getElementById('site-theme').value = mode;
+    }
+  }
+  byId('theme').addEventListener('change', () => {
+    localStorage.setItem(themeKey, byId('theme').value);
+    window.dispatchEvent(new Event('pi-tab-theme-change'));
   });
+  window.addEventListener('pi-tab-theme-change', syncTheme);
+  window.addEventListener('storage', event => { if (event.key === themeKey || event.key === null) syncTheme(); });
+  systemTheme.addEventListener('change', syncTheme);
+  if (!options.mount) {
+    const themeObserver = new MutationObserver(syncTheme);
+    for (const element of [document.documentElement, document.body].filter(Boolean)) {
+      themeObserver.observe(element, { attributes:true });
+    }
+  }
+  syncTheme();
   if (!options.mount) {
     const savedSize = JSON.parse(localStorage.getItem('pi-tab-size') || 'null');
     if (savedSize?.width && savedSize?.height) {
@@ -2020,7 +2056,7 @@ function openChat(initialConfig, options = {}) {
     if (state.busy || state.configuring) return;
     closeChatMenu();
     void runtimePi.getPreferences().then(saved => {
-      byId('theme').value = shell.dataset.theme;
+      syncTheme();
       byId('setting-prompt').value = saved.systemPrompt || runtimePi.defaultPrompt;
       byId('setting-compact').checked = saved.autoCompact ?? true;
       byId('setting-retries').value = String(saved.maxRetries ?? 0);
@@ -2063,12 +2099,13 @@ function openChat(initialConfig, options = {}) {
   });
   function setMinimized(value) {
     if (options.mount || state.minimized === value) return;
+    cancelSnap();
     const before = host.getBoundingClientRect();
     state.minimized = value;
     shell.classList.toggle('minimized', value);
     byId('minimize').setAttribute('aria-expanded', String(!value));
     const width = host.getBoundingClientRect().width;
-    host.style.left = `${before.right - width}px`;
+    host.style.left = `${dockSide === 'left' ? before.left : before.right - width}px`;
     host.style.right = 'auto';
     clampPosition();
     if (value) byId('chat-ball').focus({ preventScroll:true });
@@ -2084,13 +2121,64 @@ function openChat(initialConfig, options = {}) {
     }
     setMinimized(false);
   });
-  byId('close').addEventListener('click', () => { host.style.display = 'none'; rememberWindow(agent?.id, null); });
+  byId('close').addEventListener('click', () => { cancelSnap(); host.style.display = 'none'; rememberWindow(); });
+  let dockSide = null;
+  let snapFrame = null;
+  function cancelSnap() {
+    if (snapFrame !== null) cancelAnimationFrame(snapFrame);
+    snapFrame = null;
+  }
+  function windowBounds() {
+    const rect = host.getBoundingClientRect();
+    const spaceX = Math.max(0, innerWidth - rect.width);
+    const spaceY = Math.max(0, innerHeight - rect.height);
+    const x = Math.min(24, spaceX / 2);
+    const y = Math.min(24, spaceY / 2);
+    return { left:x, right:spaceX - x, top:y, bottom:spaceY - y };
+  }
+  function positionWindow(x, y) {
+    const bounds = windowBounds();
+    host.style.left = `${Math.max(bounds.left, Math.min(bounds.right, x))}px`;
+    host.style.right = 'auto';
+    host.style.top = `${Math.max(bounds.top, Math.min(bounds.bottom, y))}px`;
+  }
   function clampPosition() {
     if (options.mount) return;
+    cancelSnap();
     const rect = host.getBoundingClientRect();
-    host.style.left = `${Math.max(0, Math.min(window.innerWidth - rect.width, rect.left))}px`;
-    host.style.right = 'auto';
-    host.style.top = `${Math.max(0, Math.min(window.innerHeight - rect.height, rect.top))}px`;
+    const bounds = windowBounds();
+    positionWindow(dockSide ? bounds[dockSide] : rect.left, rect.top);
+  }
+  function snapToSide(velocity) {
+    cancelSnap();
+    const rect = host.getBoundingClientRect();
+    const bounds = windowBounds();
+    // Same projection and spring as the Dva assistant: velocity in pixels/second.
+    const projectedX = rect.left + velocity.x / 1000 * (.99 / (1 - .99));
+    dockSide = Math.abs(projectedX - bounds.left) <= Math.abs(projectedX - bounds.right) ? 'left' : 'right';
+    const target = { x:bounds[dockSide], y:Math.max(bounds.top, Math.min(bounds.bottom, rect.top)) };
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      positionWindow(target.x, target.y);
+      return;
+    }
+    let current = { x:rect.left, y:rect.top };
+    let lastTime = performance.now();
+    const step = time => {
+      const elapsed = Math.min((time - lastTime) / 1000, 1 / 30);
+      lastTime = time;
+      for (const axis of ['x','y']) {
+        velocity[axis] += (360 * (target[axis] - current[axis]) - 38 * velocity[axis]) * elapsed;
+        current[axis] += velocity[axis] * elapsed;
+      }
+      if (Math.abs(target.x-current.x)<.5 && Math.abs(target.y-current.y)<.5 && Math.abs(velocity.x)<5 && Math.abs(velocity.y)<5) {
+        positionWindow(target.x, target.y);
+        snapFrame = null;
+        return;
+      }
+      positionWindow(current.x, current.y);
+      snapFrame = requestAnimationFrame(step);
+    };
+    snapFrame = requestAnimationFrame(step);
   }
   if (options.mount && window.visualViewport) {
     const syncViewport = () => {
@@ -2109,6 +2197,7 @@ function openChat(initialConfig, options = {}) {
   let resizing = null;
   byId('resize-handle').addEventListener('pointerdown', event => {
     if (options.mount || event.button !== 0) return;
+    cancelSnap();
     const rect = host.getBoundingClientRect();
     host.style.left = `${rect.left}px`;
     host.style.right = 'auto';
@@ -2126,6 +2215,7 @@ function openChat(initialConfig, options = {}) {
   const endResize = event => {
     if (!resizing || resizing.pointerId !== event.pointerId) return;
     resizing = null;
+    clampPosition();
     localStorage.setItem('pi-tab-size', JSON.stringify({ width:shell.offsetWidth, height:shell.offsetHeight }));
   };
   byId('resize-handle').addEventListener('pointerup', endResize);
@@ -2135,8 +2225,9 @@ function openChat(initialConfig, options = {}) {
     handle.addEventListener('pointerdown', event => {
       if (options.mount || event.button !== 0 || !event.isPrimary || (handle.id === 'top' && event.target.closest('button,a'))) return;
       const rect = host.getBoundingClientRect();
+      cancelSnap();
       suppressBallClick = false;
-      drag = { pointerId:event.pointerId, startX:event.clientX, startY:event.clientY, deltaX:event.clientX - rect.left, deltaY:event.clientY - rect.top, moved:false, ball:handle.id === 'chat-ball' };
+      drag = { pointerId:event.pointerId, startX:event.clientX, startY:event.clientY, deltaX:event.clientX - rect.left, deltaY:event.clientY - rect.top, moved:false, ball:handle.id === 'chat-ball', samples:[{x:event.clientX,y:event.clientY,time:event.timeStamp}] };
       handle.setPointerCapture(event.pointerId);
       if (!drag.ball) event.preventDefault();
     });
@@ -2145,28 +2236,18 @@ function openChat(initialConfig, options = {}) {
     if (!drag || drag.pointerId !== event.pointerId) return;
     if (!drag.moved && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 4) return;
     drag.moved = true;
-    const rect = host.getBoundingClientRect();
-    host.style.left = `${Math.max(0, Math.min(window.innerWidth - rect.width, event.clientX - drag.deltaX))}px`;
-    host.style.right = 'auto';
-    host.style.top = `${Math.max(0, Math.min(window.innerHeight - rect.height, event.clientY - drag.deltaY))}px`;
+    drag.samples.push({x:event.clientX,y:event.clientY,time:event.timeStamp});
+    drag.samples = drag.samples.slice(-6);
+    positionWindow(event.clientX - drag.deltaX, event.clientY - drag.deltaY);
   });
   const endDrag = event => {
     if (!drag || drag.pointerId !== event.pointerId) return;
     suppressBallClick = drag.ball && drag.moved;
     if (drag.moved) {
-      const rect = host.getBoundingClientRect();
-      const edge = 12;
-      const range = 28;
-      const right = innerWidth - rect.right;
-      const bottom = innerHeight - rect.bottom;
-      const x = rect.left < range ? edge : right < range ? innerWidth - rect.width - edge : rect.left;
-      const y = rect.top < range ? edge : bottom < range ? innerHeight - rect.height - edge : rect.top;
-      if (x !== rect.left || y !== rect.top) {
-        host.style.transition = 'left .25s ease-out,top .25s ease-out';
-        host.style.left = `${x}px`;
-        host.style.top = `${y}px`;
-        setTimeout(() => { host.style.transition = ''; }, 250);
-      }
+      const latest = {x:event.clientX,y:event.clientY,time:event.timeStamp};
+      const earliest = drag.samples.find(sample => latest.time - sample.time <= 100) || latest;
+      const elapsed = latest.time - earliest.time;
+      snapToSide(elapsed > 0 ? { x:(latest.x-earliest.x)/elapsed*1000, y:(latest.y-earliest.y)/elapsed*1000 } : {x:0,y:0});
     }
     drag = null;
   };
@@ -2178,7 +2259,7 @@ function openChat(initialConfig, options = {}) {
   const instance = {
     open(config) {
       host.style.display = 'block';
-      if (agent) rememberWindow(null, agent.id);
+      if (agent) rememberWindow();
       refreshPageContext();
       clampPosition();
       if (state.minimized) setMinimized(false);
@@ -2186,8 +2267,9 @@ function openChat(initialConfig, options = {}) {
       else if (state.connected) byId('message-input').focus();
       if (options.mount) host.scrollIntoView({ block:'nearest', behavior:'auto' });
     },
-    hide() { host.style.display = 'none'; rememberWindow(agent?.id, null); },
+    hide() { cancelSnap(); host.style.display = 'none'; rememberWindow(); },
     get id() { return agent?.id; },
+    get visible() { return !options.mount && host.style.display !== 'none'; },
   };
   manager.instances.set(host.id, instance);
   if (!options.mount) manager.floatingCount = (manager.floatingCount || 0) + 1;

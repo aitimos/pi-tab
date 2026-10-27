@@ -28,7 +28,7 @@ const server = createServer((request, response) => {
     return;
   }
   response.writeHead(200, {'Content-Type':'text/html'});
-  response.end('<!doctype html><title>Pi Tab regression</title><h1>Page content</h1>');
+  response.end('<!doctype html><title>Pi Tab regression</title><style>body{min-height:4000px}</style><h1>Page content</h1>');
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const url = `http://127.0.0.1:${server.address().port}/`;
@@ -40,6 +40,24 @@ async function browser(...args) {
   return response.data;
 }
 const evaluate = async script => (await browser('eval', '-b', Buffer.from(script).toString('base64'))).result;
+// agent-browser's wheel command currently sends (0,0), ignoring the last mouse
+// position. Use CDP coordinates so this tests real native scrolling over the UI.
+async function wheel(point, deltaY) {
+  const endpoint=new URL((await browser('get','cdp-url')).cdpUrl);
+  endpoint.protocol='http:';endpoint.pathname='/json/list';
+  const targets=await (await fetch(endpoint)).json();
+  const page=targets.find(target=>target.type==='page'&&target.url===currentPage);
+  assert.ok(page,'Current test page has a CDP target');
+  const socket=new WebSocket(page.webSocketDebuggerUrl);
+  try {
+    await new Promise((resolve,reject)=>{socket.addEventListener('open',resolve,{once:true});socket.addEventListener('error',reject,{once:true});});
+    await new Promise((resolve,reject)=>{
+      socket.addEventListener('message',event=>{const reply=JSON.parse(event.data);if(reply.id===1)reply.error?reject(new Error(reply.error.message)):resolve();});
+      socket.send(JSON.stringify({id:1,method:'Input.dispatchMouseEvent',params:{type:'mouseWheel',x:Math.round(point.x),y:Math.round(point.y),deltaY,deltaX:0}}));
+    });
+  } finally { socket.close(); }
+}
+let currentPage=url;
 async function check(name, action) {
   try { await action(); console.log(`PASS ${name}`); }
   catch (error) { failures.push(name); console.error(`FAIL ${name}: ${error.message}`); }
@@ -79,6 +97,65 @@ try {
   await check('startup exposes model API choices',async()=>{
     assert.ok(await evaluate(`${root}.getElementById('api').options.length>0`));
     assert.equal(await evaluate(`${root}.getElementById('setup-error').hidden`),true);
+  });
+  await check('theme defaults to following the page and tracks standard CSS changes',async()=>{
+    assert.equal(await evaluate(`${root}.getElementById('theme').value`),'auto');
+    for(const theme of ['dark','light']) {
+      await evaluate(`document.documentElement.style.colorScheme='${theme}'`);
+      await browser('wait','--fn',`${root}.getElementById('shell').dataset.theme==='${theme}'`);
+      assert.equal(await evaluate(`${root}.getElementById('shell').dataset.theme`),theme);
+    }
+    await evaluate(`document.documentElement.style.colorScheme='normal';document.body.style.backgroundColor='rgb(25,25,25)'`);
+    await browser('wait','--fn',`${root}.getElementById('shell').dataset.theme==='dark'`);
+    await evaluate(`document.body.style.backgroundColor='white'`);
+    await browser('wait','--fn',`${root}.getElementById('shell').dataset.theme==='light'`);
+    await evaluate(`document.body.style.removeProperty('background-color');document.documentElement.style.removeProperty('color-scheme')`);
+    for(const theme of ['dark','light']) {
+      await browser('set','media',theme);
+      await browser('wait','--fn',`${root}.getElementById('shell').dataset.theme==='${theme}'`);
+      assert.equal(await evaluate(`${root}.getElementById('shell').dataset.theme`),theme);
+    }
+  });
+  await check('window, header buttons and composer have aligned nested corners',async()=>{
+    const corners=await evaluate(`(()=>{const r=${root};return ['shell','settings','composer'].map(id=>getComputedStyle(r.getElementById(id)).borderTopRightRadius)})()`);
+    assert.deepEqual(corners,['16px','8px','8px']);
+    const fit=await evaluate(`(()=>{const r=${root},top=r.getElementById('top').getBoundingClientRect(),button=r.getElementById('settings').getBoundingClientRect();return button.top>=top.top+7&&button.bottom<=top.bottom-7})()`);
+    assert.equal(fit,true);
+  });
+  await check('typing remains editable and does not reach host shortcut handlers',async()=>{
+    await evaluate(`window.hostInputEvents=[];for(const type of ['keydown','keyup','keypress','input','beforeinput'])document.addEventListener(type,event=>window.hostInputEvents.push(event.type));${root}.getElementById('base-url').focus()`);
+    await browser('keyboard','type','/test');
+    assert.equal(await evaluate(`${root}.getElementById('base-url').value`),'/test');
+    assert.deepEqual(await evaluate('window.hostInputEvents'),[]);
+    await evaluate(`${root}.getElementById('base-url').value=''`);
+  });
+  await check('inner scrolling works and never scrolls the host at the boundary or header',async()=>{
+    await evaluate(`window.scrollTo(0,200);${root}.getElementById('shell').style.setProperty('--window-height','420px');${root}.getElementById('setup').scrollTop=0`);
+    const point=await evaluate(`(()=>{const r=${root}.getElementById('setup').getBoundingClientRect();return {x:r.x+15,y:r.y+40}})()`);
+    await browser('mouse','move',String(Math.round(point.x)),String(Math.round(point.y)));
+    await wheel(point,300);
+    await browser('wait','--fn',`${root}.getElementById('setup').scrollTop>0`);
+    assert.ok(await evaluate(`${root}.getElementById('setup').scrollTop>0`));
+    await evaluate(`${root}.getElementById('setup').scrollTop=100000`);
+    await wheel(point,600);
+    await wheel({x:point.x,y:30},600);
+    assert.equal(await evaluate('window.scrollY'),200);
+    await evaluate(`window.scrollTo(0,0);${root}.getElementById('shell').style.setProperty('--window-height','670px');${root}.getElementById('setup').scrollTop=0`);
+  });
+  await check('drag release docks to either side and follows viewport resize',async()=>{
+    for(const side of ['left','right']) {
+      const point=await evaluate(`(()=>{const r=${root}.getElementById('top').getBoundingClientRect();return {x:r.x+20,y:r.y+20,target:${JSON.stringify(side)}==='left'?80:innerWidth-300}})()`);
+      await browser('mouse','move',String(Math.round(point.x)),String(Math.round(point.y)));
+      await browser('mouse','down','left');
+      await browser('mouse','move',String(Math.round(point.target)),String(Math.round(point.y+30)));
+      await browser('mouse','up','left');
+      const edge=`(()=>{const r=document.querySelector('[data-pi-overlay]').getBoundingClientRect();return Math.abs(${JSON.stringify(side)}==='left'?r.left-24:innerWidth-r.right-24)<1})()`;
+      await browser('wait','--fn',edge);
+      assert.equal(await evaluate(edge),true);
+    }
+    await browser('set','viewport','1100','800');
+    assert.ok(await evaluate(`Math.abs(innerWidth-document.querySelector('[data-pi-overlay]').getBoundingClientRect().right-24)<1`));
+    await browser('set','viewport','1280','900');
   });
   const initial = await box();
   await click('minimize');
@@ -154,6 +231,12 @@ try {
     await evaluate(`(()=>{const select=${root}.getElementById('theme');select.value='${next}';select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
     assert.equal(await evaluate(`${root}.getElementById('shell').dataset.theme`),next);
     assert.equal(await evaluate(`localStorage.getItem('pi-tab-theme')`),next);
+    await evaluate(`document.documentElement.style.colorScheme='${theme}'`);
+    assert.equal(await evaluate(`${root}.getElementById('shell').dataset.theme`),next);
+    await evaluate(`(()=>{const select=${root}.getElementById('theme');select.value='auto';select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    await browser('wait','--fn',`${root}.getElementById('shell').dataset.theme==='${theme}'`);
+    assert.equal(await evaluate(`${root}.getElementById('theme').value`),'auto');
+    await evaluate(`document.documentElement.style.removeProperty('color-scheme')`);
   });
   await evaluate(`${root}.getElementById('preferences-back').scrollIntoView({block:'nearest'})`);
   await click('preferences-back');
@@ -220,6 +303,10 @@ try {
     assert.ok(await evaluate(`document.querySelectorAll('[data-pi-overlay]')[1].shadowRoot.getElementById('chat-messages').textContent.includes('Test reply')`));
     assert.equal(await evaluate(`${root}.querySelector('.chat-select[aria-current=true]').closest('.chat-row').dataset.chatId`),String(currentId));
   });
+  await check('closing one of two windows on the same conversation preserves restoration',async()=>{
+    await evaluate(`document.querySelectorAll('[data-pi-overlay]')[1].shadowRoot.getElementById('close').click()`);
+    assert.deepEqual(await evaluate(`JSON.parse(sessionStorage.getItem('pi-tab-open-chats'))`),[currentId]);
+  });
   await browser('tab','t2');
   await check('deleting the last conversation creates a blank one with the same model',async()=>{
     const removed=await engine('deleteChat',[currentId]);assert.equal(removed.ok,true,removed.error);
@@ -236,7 +323,58 @@ try {
   await check('removed conversations stay removed after runtime restart and reload',async()=>{
     const ids=await evaluate(`[...${root}.querySelectorAll('.chat-row')].map(row=>Number(row.dataset.chatId))`);
     assert.equal(ids.length,1);assert.ok(!ids.includes(currentId));assert.ok(!ids.includes(backgroundChat.id));
+    assert.equal(await evaluate(`document.querySelectorAll('[data-pi-overlay]').length`),1);
   });
+  await check('narrow windows keep header controls inside the frame',async()=>{
+    await browser('set','viewport','360','740');
+    assert.equal(await evaluate(`(()=>{const r=${root},shell=r.getElementById('shell').getBoundingClientRect();return [...r.querySelectorAll('#top .icon-button')].every(button=>{const b=button.getBoundingClientRect();return b.left>=shell.left&&b.right<=shell.right})})()`),true);
+    assert.equal(await evaluate(`(()=>{const r=${root},shell=r.getElementById('shell').getBoundingClientRect(),menu=r.getElementById('chat-list').getBoundingClientRect();return menu.left>=shell.left+8&&menu.right<=shell.right-8})()`),true);
+    await browser('screenshot',join(directory,'narrow.png'));
+    await browser('set','viewport','1280','900');
+  });
+  await check('reduced motion docks without leaving an animation running',async()=>{
+    await browser('set','media','light','reduced-motion');
+    const point=await evaluate(`(()=>{const r=${root}.getElementById('top').getBoundingClientRect();return {x:r.x+20,y:r.y+20}})()`);
+    await browser('mouse','move',String(Math.round(point.x)),String(Math.round(point.y)));
+    await browser('mouse','down','left');
+    await browser('mouse','move','60',String(Math.round(point.y+20)));
+    await browser('mouse','up','left');
+    assert.ok(await evaluate(`Math.abs(document.querySelector('[data-pi-overlay]').getBoundingClientRect().left-24)<1`));
+  });
+  if(process.env.PI_TAB_TEST_LIVE==='1') {
+    for(const page of ['https://github.com/aitimos/pi-tab','https://www.bilibili.com/']) {
+      await browser('tab','t1');
+      await browser('open',page);
+      currentPage=await evaluate('location.href');
+      await browser('tab','t2');
+      const activation=await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(new URL(page).origin+'/*')}});return chrome.tabs.sendMessage(tab.id,{type:'activate'});})()`);
+      assert.equal(activation.ok,true,activation.error);
+      await browser('tab','t1');
+      await browser('wait','[data-pi-overlay]');
+      await browser('wait','--fn',`${root}.getElementById('api').options.length>0`);
+      await browser('wait','--fn',`${root}.getElementById('message-input').getClientRects().length>0`);
+      await check(`${new URL(page).hostname}: theme, keyboard and scroll integration`,async()=>{
+        assert.equal(await evaluate(`${root}.getElementById('theme').value`),'auto');
+        await evaluate(`${root}.getElementById('message-input').focus()`);
+        await browser('keyboard','type','/test');
+        assert.equal(await evaluate(`${root}.getElementById('message-input').value`),'/test');
+        assert.equal(await evaluate(`document.activeElement===document.querySelector('[data-pi-overlay]')`),true);
+        const before=await evaluate('window.scrollY');
+        const point=await evaluate(`(()=>{const r=${root}.getElementById('top').getBoundingClientRect();return {x:r.x+20,y:r.y+20}})()`);
+        await browser('mouse','move',String(Math.round(point.x)),String(Math.round(point.y)));
+        await wheel(point,600);
+        assert.equal(await evaluate('window.scrollY'),before);
+        await browser('screenshot',join(directory,new URL(page).hostname+'.png'));
+        await click('settings');
+        await browser('wait','--fn',`${root}.getElementById('preferences').style.display==='block'`);
+        for(const theme of ['dark','light','auto']) {
+          await evaluate(`(()=>{const select=${root}.getElementById('theme');select.value='${theme}';select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+          if(theme!=='auto')assert.equal(await evaluate(`${root}.getElementById('shell').dataset.theme`),theme);
+          await browser('screenshot',join(directory,new URL(page).hostname+'-'+theme+'.png'));
+        }
+      });
+    }
+  }
   console.log(`Screenshot: ${join(directory,'window.png')}`);
 } finally {
   await browser('close').catch(()=>{});
