@@ -2166,19 +2166,19 @@ async function openChat(initialConfig, options = {}) {
   function moveEdge(target, immediate = false, velocity = edgeVelocity) {
     if (options.mount) return;
     const rect = pauseEdge(), bounds = windowBounds();
-    const left = target ? (dockSide === 'left' ? -rect.width : innerWidth)
-      : Math.max(bounds.left, Math.min(bounds.right, rect.left));
-    let offset = rect.left - left;
+    const left = target ? bounds[dockSide] : Math.max(bounds.left, Math.min(bounds.right, rect.left));
+    const end = target ? (dockSide === 'left' ? -rect.width : innerWidth) - left : 0;
+    let offset = rect.left - left - end;
     edgeTarget = target; edgeVelocity = velocity;
     host.style.left = `${left}px`;
     if (!target) host.style.top = `${Math.max(bounds.top, Math.min(bounds.bottom, rect.top))}px`;
     shell.inert = !!target;
     host.style.pointerEvents = target ? 'none' : '';
     shell.style.visibility = '';
-    shell.style.transform = `translateX(${offset}px)`;
+    shell.style.transform = `translateX(${end+offset}px)`;
     const finish = () => {
       edgeFrame = null; edgeVelocity = 0;
-      shell.style.transform = ''; shell.style.willChange = '';
+      shell.style.transform = target ? `translateX(${end}px)` : ''; shell.style.willChange = '';
       shell.style.visibility = target ? 'hidden' : '';
       edgeTab.hidden = !target;
     };
@@ -2193,7 +2193,7 @@ async function openChat(initialConfig, options = {}) {
       const decay = Math.exp(-28*dt), momentum = edgeVelocity+28*offset;
       offset = (offset+momentum*dt)*decay;
       edgeVelocity = (edgeVelocity-28*momentum*dt)*decay;
-      shell.style.transform = `translateX(${offset}px)`;
+      shell.style.transform = `translateX(${end+offset}px)`;
       if (Math.sign(offset)!==direction || (Math.abs(offset)<.5 && Math.abs(edgeVelocity)<5)) { finish(); return; }
       edgeFrame = requestAnimationFrame(step);
     };
