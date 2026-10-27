@@ -196,14 +196,18 @@ try {
 
   await check('docked window folds on mouse leave and expands on hover without losing drafts',async()=>{
     await evaluate(`${root}.activeElement?.blur()`);
+    const inside=await evaluate(`(()=>{const r=${root}.getElementById('top').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);
+    await browser('mouse','move',String(Math.round(inside.x)),String(Math.round(inside.y)));
     await browser('mouse','move','5','5');
     await browser('wait','--fn',`!${root}.getElementById('edge-tab').hidden`);
     assert.equal(await evaluate(`getComputedStyle(${root}.getElementById('shell')).visibility`),'hidden');
     const rail=await evaluate(`(()=>{const r=${root}.getElementById('edge-tab').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,width:r.width}})()`);
     assert.equal(rail.width,12);
+    await browser('screenshot',join(directory,'edge-collapsed.png'));
     await browser('mouse','move',String(Math.round(rail.x)),String(Math.round(rail.y)));
     await browser('wait','--fn',`${root}.getElementById('edge-tab').hidden`);
     assert.equal(await evaluate(`getComputedStyle(${root}.getElementById('shell')).visibility`),'visible');
+    await browser('screenshot',join(directory,'edge-expanded.png'));
     await evaluate(`${root}.getElementById('base-url').value='draft';${root}.getElementById('base-url').focus()`);
     await browser('mouse','move','5','5');await browser('wait','500');
     assert.equal(await evaluate(`${root}.getElementById('edge-tab').hidden`),true);
