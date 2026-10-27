@@ -120,6 +120,7 @@ try {
   await browser('tab','t1');
   await click('chat-switch');
   await browser('screenshot',join(directory,'conversation-menu.png'));
+  await click('chat-switch');
   await click('new-agent');
   await browser('wait','--fn',`document.querySelectorAll('[data-pi-overlay]').length===2`);
   await browser('tab','t2');

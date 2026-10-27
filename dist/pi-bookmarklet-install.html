@@ -151,15 +151,18 @@ function openChat(initialConfig, options = {}) {
     #top { cursor:move; touch-action:none; user-select:none; display:flex; align-items:center; gap:8px; flex:none; height:48px; padding:6px 10px 6px 14px; border-bottom:.5px solid var(--line); }
     #mark,.welcome-mark { display:grid; place-items:center; flex:none; } #mark .pi-icon { width:22px; height:22px; } .welcome-mark .pi-icon { width:45px; height:45px; }
     #mark { width:24px; height:24px; }
-    #brand { flex:1; min-width:0; }
-    #brand strong { font-size:13px; font-weight:600; letter-spacing:-.2px; display:block; line-height:1.4; }
+    #brand { min-width:0; }
+    #brand strong { font-size:13px; font-weight:600; letter-spacing:-.2px; display:block; line-height:1.4; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     #brand small { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
-    .actions { display:flex; gap:3px; align-items:center; }
+    .actions { display:flex; flex:none; gap:4px; align-items:center; }
+    .window-actions { margin-left:auto; }
     button { font:inherit; cursor:pointer; transition:background .15s,color .15s,border-color .15s; }
     button:disabled { opacity:.4; cursor:default; }
     button:focus-visible,summary:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
     svg { width:16px; height:16px; flex:none; vertical-align:middle; }
-    .icon-button { width:30px; height:30px; padding:0; display:grid; place-items:center; background:transparent; border:0; border-radius:8px; color:var(--muted); }
+    .icon-button { width:32px; height:36px; padding:0; display:grid; place-items:center; background:transparent; border:0; border-radius:8px; color:var(--muted); }
+    .actions svg { width:18px; height:18px; }
+    .actions .github-link svg { width:17px; height:17px; }
     .icon-button:hover:not(:disabled) { background:var(--raised); color:var(--text); }
     #content { min-height:0; flex:1; display:flex; flex-direction:column; }
     #setup { padding:24px; overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--line) transparent; }
@@ -397,8 +400,12 @@ function openChat(initialConfig, options = {}) {
     <header id="top">
       <div id="mark" aria-hidden="true">${piIcon()}</div>
       <div id="brand"><strong>Pi Tab</strong><small id="status" role="status">正在启动…</small></div>
-      <nav class="actions" aria-label="窗口操作">
+      <nav class="actions" aria-label="项目链接">
         <a class="icon-button github-link" href="https://github.com/xred-team/pi-in-browser" target="_blank" rel="noopener noreferrer" title="在 GitHub 给 Pi Tab 点 Star" aria-label="在 GitHub 给 Pi Tab 点 Star">${icon('github')}</a>
+      </nav>
+      <nav class="actions window-actions" aria-label="对话和窗口操作">
+        <button class="icon-button" id="new-chat" type="button" title="新对话" aria-label="新对话" disabled>${icon('plus')}</button>
+        <button class="icon-button" id="new-agent" type="button" title="新开窗口" aria-label="新开窗口">${icon('copy')}</button>
         <button class="icon-button" id="chat-switch" title="对话菜单" aria-label="对话菜单" aria-expanded="false">${icon('page')}</button>
         <button class="icon-button" id="settings" title="Pi 设置" aria-label="Pi 设置">${icon('settings')}</button>
         <button class="icon-button" id="minimize" title="最小化" aria-label="最小化" aria-expanded="true">${icon('minimize')}</button>
@@ -407,9 +414,6 @@ function openChat(initialConfig, options = {}) {
     </header>
     <div id="chat-list" aria-label="对话菜单">
       <div id="chat-entries"></div>
-      <div class="menu-divider"></div>
-      <button class="menu-action" id="new-chat" type="button" disabled>${icon('plus')}新对话</button>
-      <button class="menu-action" id="new-agent" type="button" title="在新窗口开始对话">${icon('copy')}新开窗口</button>
       <div class="menu-divider"></div>
       <button class="menu-action" id="theme" type="button">◐<span>切换主题</span></button>
     </div>
@@ -1910,7 +1914,7 @@ function openChat(initialConfig, options = {}) {
   let drag = null;
   for (const handle of [byId('top'), byId('chat-ball')]) {
     handle.addEventListener('pointerdown', event => {
-      if (options.mount || event.button !== 0 || !event.isPrimary || (handle.id === 'top' && event.target.closest('button'))) return;
+      if (options.mount || event.button !== 0 || !event.isPrimary || (handle.id === 'top' && event.target.closest('button,a'))) return;
       const rect = host.getBoundingClientRect();
       suppressBallClick = false;
       drag = { pointerId:event.pointerId, startX:event.clientX, startY:event.clientY, deltaX:event.clientX - rect.left, deltaY:event.clientY - rect.top, moved:false, ball:handle.id === 'chat-ball' };
