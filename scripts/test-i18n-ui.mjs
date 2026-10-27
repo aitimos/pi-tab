@@ -25,7 +25,7 @@ const server=createServer((request,response)=>{
 });
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const url=`http://127.0.0.1:${server.address().port}/`;
-async function browser(...args){const {stdout}=await run('agent-browser',['--headed','false','--session',session,'--json',...args],{maxBuffer:5*1024*1024});const r=JSON.parse(stdout);if(!r.success)throw new Error(JSON.stringify(r.error));return r.data;}
+async function browser(...args){const {stdout}=await run('agent-browser',['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox','--session',session,'--json',...args],{maxBuffer:5*1024*1024});const r=JSON.parse(stdout);if(!r.success)throw new Error(JSON.stringify(r.error));return r.data;}
 const evaluate=async code=>(await browser('eval','-b',Buffer.from(code).toString('base64'))).result;
 const root=`document.querySelector('[data-pi-overlay]').shadowRoot`;
 const click=async id=>evaluate(`${root}.getElementById(${JSON.stringify(id)}).click()`);
@@ -35,7 +35,7 @@ async function scanEnglish(){
   assert.deepEqual(remaining,[],'visible English interface has no untranslated Chinese');
 }
 try{
-  await browser('--args','--headless=new','--executable-path',chrome,'open',url);await ready();
+  await browser('open',url);await ready();
   assert.equal(await evaluate('pi.i18n.mode'),'auto');
   assert.equal(await evaluate('document.documentElement.lang'),await evaluate(`(navigator.languages.find(x=>/^(zh|en)(-|$)/i.test(x))||'en').toLowerCase().startsWith('zh')?'zh-CN':'en'`));
   for(const languages of [['zh-TW','en-US'],['en-GB','zh-CN']]){

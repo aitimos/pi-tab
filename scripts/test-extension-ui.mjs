@@ -63,7 +63,7 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const url = `http://127.0.0.1:${server.address().port}/`;
 const failures = [];
 async function browser(...args) {
-  const {stdout} = await run('agent-browser', ['--headed','false','--session', session, '--json', ...args], {maxBuffer:4*1024*1024});
+  const {stdout} = await run('agent-browser', ['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox','--extension',extension,'--session', session, '--json', ...args], {maxBuffer:4*1024*1024});
   const response = JSON.parse(stdout);
   if (!response.success) throw new Error(JSON.stringify(response.error));
   return response.data;
@@ -114,7 +114,7 @@ try {
   manifest.key = key.toString('base64');
   await writeFile(join(extension,'manifest.json'),JSON.stringify(manifest));
   controller = `chrome-extension://${extensionId}/test-controller.html`;
-  await browser('--args','--headless=new','--executable-path',chrome,'--extension',extension,'open',url);
+  await browser('open',url);
   // Match the user's existing saved large window before opening the extension.
   await evaluate(`localStorage.setItem('pi-tab-size',JSON.stringify({width:500,height:670}))`);
   await browser('tab','new',controller);

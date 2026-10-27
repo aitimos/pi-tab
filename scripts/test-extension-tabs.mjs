@@ -42,7 +42,7 @@ const server=createServer((request,response)=>{
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const url=`http://127.0.0.1:${server.address().port}/source`;
 async function browser(...args){
-  const {stdout}=await run('agent-browser',['--headed','false','--session',session,'--json',...args],{maxBuffer:4*1024*1024});
+  const {stdout}=await run('agent-browser',['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox','--extension',extension,'--session',session,'--json',...args],{maxBuffer:4*1024*1024});
   const reply=JSON.parse(stdout);assert.equal(reply.success,true,JSON.stringify(reply.error));return reply.data;
 }
 const evaluate=async code=>(await browser('eval','-b',Buffer.from(code).toString('base64'))).result;
@@ -54,7 +54,7 @@ try{
   const id=createHash('sha256').update(key).digest('hex').slice(0,32).replace(/[0-9a-f]/g,d=>String.fromCharCode(97+parseInt(d,16)));
   const manifest=JSON.parse(await readFile(join(extension,'manifest.json'),'utf8'));manifest.key=key.toString('base64');
   await writeFile(join(extension,'manifest.json'),JSON.stringify(manifest));
-  await browser('--args','--headless=new','--executable-path',chrome,'--extension',extension,'open',url);
+  await browser('open',url);
   await browser('tab','new',`chrome-extension://${id}/test-controller.html`);
   const sourceTab=await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url)}});await chrome.storage.session.set({['active:'+tab.id]:true});const r=await chrome.tabs.sendMessage(tab.id,{type:'activate'});if(!r.ok)throw new Error(r.error);return tab.id})()`);
   const engine=async(method,args=[],chatId,name,site='127.0.0.1',tabId=sourceTab)=>{

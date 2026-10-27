@@ -42,7 +42,7 @@ bookmark=createBookmarklet(await readFile('dist/pi-console.js','utf8'),{
   config:{api:'openai-completions',baseUrl:url+'v1',apiKey:'test-only',model:'test-model',reasoning:false,thinking:'off'},
 });
 async function browser(...args){
-  const {stdout}=await run('agent-browser',['--headed','false','--session',session,'--json',...args],{maxBuffer:4*1024*1024});
+  const {stdout}=await run('agent-browser',['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox','--session',session,'--json',...args],{maxBuffer:4*1024*1024});
   const reply=JSON.parse(stdout);
   if(!reply.success)throw new Error(JSON.stringify(reply.error));
   return reply.data;
@@ -66,7 +66,7 @@ async function send(text){
   await browser('press','Enter');
 }
 try{
-  await browser('--args','--headless=new','--executable-path',chrome,'open',url);
+  await browser('open',url);
   await evaluate(`localStorage.setItem('pi-tab-language',${JSON.stringify(language)})`);
   await launch();
   assert.equal(await evaluate(`${root}.getElementById('message-input').placeholder`),language==='en'?'Message':'输入消息');
@@ -123,6 +123,19 @@ try{
   assert.equal((await evaluate(`pi.agent(${first}).history()`)).entries.filter(entry=>entry.kind==='pi.assistant'&&JSON.stringify(entry).includes('Bookmark test reply')).length,2);
   assert.ok(requests>=3,'model request is retried after document reload');
   console.log('PASS recovered task completes');
+
+  hold=true;
+  await send('Stop before reload');
+  await browser('wait','--fn',`pi.busyFor(${first})`);
+  await click('#abort');
+  await browser('wait','--fn',`!pi.busyFor(${first})`);
+  const stoppedRequests=requests;
+  await browser('reload');await launch();
+  assert.equal(await evaluate(`pi.busyFor(${first})`),false);
+  assert.notEqual(await evaluate(selected),first);
+  assert.equal(requests,stoppedRequests,'cancelled task must not restart after reload');
+  hold=false;
+  console.log('PASS stopped bookmark task does not resume after reload');
 
   // Reopening an empty conversation must not accumulate unused history entries.
   await browser('reload');
