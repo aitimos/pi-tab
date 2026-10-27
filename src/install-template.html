@@ -96,7 +96,8 @@ function openChat(initialConfig, options = {}) {
   const style = document.createElement('style');
   style.textContent = `
     :host { all:initial; color-scheme:dark; }
-    *, *::before, *::after { box-sizing:border-box; overscroll-behavior:contain; }
+    *, *::before, *::after { box-sizing:border-box; }
+    #shell,.form-body,#chat-messages,#chat-list,#model-list,#manual-model-results,#model-menu,#attachments,.message-file pre { overscroll-behavior:contain; }
     [hidden] { display:none!important; }
     #shell { position:relative; --bg:#191919; --surface:#222222; --raised:#2a2a2a; --line:#484848; --text:#eeeeee; --muted:#b4b4b4; --accent:#9eb1ff; width:min(var(--window-width,420px),calc(100vw - 24px)); height:min(var(--window-height,660px),calc(100dvh - 24px)); display:flex; flex-direction:column; overflow:hidden; border-radius:12px; background:var(--bg); color:var(--text); border:.5px solid var(--line); font:13px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif; text-align:left; color-scheme:dark; }
     #shell[data-theme=light] { --bg:#fcfcfc; --surface:#f9f9f9; --raised:#f0f0f0; --line:#cecece; --text:#202020; --muted:#646464; --accent:#3a5bc7; color-scheme:light; }
@@ -323,7 +324,7 @@ function openChat(initialConfig, options = {}) {
     .pixel-loader i:nth-child(3n+1) { animation-delay:-.4s; }
     .pixel-loader i:nth-child(3n+2) { animation-delay:-.8s; }
     @keyframes pulse { 50% { opacity:.3; } }
-    #composer { position:relative; flex:none; margin:8px; padding:8px 0 2px; border:.5px solid var(--line); border-radius:4px; background:var(--surface); box-shadow:0 5px 18px rgba(0,0,0,.15); transition:border-color .25s ease-out; }
+    #composer { position:relative; flex:none; margin:8px; padding:8px 0 2px; border:.5px solid var(--line); border-radius:10px; background:var(--surface); box-shadow:0 5px 18px rgba(0,0,0,.15); transition:border-color .25s ease-out; }
     #shell[data-theme=light] #composer { box-shadow:0 5px 18px rgba(0,0,0,.05); }
     #composer:focus-within { border-color:var(--accent); }
     #message-input { display:block; width:calc(100% - 36px); margin:0 18px; resize:none; min-height:40px; max-height:180px; padding:4px 0; border:0; border-radius:0; background:transparent; font-size:14px; line-height:1.6; scrollbar-width:thin; }
@@ -1675,7 +1676,7 @@ function openChat(initialConfig, options = {}) {
         return;
       }
       if (event.type === 'run_start' || event.type === 'run_end' || event.type === 'snapshot') {
-        const running = event.type === 'run_start' || (event.type === 'snapshot' && Boolean(event.snapshot?.run));
+        const running = event.type === 'run_start' || (event.type === 'snapshot' && Boolean(event.run));
         for (const row of byId('chat-entries').children) {
           if (row.dataset.chatId === String(event.conversationId)) row.querySelector('.chat-running').hidden = !running;
         }
@@ -1686,6 +1687,7 @@ function openChat(initialConfig, options = {}) {
         return;
       }
       if (event.type === 'queue_changed') { void refreshQueuedMessages(); return; }
+      if (event.type === 'snapshot') { const busy = Boolean(event.run) || state.pending > 0; if (state.busy !== busy) setBusy(busy); return; }
       if (event.type === 'run_start' && !state.busy) { setBusy(true); return; }
       if (event.type === 'run_end' && !state.pending) {
         setBusy(false);

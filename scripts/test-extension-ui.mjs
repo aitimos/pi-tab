@@ -135,7 +135,7 @@ try {
   });
   await check('window, header buttons and composer have aligned nested corners',async()=>{
     const corners=await evaluate(`(()=>{const r=${root};return ['shell','settings','composer'].map(id=>getComputedStyle(r.getElementById(id)).borderTopRightRadius)})()`);
-    assert.deepEqual(corners,['12px','6px','4px']);
+    assert.deepEqual(corners,['12px','6px','10px']);
     const fit=await evaluate(`(()=>{const r=${root},top=r.getElementById('top').getBoundingClientRect(),button=r.getElementById('settings').getBoundingClientRect();return button.top>=top.top+5&&button.bottom<=top.bottom-5})()`);
     assert.equal(fit,true);
   });
@@ -342,18 +342,6 @@ try {
     assert.equal(await evaluate(`${root}.getElementById('chat-entries').children.length`),afterChats.value.length);
   });
   const backgroundChat=afterChats.value.find(chat=>!beforeChats.value.some(old=>old.id===chat.id));
-  // Inject runtime boundary events to verify background-session UI updates.
-  for(const type of ['run_start','run_end']) {
-    await browser('tab','t2');
-    await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});await chrome.tabs.sendMessage(tab.id,{type:'engine-event',event:{type:'${type}',conversationId:${JSON.stringify(backgroundChat.id)}}});})()`);
-    await browser('tab','t1');
-    await check(`background conversation indicator follows ${type}`,async()=>{
-      const indicators=await evaluate(`[...${root}.querySelectorAll('#chat-entries .chat-row')].map(row=>({id:row.dataset.chatId,running:!row.querySelector('.chat-running').hidden}))`);
-      assert.equal(indicators.find(row=>row.id===String(backgroundChat.id)).running,type==='run_start');
-      assert.ok(indicators.filter(row=>row.id!==String(backgroundChat.id)).every(row=>!row.running));
-    });
-    if(type==='run_start')await browser('screenshot',join(directory,'conversation-running.png'));
-  }
   await browser('tab','t2');
   const currentId=beforeChats.value[0].id;
   const engine = async (method,args=[],chatId,name) => evaluate(`chrome.runtime.sendMessage(${JSON.stringify({target:'engine',site:'127.0.0.1',method,args,chatId,name})})`);
@@ -366,6 +354,26 @@ try {
   holdModel=true;
   await evaluate(`void chrome.runtime.sendMessage(${JSON.stringify({target:'engine',site:'127.0.0.1',method:'agent',chatId:currentId,name:'prompt',args:['Pending task']})});true`);
   await browser('wait','--fn',`(async()=>{const r=await chrome.runtime.sendMessage({target:'engine',site:'127.0.0.1',method:'listChats'});return r.value.some(c=>c.id===${currentId}&&c.busy)})()`);
+  await check('real background run stays visible when opening and reopening the conversation menu',async()=>{
+    await browser('tab','t1');
+    const indicator=`${root}.querySelector('[data-chat-id="${currentId}"] .chat-running')`;
+    await browser('wait','--fn',`${indicator} && !${indicator}.hidden`);
+    assert.equal(await evaluate(`getComputedStyle(${indicator}).display`),'flex');
+    await evaluate(`${root}.querySelector('[data-chat-id="${backgroundChat.id}"] .chat-select').click()`);
+    await click('chat-switch');
+    await browser('wait','--fn',`${indicator} && !${indicator}.hidden`);
+    await evaluate(`${root}.querySelector('[data-chat-id="${currentId}"] .chat-select').click()`);
+    await click('chat-switch');
+    await browser('wait','--fn',`${indicator} && !${indicator}.hidden`);
+    await browser('screenshot',join(directory,'conversation-running.png'));
+    await browser('tab','t2');
+  });
+  await check('Durable snapshot with a live run preserves the running indicator',async()=>{
+    await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});await chrome.tabs.sendMessage(tab.id,{type:'engine-event',event:{type:'snapshot',conversationId:${currentId},run:{inputs:[1]}}});})()`);
+    await browser('tab','t1');
+    assert.equal(await evaluate(`${root}.querySelector('[data-chat-id="${currentId}"] .chat-running').hidden`),false);
+    await browser('tab','t2');
+  });
   await check('queued attachment editing keeps image and file contents',async()=>{
     await browser('tab','t1');
     await click('chat-switch');
@@ -393,6 +401,10 @@ try {
   await engine('agent',[],currentId,'abort');
   holdModel=false;
   await browser('tab','t1');
+  await check('real run completion clears the conversation indicator',async()=>{
+    if(await evaluate(`${root}.getElementById('chat-list').dataset.open!=='true'`))await click('chat-switch');
+    await browser('wait','--fn',`${root}.querySelector('[data-chat-id="${currentId}"] .chat-running')?.hidden===true`);
+  });
   // Removing the background conversation must not switch the current one.
   if(await evaluate(`${root}.getElementById('chat-list').dataset.open!=='true'`))await click('chat-switch');
   const removeSelector=`#chat-entries [data-chat-id="${backgroundChat.id}"] .chat-delete`;
@@ -438,6 +450,24 @@ try {
     const ids=await evaluate(`[...${root}.querySelectorAll('.chat-row')].map(row=>Number(row.dataset.chatId))`);
     assert.equal(ids.length,1);assert.ok(!ids.includes(currentId));assert.ok(!ids.includes(backgroundChat.id));
     assert.equal(await evaluate(`document.querySelectorAll('[data-pi-overlay]').length`),1);
+  });
+  await check('long conversation list scrolls over titles and contains boundary scrolling',async()=>{
+    await browser('tab','t2');
+    for(let i=0;i<16;i++)assert.equal((await engine('createChat')).ok,true);
+    await browser('tab','t1');
+    await click('chat-switch');await click('chat-switch');
+    await browser('wait','--fn',`${root}.querySelectorAll('.chat-row').length===17`);
+    const point=await evaluate(`(()=>{const title=${root}.querySelector('.chat-title').getBoundingClientRect();return {x:title.x+20,y:title.y+title.height/2}})()`);
+    const before=await evaluate('window.scrollY');
+    await wheel(point,300);
+    await browser('wait','--fn',`${root}.getElementById('chat-list').scrollTop>0`);
+    await evaluate(`${root}.getElementById('chat-list').scrollTop=100000`);
+    await wheel(point,600);
+    assert.equal(await evaluate('window.scrollY'),before);
+    const end=await evaluate(`${root}.getElementById('chat-list').scrollTop`);
+    await wheel(point,-180);
+    await browser('wait','--fn',`${root}.getElementById('chat-list').scrollTop<${end}`);
+    await browser('screenshot',join(directory,'conversation-scroll.png'));
   });
   await check('narrow windows keep header controls inside the frame',async()=>{
     await browser('set','viewport','360','740');

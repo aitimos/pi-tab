@@ -149,7 +149,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
       for (const event of batch) {
         if (event.type === 'run_start') durableBusy.set(id, true);
         if (event.type === 'run_end') durableBusy.set(id, false);
-        if (event.type === 'snapshot') durableBusy.set(id, Boolean(event.snapshot?.run));
+        if (event.type === 'snapshot') durableBusy.set(id, Boolean(event.run));
         emit({ ...event, conversationId: id });
       }
     });

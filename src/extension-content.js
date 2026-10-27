@@ -103,6 +103,7 @@ chrome.runtime.onMessage.addListener((message,_sender,respond)=>{
       }
       if(message.event.type==='run_start')busy.set(message.event.conversationId,true);
       if(message.event.type==='run_end')busy.set(message.event.conversationId,false);
+      if(message.event.type==='snapshot')busy.set(message.event.conversationId,Boolean(message.event.run));
       for(const listener of listeners)listener(message.event);
     }
     return false;
