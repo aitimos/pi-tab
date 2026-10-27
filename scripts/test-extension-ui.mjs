@@ -115,6 +115,23 @@ try {
     assert.equal((await box()).visible,true);
   });
   await browser('screenshot',join(directory,'window.png'));
+  await browser('tab','t2');
+  const beforeChats = await evaluate(`chrome.runtime.sendMessage({target:'engine',site:'127.0.0.1',method:'listChats'})`);
+  await browser('tab','t1');
+  await click('chat-switch');
+  await browser('screenshot',join(directory,'conversation-menu.png'));
+  await click('new-agent');
+  await browser('wait','--fn',`document.querySelectorAll('[data-pi-overlay]').length===2`);
+  await browser('tab','t2');
+  const afterChats = await evaluate(`chrome.runtime.sendMessage({target:'engine',site:'127.0.0.1',method:'listChats'})`);
+  await check('new window creates a separate empty conversation',async()=>{
+    assert.equal(beforeChats.ok,true);assert.equal(afterChats.ok,true);
+    assert.equal(afterChats.value.length,beforeChats.value.length+1);
+    const created=afterChats.value.find(chat=>!beforeChats.value.some(old=>old.id===chat.id));
+    assert.ok(created);
+    const history=await evaluate(`chrome.runtime.sendMessage({target:'engine',site:'127.0.0.1',method:'agent',chatId:${created.id},name:'history'})`);
+    assert.equal(history.ok,true);assert.equal(history.value.entries.length,0);
+  });
   console.log(`Screenshot: ${join(directory,'window.png')}`);
 } finally {
   await browser('close').catch(()=>{});

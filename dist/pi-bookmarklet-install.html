@@ -210,7 +210,7 @@ function openChat(initialConfig, options = {}) {
     #model-dialog .dialog-heading { justify-content:space-between; margin-bottom:24px; }
     #model-dialog .dialog-heading h2 { margin:0; font-size:17px; line-height:1.5; }
     #model-picker-main { flex:1; min-height:0; display:flex; flex-direction:column; }
-    #model-list { flex:1; min-height:0; overflow:auto; margin:10px -12px; }
+    #model-list { flex:1; min-height:0; overflow:auto; margin:10px -12px; display:grid; grid-auto-rows:max-content; align-content:start; gap:4px; }
     #manual-model-form,#provider-form { flex:1; overflow:auto; display:flex; flex-direction:column; gap:18px; }
     #manual-model-form label,#provider-form label { margin:0; }
     #manual-model-form .primary,#provider-form .primary { margin-top:4px; }
@@ -263,8 +263,9 @@ function openChat(initialConfig, options = {}) {
     .answer-actions { display:flex; align-items:center; gap:6px; color:var(--muted); }
     .answer-actions .icon-button { width:26px; height:26px; }
     .answer-action-status { font-size:12px; }
-    #shell #chat-list { display:none; position:absolute; z-index:2; top:48px; right:10px; width:min(300px,calc(100% - 20px)); max-height:55%; overflow:auto; padding:6px; background:color-mix(in srgb,var(--bg) 94%,transparent); border:.5px solid var(--line); border-radius:10px; }
-    #shell #chat-list[data-open=true] { display:block; }
+    #shell #chat-list { display:none; position:absolute; z-index:2; top:48px; right:10px; width:min(300px,calc(100% - 20px)); max-height:55%; overflow:auto; padding:6px; background:var(--bg); border:.5px solid var(--line); border-radius:10px; }
+    #shell #chat-list[data-open=true] { display:flex; flex-direction:column; gap:4px; }
+    #chat-entries { display:flex; flex-direction:column; gap:4px; }
     #chat-list button { display:block; width:100%; padding:9px 10px; background:transparent; border:0; border-radius:6px; color:var(--text); text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
     #chat-list button:hover:not(:disabled),#chat-list button[aria-current=true] { background:var(--raised); }
     #chat-list .menu-divider { height:.5px; margin:6px 4px; background:var(--line); }
@@ -327,11 +328,11 @@ function openChat(initialConfig, options = {}) {
     .model-button:hover:not(:disabled) { color:var(--text); }
     #chat-model { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     #model-menu { position:absolute; z-index:4; left:12px; bottom:calc(100% + 8px); width:min(320px,calc(100% - 24px)); max-height:min(360px,60dvh); overflow:auto; padding:6px; border:.5px solid var(--line); border-radius:12px; background:var(--bg); box-shadow:0 12px 32px rgba(0,0,0,.15); }
-    #model-menu-list { max-height:270px; overflow:auto; }
+    #model-menu-list { max-height:270px; overflow:auto; display:grid; gap:4px; }
     #model-menu button { display:block; width:100%; padding:8px 10px; border:0; border-radius:7px; background:transparent; color:var(--text); text-align:left; }
     #model-menu button:hover,#model-menu button[aria-current=true] { background:var(--raised); }
     #model-menu button small { display:block; color:var(--muted); font-size:12px; }
-    #model-menu-actions { display:flex; gap:4px; border-top:.5px solid var(--line); margin-top:5px; padding-top:5px; }
+    #model-menu-actions { display:flex; gap:8px; border-top:.5px solid var(--line); margin-top:8px; padding-top:8px; }
     #model-menu-actions button { font-size:12px; color:var(--muted); }
     #model-menu-empty { padding:8px 10px; color:var(--muted); font-size:12px; }
     #send,#abort { position:relative; width:44px; height:44px; flex:none; display:grid; place-items:center; padding:0; border:0; border-radius:22px; background:transparent; color:var(--text); }
@@ -1720,8 +1721,7 @@ function openChat(initialConfig, options = {}) {
   byId('new-agent').addEventListener('click', async () => {
     if (!agent) return;
     closeChatMenu();
-    const chatId = await runtimePi.createChat({ inheritFrom: agent.id });
-    openChat(undefined, { forceNew:true, chatId });
+    openChat(undefined, { forceNew:true, newAgent:true, inheritFrom:agent.id });
   });
   function closeChatMenu() {
     byId('chat-list').dataset.open = 'false';
