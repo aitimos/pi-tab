@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Pi Tab",
-  "version": "1.0.23",
+  "version": "1.0.24",
   "description": "__MSG_description__",
   "default_locale": "en",
   "icons": {

@@ -274,7 +274,7 @@ async function openChat(initialConfig, options = {}) {
     .chat-running svg { width:16px; height:16px; animation:chat-running 1s linear infinite; }
     @keyframes chat-running { to { transform:rotate(360deg); } }
     @media(prefers-reduced-motion:reduce) { .chat-running svg { animation:none; } }
-    #edge-tab { position:fixed; display:grid; place-items:center; width:28px; height:64px; padding:0; border:0; background:var(--edge-bg); color:var(--edge-text); box-shadow:0 4px 16px rgba(0,0,0,.15),0 1px 4px rgba(0,0,0,.1); pointer-events:auto; cursor:grab; touch-action:none; user-select:none; }
+    #edge-tab { position:fixed; display:grid; place-items:center; width:28px; height:64px; padding:0; border:0; background:var(--edge-bg); box-shadow:0 4px 16px rgba(0,0,0,.15),0 1px 4px rgba(0,0,0,.1); pointer-events:auto; cursor:grab; touch-action:none; user-select:none; }
     #edge-tab:active { cursor:grabbing; }
     #edge-tab .pi-icon { width:18px; height:18px; }
     #resize-handle { position:absolute; right:0; bottom:0; width:20px; height:20px; border:0; background:transparent; cursor:nwse-resize; touch-action:none; }
@@ -2011,6 +2011,7 @@ async function openChat(initialConfig, options = {}) {
     }
     shell.dataset.theme = theme;
     host.style.colorScheme = theme;
+    host.style.setProperty('--edge-bg', getComputedStyle(shell).getPropertyValue('--bg'));
     byId('theme').value = mode;
     if (options.mount) {
       if (document.documentElement.dataset.theme !== theme) document.documentElement.dataset.theme = theme;
@@ -2144,54 +2145,68 @@ async function openChat(initialConfig, options = {}) {
   byId('close').addEventListener('click', () => { expandEdge(true); host.style.display = 'none'; rememberWindow(); });
   let dockSide = null;
   let edgeTimer, edgeHoverTimer, suppressEdgeClick = false;
-  let edgeFrame = null, edgeProgress = 0, edgeVelocity = 0, edgeTarget = 0, edgeDistance = 0;
+  let edgeFrame = null, edgeVelocity = 0, edgeTarget = 0;
   const edgeReducedMotion = matchMedia('(prefers-reduced-motion:reduce)');
   const edgeTab = document.createElement('button');
   edgeTab.id = 'edge-tab';edgeTab.type = 'button';edgeTab.hidden = true;
   edgeTab.innerHTML=piIcon();
   i18n.attr(edgeTab,'aria-label',()=>t("打开 Pi Tab"));
   root.append(edgeTab);
-  function moveEdge(target, immediate = false) {
-    edgeTarget = target;
+  // Dragging and animation both use the window's current screen position.
+  // Absorb any live transform before another interaction takes ownership.
+  function pauseEdge() {
+    clearTimeout(edgeTimer); clearTimeout(edgeHoverTimer);
+    if (edgeFrame !== null) cancelAnimationFrame(edgeFrame);
+    edgeFrame = null;
+    const rect = shell.getBoundingClientRect();
+    host.style.left = `${rect.left}px`; host.style.top = `${rect.top}px`; host.style.right = 'auto';
+    shell.style.transform = ''; shell.style.willChange = '';
+    return rect;
+  }
+  function moveEdge(target, immediate = false, velocity = edgeVelocity) {
+    if (options.mount) return;
+    const rect = pauseEdge(), bounds = windowBounds();
+    const left = target ? (dockSide === 'left' ? -rect.width : innerWidth)
+      : Math.max(bounds.left, Math.min(bounds.right, rect.left));
+    let offset = rect.left - left;
+    edgeTarget = target; edgeVelocity = velocity;
+    host.style.left = `${left}px`;
+    if (!target) host.style.top = `${Math.max(bounds.top, Math.min(bounds.bottom, rect.top))}px`;
     shell.inert = !!target;
     host.style.pointerEvents = target ? 'none' : '';
     shell.style.visibility = '';
-    if (edgeFrame !== null) cancelAnimationFrame(edgeFrame);
+    shell.style.transform = `translateX(${offset}px)`;
     const finish = () => {
-      edgeFrame = null; edgeProgress = target; edgeVelocity = 0;
+      edgeFrame = null; edgeVelocity = 0;
       shell.style.transform = ''; shell.style.willChange = '';
       shell.style.visibility = target ? 'hidden' : '';
       edgeTab.hidden = !target;
     };
-    if (immediate || edgeReducedMotion.matches || Math.abs(edgeProgress-target)<.001 && Math.abs(edgeVelocity)<.01) {
-      finish(); return;
-    }
+    if (immediate || edgeReducedMotion.matches || Math.abs(offset) < .5) { finish(); return; }
     shell.style.willChange = 'transform';
     let lastTime = performance.now();
+    const direction = Math.sign(offset);
     const step = time => {
       const dt = Math.min((time-lastTime)/1000, 1/30);
       lastTime = time;
-      // Critically damped spring: retarget without resetting position or velocity.
-      const displacement = edgeProgress-edgeTarget;
-      const decay = Math.exp(-28*dt), momentum = edgeVelocity+28*displacement;
-      edgeProgress = edgeTarget+(displacement+momentum*dt)*decay;
+      // Critically damped spring in pixels; preserve velocity when reversed.
+      const decay = Math.exp(-28*dt), momentum = edgeVelocity+28*offset;
+      offset = (offset+momentum*dt)*decay;
       edgeVelocity = (edgeVelocity-28*momentum*dt)*decay;
-      shell.style.transform = `translateX(${edgeDistance*edgeProgress}px)`;
-      if ((edgeTarget===1 && edgeProgress>=1) || (edgeTarget===0 && edgeProgress<=0) || (Math.abs(edgeProgress-edgeTarget)<.001 && Math.abs(edgeVelocity)<.01)) { finish(); return; }
+      shell.style.transform = `translateX(${offset}px)`;
+      if (Math.sign(offset)!==direction || (Math.abs(offset)<.5 && Math.abs(edgeVelocity)<5)) { finish(); return; }
       edgeFrame = requestAnimationFrame(step);
     };
     edgeFrame = requestAnimationFrame(step);
   }
   function expandEdge(immediate = false) {
     if (drag && !immediate) return;
-    clearTimeout(edgeTimer);clearTimeout(edgeHoverTimer);
-    if(edgeTarget===1){const b=windowBounds(),r=host.getBoundingClientRect();host.style.top=`${Math.max(b.top,Math.min(b.bottom,r.top))}px`;}
     moveEdge(0, immediate);
   }
   function showEdge(side) {
-    const rect=host.getBoundingClientRect(),style=getComputedStyle(shell);
-    edgeTab.style.cssText=`${side}:0;top:${Math.max(12,Math.min(innerHeight-76,rect.top+rect.height/2-32))}px;border-radius:${side==='left'?'0 9px 9px 0':'9px 0 0 9px'};--edge-bg:${style.getPropertyValue('--bg')};--edge-text:${style.getPropertyValue('--muted')}`;
-    edgeTab.hidden=false;
+    const rect = host.getBoundingClientRect(), height = edgeTab.offsetHeight || 64;
+    edgeTab.style.cssText = `${side}:0;top:${Math.max(12,Math.min(innerHeight-height-12,rect.top+rect.height/2-height/2))}px;border-radius:${side==='left'?'0 9px 9px 0':'9px 0 0 9px'}`;
+    edgeTab.hidden = false;
   }
   edgeReducedMotion.addEventListener('change', () => { if(edgeReducedMotion.matches)moveEdge(edgeTarget,true); });
   if (!options.mount) {
@@ -2202,8 +2217,6 @@ async function openChat(initialConfig, options = {}) {
         const editing=root.activeElement;
         if(!dockSide||state.minimized||drag||resizing||shell.querySelector('dialog[open]')||
           (editing?.matches('input,textarea')&&editing.value))return;
-        const rect=host.getBoundingClientRect();
-        edgeDistance=dockSide==='left'?-rect.right:innerWidth-rect.left;
         showEdge(dockSide);
         moveEdge(1);
       },300);
@@ -2253,10 +2266,8 @@ async function openChat(initialConfig, options = {}) {
   let resizing = null;
   byId('resize-handle').addEventListener('pointerdown', event => {
     if (options.mount || event.button !== 0) return;
-    const rect = shell.getBoundingClientRect();
-    expandEdge(true);
-    host.style.left = `${rect.left}px`;
-    host.style.right = 'auto';
+    const rect = pauseEdge();
+    edgeVelocity = 0;
     resizing = { pointerId:event.pointerId, x:event.clientX, y:event.clientY, width:rect.width, height:rect.height };
     event.currentTarget.setPointerCapture(event.pointerId);
     event.preventDefault();
@@ -2280,100 +2291,84 @@ async function openChat(initialConfig, options = {}) {
   for (const handle of [byId('top'), byId('chat-ball'), edgeTab]) {
     handle.addEventListener('pointerdown', event => {
       if (options.mount || event.button !== 0 || !event.isPrimary || (handle.id === 'top' && event.target.closest('button,a'))) return;
-      if(handle===edgeTab){
-        clearTimeout(edgeTimer);clearTimeout(edgeHoverTimer);
-        if(edgeFrame!==null)cancelAnimationFrame(edgeFrame);
-        edgeFrame=null;suppressEdgeClick=false;
-        const rect=host.getBoundingClientRect(),rail=edgeTab.getBoundingClientRect();
-        drag={pointerId:event.pointerId,startX:event.clientX,startY:event.clientY,lastX:event.clientX,lastTime:performance.now(),velocity:0,moved:false,rail:true,side:dockSide,originSide:dockSide,railTop:rail.top,top:rect.top,width:rect.width,pulled:false};
-        handle.setPointerCapture(event.pointerId);event.preventDefault();return;
+      const animating = edgeFrame !== null;
+      const collapsed = shell.style.visibility === 'hidden';
+      const rect = pauseEdge();
+      edgeVelocity = 0;
+      suppressEdgeClick = false; suppressBallClick = false;
+      drag = {
+        pointerId:event.pointerId, startX:event.clientX, startY:event.clientY,
+        left:rect.left, top:rect.top, lastX:event.clientX, lastTime:performance.now(), velocity:0,
+        moved:false, rail:handle===edgeTab, ball:handle.id==='chat-ball',
+        originSide:dockSide, side:null, pulled:!collapsed, animating,
+      };
+      if (drag.rail) {
+        const rail = edgeTab.getBoundingClientRect();
+        drag.railTop = rail.top; drag.railHeight = rail.height;
       }
-      const rect = shell.getBoundingClientRect();
-      expandEdge(true);
-      host.style.left = `${rect.left}px`; host.style.top = `${rect.top}px`; host.style.right = 'auto';
-      suppressBallClick = false;
-      drag = { pointerId:event.pointerId, startX:event.clientX, startY:event.clientY, deltaX:event.clientX - rect.left, deltaY:event.clientY - rect.top, moved:false, ball:handle.id === 'chat-ball', lastX:event.clientX, lastTime:performance.now(), velocity:0, side:null };
       handle.setPointerCapture(event.pointerId);
       if (!drag.ball) event.preventDefault();
     });
   }
   window.addEventListener('pointermove', event => {
     if (!drag || drag.pointerId !== event.pointerId) return;
-    if (!drag.moved && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 4) return;
+    const dx = event.clientX-drag.startX, dy = event.clientY-drag.startY;
+    if (!drag.moved && Math.hypot(dx,dy)<4) return;
     drag.moved = true;
-    if(drag.rail){
-      const dx=event.clientX-drag.startX,dy=event.clientY-drag.startY;
-      const now=performance.now();
-      drag.velocity=(event.clientX-drag.lastX)/Math.max(.008,(now-drag.lastTime)/1000);
-      drag.lastX=event.clientX;drag.lastTime=now;
-      const inward=drag.originSide==='left'?dx:-dx;
-      if(!drag.pulled&&inward>12)drag.pulled=true;
-      if(!drag.pulled){
-        const top=Math.max(12,Math.min(innerHeight-76,drag.railTop+dy));
-        host.style.top=`${drag.top+top-drag.railTop}px`;
-        showEdge(drag.originSide);return;
+    const now = performance.now();
+    drag.velocity = (event.clientX-drag.lastX)/Math.max(.008,(now-drag.lastTime)/1000);
+    drag.lastX = event.clientX; drag.lastTime = now;
+    const inward = drag.originSide==='left' ? dx : -dx;
+    if (drag.rail) {
+      if (inward>12) drag.pulled = true;
+      if (!drag.pulled) {
+        const top = Math.max(12,Math.min(innerHeight-drag.railHeight-12,drag.railTop+dy));
+        host.style.top = `${drag.top+top-drag.railTop}px`;
+        showEdge(drag.originSide);
+        return;
       }
-      const left=drag.originSide==='left'?-drag.width+28+dx:innerWidth-28+dx;
-      host.style.left=`${left}px`;host.style.right='auto';
-      host.style.top=`${Math.max(0,Math.min(innerHeight-40,drag.top+dy))}px`;
-      shell.style.visibility='';shell.style.transform='';
-      shell.inert=true;edgeTab.style.opacity='0';
-      drag.side=inward<=12?drag.originSide:null;
-      return;
+      shell.style.visibility = ''; shell.inert = true;
+      edgeTab.style.opacity = '0';
+      drag.side = inward<=12 ? drag.originSide : null;
+    } else {
+      dockSide = null;
+      drag.side = drag.ball ? null : event.clientX<=12 ? 'left' : event.clientX>=innerWidth-12 ? 'right' : null;
     }
-    dockSide = null;
-    const now=performance.now();
-    drag.velocity=(event.clientX-drag.lastX)/Math.max(.008,(now-drag.lastTime)/1000);
-    drag.lastX=event.clientX;drag.lastTime=now;
-    host.style.left=`${event.clientX-drag.deltaX}px`;
-    host.style.top=`${Math.max(0,Math.min(innerHeight-40,event.clientY-drag.deltaY))}px`;
-    host.style.right='auto';
-    drag.side=drag.ball?null:event.clientX<=12?'left':event.clientX>=innerWidth-12?'right':null;
-    if(drag.side){showEdge(drag.side);edgeTab.style.pointerEvents='none';}
-    else edgeTab.hidden=true;
+    host.style.left = `${drag.left+dx}px`;
+    host.style.top = `${Math.max(0,Math.min(innerHeight-40,drag.top+dy))}px`;
+    if (!drag.rail) {
+      if (drag.side) { showEdge(drag.side); edgeTab.style.pointerEvents = 'none'; }
+      else edgeTab.hidden = true;
+    }
   });
   const endDrag = event => {
     if (!drag || drag.pointerId !== event.pointerId) return;
-    suppressBallClick = drag.ball && drag.moved;
-    const released=drag;
+    const released = drag;
     drag = null;
-    if(released.rail){
-      suppressEdgeClick=released.moved;edgeTab.style.opacity='';
-      if(!released.moved){expandEdge();return;}
-      if(!released.pulled){moveEdge(1,true);return;}
-      if(!released.side&&event.type!=='pointercancel'){
-        const rect=host.getBoundingClientRect(),b=windowBounds();
-        const left=Math.max(b.left,Math.min(b.right,rect.left));
-        host.style.left=`${left}px`;
-        host.style.top=`${Math.max(b.top,Math.min(b.bottom,rect.top))}px`;
-        edgeDistance=rect.left-left;edgeProgress=1;edgeVelocity=edgeDistance?released.velocity/edgeDistance:0;
-        shell.style.transform=`translateX(${edgeDistance}px)`;
-        edgeTab.hidden=true;dockSide=null;moveEdge(0);return;
-      }
+    suppressBallClick = released.ball && released.moved;
+    suppressEdgeClick = released.rail && released.moved;
+    edgeTab.style.opacity = '';
+    if (event.type==='pointercancel') { clampPosition(); return; }
+    if (!released.moved) {
+      if (released.rail) expandEdge();
+      else if (released.animating) moveEdge(edgeTarget);
+      return;
     }
-    if(!released.moved)return;
-    clearTimeout(edgeTimer);
-    if(event.type==='pointercancel'){edgeTab.hidden=true;clampPosition();return;}
-    dockSide=released.side;
-    if(!dockSide){edgeTab.hidden=true;return;}
-    const rect=host.getBoundingClientRect(),bounds=windowBounds();
-    const left=bounds[dockSide];
-    host.style.left=`${left}px`;
-    edgeDistance=dockSide==='left'?-(left+rect.width):innerWidth-left;
-    edgeProgress=(rect.left-left)/edgeDistance;
-    edgeVelocity=performance.now()-released.lastTime<80?released.velocity/edgeDistance:0;
-    shell.style.transform=`translateX(${rect.left-left}px)`;
-    showEdge(dockSide);
-    moveEdge(1);
+    const velocity = performance.now()-released.lastTime<80 ? released.velocity : 0;
+    dockSide = released.rail && !released.pulled ? released.originSide : released.side;
+    if (dockSide) { showEdge(dockSide); moveEdge(1,false,velocity); }
+    else {
+      edgeTab.hidden = true;
+      if (released.rail) moveEdge(0,false,velocity);
+    }
   };
   window.addEventListener('pointerup', endDrag);
   window.addEventListener('pointercancel', endDrag);
-  window.addEventListener('blur', () => { if(drag){drag=null;edgeTab.hidden=true;clampPosition();} });
+  window.addEventListener('blur', () => { if (drag) endDrag({pointerId:drag.pointerId,type:'pointercancel'}); });
   const manager = prior || { instances: new Map(), open(config) { return openChat(config, { forceNew:true, newAgent:true }); } };
   if (!prior) window[globalName] = manager;
   const instance = {
     open(config) {
-      expandEdge();
       host.style.display = 'block';
       if (agent) rememberWindow();
       refreshPageContext();

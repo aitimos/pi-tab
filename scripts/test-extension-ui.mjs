@@ -290,6 +290,67 @@ try {
       assert.equal(await evaluate(`getComputedStyle(${root}.getElementById('shell')).visibility`),'visible');
     }
   });
+  await check('side handle keeps the live position when grabbed during expansion and cancels cleanly',async()=>{
+    for (const side of ['left','right']) {
+      const point=await evaluate(`(()=>{const r=${root}.getElementById('top').getBoundingClientRect();return {x:r.x+20,y:r.y+20,edge:${JSON.stringify(side)}==='left'?2:innerWidth-2}})()`);
+      await browser('mouse','move',String(Math.round(point.x)),String(Math.round(point.y)));
+      await browser('mouse','down','left');
+      await browser('mouse','move',String(point.edge),String(Math.round(point.y)));
+      await browser('mouse','up','left');
+      await browser('wait','--fn',`getComputedStyle(${root}.getElementById('shell')).visibility==='hidden'`);
+      // The collapsed handle must follow theme changes without reopening.
+      for (const theme of ['dark','light']) {
+        await evaluate(`document.documentElement.style.colorScheme='${theme}'`);
+        await browser('wait','--fn',`${root}.getElementById('shell').dataset.theme==='${theme}'`);
+        assert.equal(await evaluate(`getComputedStyle(${root}.getElementById('edge-tab')).backgroundColor===getComputedStyle(${root}.getElementById('shell')).backgroundColor`),true);
+      }
+      const result=await evaluate(`(async()=>{
+        const shell=${root}.getElementById('shell'),rail=${root}.getElementById('edge-tab');
+        const capture=rail.setPointerCapture;
+        // Script only the timing-sensitive interruption; real capture/drag is covered above.
+        rail.setPointerCapture=()=>{};
+        try {
+          rail.click();await new Promise(resolve=>setTimeout(resolve,60));
+          const before=shell.getBoundingClientRect().left,dx=${JSON.stringify(side)}==='left'?40:-40;
+          const p={pointerId:777,isPrimary:true,button:0,clientX:${point.edge},clientY:300};
+          rail.dispatchEvent(new PointerEvent('pointerdown',p));
+          const grabbed=shell.getBoundingClientRect().left;
+          window.dispatchEvent(new PointerEvent('pointermove',{...p,clientX:p.clientX+dx}));
+          const moved=shell.getBoundingClientRect().left;
+          window.dispatchEvent(new Event('blur'));
+          return {before,grabbed,moved,dx,opacity:getComputedStyle(rail).opacity,hidden:rail.hidden,inert:shell.inert,visibility:getComputedStyle(shell).visibility};
+        } finally {rail.setPointerCapture=capture;}
+      })()`);
+      assert.ok(Math.abs(result.grabbed-result.before)<1,JSON.stringify(result));
+      assert.ok(Math.abs(result.moved-result.before-result.dx)<1,JSON.stringify(result));
+      assert.equal(result.opacity,'1');assert.equal(result.hidden,true);
+      assert.equal(result.inert,false);assert.equal(result.visibility,'visible');
+      await evaluate(`document.documentElement.style.removeProperty('color-scheme')`);
+    }
+  });
+  await check('pausing a handle drag before release drops old fling velocity',async()=>{
+    const result=await evaluate(`(async()=>{
+      const host=document.querySelector('[data-pi-overlay]'),shell=${root}.getElementById('shell'),rail=${root}.getElementById('edge-tab');
+      host.dispatchEvent(new PointerEvent('pointerleave',{pointerType:'mouse'}));
+      while(getComputedStyle(shell).visibility!=='hidden')await new Promise(requestAnimationFrame);
+      const capture=rail.setPointerCapture;rail.setPointerCapture=()=>{};
+      try {
+        const r=rail.getBoundingClientRect(),p={pointerId:778,isPrimary:true,button:0,clientX:r.x+14,clientY:r.y+32};
+        rail.dispatchEvent(new PointerEvent('pointerdown',p));
+        window.dispatchEvent(new PointerEvent('pointermove',{...p,clientX:p.clientX-30}));
+        window.dispatchEvent(new PointerEvent('pointermove',{...p,clientX:p.clientX-190}));
+        await new Promise(resolve=>setTimeout(resolve,120));
+        const before=shell.getBoundingClientRect().left;
+        window.dispatchEvent(new PointerEvent('pointerup',{...p,clientX:p.clientX-190}));
+        await new Promise(requestAnimationFrame);await new Promise(requestAnimationFrame);
+        const first=shell.getBoundingClientRect().left,target=host.getBoundingClientRect().left;
+        while(shell.style.transform)await new Promise(requestAnimationFrame);
+        return {before,first,target};
+      } finally {rail.setPointerCapture=capture;}
+    })()`);
+    assert.ok(Math.abs(result.first-result.before)<Math.abs(result.target-result.before)*.75,JSON.stringify(result));
+    assert.ok(Math.abs(result.first-result.before)>0,JSON.stringify(result));
+  });
   await check('dragging away from an edge leaves the window where it was released',async()=>{
     for(const placement of ['center','left','right']) {
       const point=await evaluate(`(()=>{const r=${root}.getElementById('top').getBoundingClientRect();return {x:r.x+20,y:r.y+20,left:${JSON.stringify(placement)}==='center'?(innerWidth-r.width)/2:${JSON.stringify(placement)}==='left'?60:innerWidth-r.width-60}})()`);
