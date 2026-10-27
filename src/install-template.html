@@ -2215,13 +2215,13 @@ async function openChat(initialConfig, options = {}) {
       clearTimeout(edgeTimer);
       edgeTimer=setTimeout(()=>{
         const editing=root.activeElement;
-        if(!dockSide||state.minimized||drag||resizing||shell.querySelector('dialog[open]')||
+        if(!dockSide||state.minimized||drag||resizing||edgeTab.matches(':hover')||shell.matches(':hover')||shell.querySelector('dialog[open]')||
           (editing?.matches('input,textarea')&&editing.value))return;
         showEdge(dockSide);
         moveEdge(1);
       },300);
     });
-    host.addEventListener('pointerenter',()=>{if(edgeTarget===0)clearTimeout(edgeTimer);});
+    host.addEventListener('pointerenter',()=>clearTimeout(edgeTimer));
     edgeTab.addEventListener('pointerenter',()=>{clearTimeout(edgeHoverTimer);edgeHoverTimer=setTimeout(()=>expandEdge(),200);});
     edgeTab.addEventListener('pointerleave',()=>clearTimeout(edgeHoverTimer));
     edgeTab.addEventListener('click',event=>{if(suppressEdgeClick&&event.detail){suppressEdgeClick=false;return;}expandEdge();});

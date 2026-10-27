@@ -302,7 +302,7 @@ try {
       for (const theme of ['dark','light']) {
         await evaluate(`document.documentElement.style.colorScheme='${theme}'`);
         await browser('wait','--fn',`${root}.getElementById('shell').dataset.theme==='${theme}'`);
-        assert.equal(await evaluate(`getComputedStyle(${root}.getElementById('edge-tab')).backgroundColor===getComputedStyle(${root}.getElementById('top')).backgroundColor`),true);
+        await browser('wait','--fn',`getComputedStyle(${root}.getElementById('edge-tab')).backgroundColor===getComputedStyle(${root}.getElementById('top')).backgroundColor`);
       }
       const handle=await evaluate(`(()=>{
         const shell=${root}.getElementById('shell'),rail=${root}.getElementById('edge-tab'),r=rail.getBoundingClientRect();
