@@ -87,6 +87,10 @@ Pull Request 和 main 分支推送会自动构建并运行测试。发布时同�
 
 加载未打包扩展的用户需要替换原目录文件，在 `chrome://extensions` 重新加载，再刷新网页；GitHub Release 不会自动更新浏览器中已安装的扩展。
 
+## 参与社区
+
+[问题反馈与功能建议](https://github.com/aitimos/pi-tab/issues/new/choose) | [贡献指南](CONTRIBUTING.md) | [行为准则](CODE_OF_CONDUCT.md) | [安全报告](SECURITY.md)
+
 ## 许可证
 
 本项目采用 [Apache License 2.0](LICENSE)。

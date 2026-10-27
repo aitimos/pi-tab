@@ -87,6 +87,10 @@ Pull requests and pushes to main build and test the extension. To release, updat
 
 Unpacked extensions require replacing the files in the original directory, reloading in `chrome://extensions`, and refreshing the webpage. GitHub Releases do not automatically update installed browser extensions.
 
+## Community
+
+[Issues and feature requests](https://github.com/aitimos/pi-tab/issues/new/choose) | [Contributing](CONTRIBUTING.md) | [Code of conduct](CODE_OF_CONDUCT.md) | [Security policy](SECURITY.md)
+
 ## License
 
 Licensed under the [Apache License 2.0](LICENSE).

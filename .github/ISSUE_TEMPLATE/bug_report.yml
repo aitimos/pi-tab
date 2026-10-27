@@ -1,0 +1,49 @@
+name: 问题反馈 / Bug report
+description: 报告无法启动、会话、模型或界面问题。
+body:
+  - type: markdown
+    attributes:
+      value: "安全漏洞请使用私密报告入口。请勿粘贴 API Key、Cookie 或完整书签地址。中文或英文均可。"
+  - type: input
+    id: version
+    attributes:
+      label: Pi Tab 版本 / Version
+      placeholder: v1.0.7
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: 使用方式 / Mode
+      options:
+        - Chrome 扩展 / Extension
+        - 书签 / Bookmarklet
+        - 安装页 / Installer
+        - Console
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 浏览器与系统 / Browser and OS
+      placeholder: Chrome 版本，macOS / Windows / Linux
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 复现步骤与实际结果 / Steps and actual result
+      description: 如果与特定网站有关，请提供可公开的示例网址。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望结果 / Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 截图、日志或模型信息 / Additional context
+      description: 可选。模型问题请注明提供商、接口类型和模型名称，不要包含密钥。

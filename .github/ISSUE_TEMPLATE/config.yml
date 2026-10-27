@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 私密报告安全漏洞 / Report a vulnerability
+    url: https://github.com/aitimos/pi-tab/security/advisories/new
+    about: 请勿在公开 Issue 中披露未修复漏洞或凭据。
+  - name: 安装与使用 / Installation and usage
+    url: https://aitimos.github.io/pi-tab/
+    about: 书签和 Chrome 扩展安装教程。
