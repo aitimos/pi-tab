@@ -11,7 +11,19 @@ export function createBookmarklet(source, { openChat, config } = {}) {
       pi=PiConsolePlugin.install({globalName:'pi' in window?'__piTabAgent':'pi'});
     }
     await pi.ready;
-    ${openChat ? `(${openChat.toString()})(${JSON.stringify(config || {})});` : ''}
+    ${openChat ? `const launch={};
+    if(!window.__piQuickChatOverlay){
+      const chats=await pi.listChats();
+      const openIds=JSON.parse(sessionStorage.getItem('pi-tab-open-chats')||'[]');
+      const previous=chats.find(chat=>openIds.includes(chat.id))||chats.find(chat=>chat.active);
+      const running=(previous?.busy&&previous)||chats.find(chat=>chat.busy);
+      if(running)launch.chatId=running.id;
+      else if(previous){
+        if((await pi.agent(previous.id).history()).entries.length){launch.newAgent=true;launch.inheritFrom=previous.id;}
+        else launch.chatId=previous.id;
+      }
+    }
+    (${openChat.toString()})(${JSON.stringify(config || {})},launch);` : ''}
   }catch(error){
     console.error('[Pi Tab]',error);
     const notice=document.createElement('div');

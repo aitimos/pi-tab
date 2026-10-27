@@ -5,7 +5,7 @@ import { runInNewContext } from 'node:vm';
 import { createBookmarklet } from '../src/bookmarklet.js';
 
 test('bookmark runs once, awaits startup and preserves URL-sensitive config', { timeout:2000 }, async () => {
-  const source = `var PiConsolePlugin={install(){window.loads=(window.loads||0)+1;return window.pi={__piConsolePlugin:true,ready:Promise.resolve().then(()=>window.started=true)};}};`;
+  const source = `var PiConsolePlugin={install(){window.loads=(window.loads||0)+1;return window.pi={__piConsolePlugin:true,listChats:async()=>[],history:async()=>({entries:[]}),ready:Promise.resolve().then(()=>window.started=true)};}};`;
   const config = { api:'openai-completions', model:'模型 "test"', apiKey:'test-only-\n-<&%20?#😀-key' };
   const url = createBookmarklet(source, {
     config,
@@ -14,7 +14,7 @@ test('bookmark runs once, awaits startup and preserves URL-sensitive config', { 
   assert.equal(new URL(url).search, '');
   assert.equal(new URL(url).hash, '');
   const page = {};
-  const context = { window:page, console };
+  const context = { window:page, console, sessionStorage:{getItem:()=>null} };
   for (let i=0; i<2; i++) {
     const completed = new Promise(resolve => { page.done=resolve; });
     assert.equal(runInNewContext(decodeURIComponent(url.slice('javascript:'.length)), context), undefined);
@@ -43,11 +43,11 @@ test('startup errors show a dismissible page notice without a browser alert', as
 });
 
 test('a page using window.pi can still start Pi Tab', async () => {
-  const source = `var PiConsolePlugin={install({globalName}){const pi={__piConsolePlugin:true,ready:Promise.resolve()};window[globalName]=pi;return pi;}};`;
+  const source = `var PiConsolePlugin={install({globalName}){const pi={__piConsolePlugin:true,listChats:async()=>[],history:async()=>({entries:[]}),ready:Promise.resolve()};window[globalName]=pi;return pi;}};`;
   const page = {pi:{pageOwned:true}};
   const opened = new Promise(resolve => { page.opened=resolve; });
   const url = createBookmarklet(source, {openChat:function() { window.opened(window.__piTabAgent); }});
-  runInNewContext(decodeURIComponent(url.slice(11)), {window:page,console:{error() {}}});
+  runInNewContext(decodeURIComponent(url.slice(11)), {window:page,sessionStorage:{getItem:()=>null},console:{error() {}}});
   assert.equal((await opened).__piConsolePlugin, true);
   assert.equal(page.pi.pageOwned, true);
 });
@@ -67,4 +67,23 @@ test('shipped chat and Console bookmarks stay below the browser URL limit', asyn
   const consoleBookmark = await readFile(new URL('../dist/pi-bookmarklet.txt', import.meta.url), 'utf8');
   assert.ok(chat.length < 2 * 1024 * 1024);
   assert.ok(consoleBookmark.length < 2 * 1024 * 1024);
+});
+
+test('bookmark opens blank conversations but resumes unfinished tasks', async () => {
+  for (const {name, chats, entries, manager, openIds = [], expected} of [
+    {name:'first use', chats:[{id:1,active:true,busy:false}], entries:[], expected:{chatId:1}},
+    {name:'completed history', chats:[{id:1,active:true,busy:false}], entries:[{}], expected:{newAgent:true,inheritFrom:1}},
+    {name:'active task', chats:[{id:1,active:true,busy:true}], entries:[{}], expected:{chatId:1}},
+    {name:'background task', chats:[{id:1,active:true,busy:false},{id:2,busy:true}], entries:[{}], expected:{chatId:2}},
+    {name:'prefer active task', chats:[{id:2,busy:true},{id:1,active:true,busy:true}], entries:[{}], expected:{chatId:1}},
+    {name:'last opened empty conversation', chats:[{id:1,active:true},{id:2}], openIds:[2], entries:[], expected:{chatId:2}},
+    {name:'last opened model inheritance', chats:[{id:1,active:true},{id:2}], openIds:[2], entries:[{}], expected:{newAgent:true,inheritFrom:2}},
+    {name:'existing windows', chats:[], entries:[{}], manager:{}, expected:{}},
+  ]) {
+    const page={pi:{__piConsolePlugin:true,ready:Promise.resolve(),listChats:async()=>chats,agent:()=>({history:async()=>({entries})})},__piQuickChatOverlay:manager};
+    const opened=new Promise(resolve=>{page.opened=resolve;});
+    const url=createBookmarklet('', {openChat:function(config,options){window.opened(options);}});
+    runInNewContext(decodeURIComponent(url.slice(11)), {window:page,console,sessionStorage:{getItem:()=>JSON.stringify(openIds)}});
+    assert.deepEqual(JSON.parse(JSON.stringify(await opened)),expected,name);
+  }
 });
