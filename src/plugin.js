@@ -460,6 +460,34 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     __piConsolePlugin: true, version: '1.1.0', durableVersion: '1.4.0', Type,
     get defaultPrompt() { return DEFAULT_PROMPT; },
     ready: null, configure, prompt, registerTool, listChats, selectChat, newChat, createChat,
+    async deleteChat(id) {
+      await pi.ready; ensureOpen();
+      const state = await harness.snapshot(TabState, ctx);
+      if (!state.chats.some(chat => chat.id === id)) throw new Error('对话不存在。');
+      if (pi.busyFor(id)) throw new Error('请先停止这个会话的任务，再删除。');
+      // Durable retains its event log; remove this conversation from the app's
+      // index and reset its active context rather than rewriting shared storage.
+      const target = await harness.conversation(id, ctx);
+      await target.abort(ctx);
+      await target.reset(undefined, ctx);
+      const replacementId = state.chats.find(chat => chat.id !== id)?.id ?? await createChat({ inheritFrom:id });
+      await harness.commit(async tx => {
+        const data = await tx.doc(TabState);
+        data.chats = data.chats.filter(chat => chat.id !== id);
+        delete data.chatConfigs[id];
+        if (data.activeId === id) data.activeId = replacementId;
+      }, ctx);
+      if (conversation.id === id) {
+        conversation = await harness.conversation(replacementId, ctx);
+        configuration = configurations.get(replacementId) ?? null;
+      }
+      await eventStreams.get(id)?.stop();
+      eventStreams.delete(id);
+      configurations.delete(id);
+      durableBusy.delete(id);
+      emit({ type:'chat_deleted', conversationId:id, replacementId });
+      return { replacementId };
+    },
     async getPreferences() { await pi.ready; return structuredClone(preferences); },
     async setPreferences(input) {
       await pi.ready; ensureOpen();

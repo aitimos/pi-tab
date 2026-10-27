@@ -87,6 +87,12 @@ chrome.runtime.onMessage.addListener((message, _sender, respond) => {
     if (method === 'createChat') { const id=await pi.createChat({inheritFrom:args[0],activate:true}); targets.set(id,tabId); return id; }
     if (method === 'selectChat') { await pi.selectChat(chatId); bindTarget(chatId,tabId); return {config:pi.configFor(chatId),busy:pi.busyFor(chatId)}; }
     if (method === 'listChats') return (await pi.listChats()).map(chat=>({...chat,busy:pi.busyFor(chat.id),config:pi.configFor(chat.id)}));
+    if (method === 'deleteChat') {
+      const result = await pi.deleteChat(args[0]);
+      targets.delete(args[0]);
+      bindTarget(result.replacementId, tabId);
+      return result;
+    }
     if (method === 'agent') {
       if (['prompt','steer','followUp'].includes(message.name)) bindTarget(chatId,tabId);
       const agent=pi.agent(chatId);

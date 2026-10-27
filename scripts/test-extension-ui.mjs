@@ -15,7 +15,18 @@ if (!chrome) throw new Error('Set PI_TAB_TEST_CHROME to the Chrome for Testing e
 const directory = await mkdtemp(join(tmpdir(), 'pi-tab-ui-'));
 const extension = join(directory, 'extension');
 const session = `pi-tab-ui-${process.pid}`;
-const server = createServer((_request, response) => {
+let holdModel = false;
+const server = createServer((request, response) => {
+  if (request.url.endsWith('/chat/completions')) {
+    if (holdModel) return; // Keep a real run pending until the test aborts it.
+    response.writeHead(200, {'Content-Type':'text/event-stream'});
+    for (const choice of [
+      {delta:{role:'assistant',content:'Test reply'},finish_reason:null},
+      {delta:{},finish_reason:'stop'},
+    ]) response.write('data: '+JSON.stringify({id:'test',object:'chat.completion.chunk',created:1,model:'test-model',choices:[{index:0,...choice}]})+'\n\n');
+    response.end('data: [DONE]\n\n');
+    return;
+  }
   response.writeHead(200, {'Content-Type':'text/html'});
   response.end('<!doctype html><title>Pi Tab regression</title><h1>Page content</h1>');
 });
@@ -149,7 +160,7 @@ try {
   assert.equal(await evaluate(`${root}.getElementById('preferences').style.display`),'none');
   await click('chat-switch');
   await check('conversation menu contains only conversations',async()=>{
-    assert.equal(await evaluate(`${root}.getElementById('chat-list').children.length`),1);
+    assert.equal(await evaluate(`${root}.getElementById('chat-menu-error').hidden`),true);
     assert.equal(await evaluate(`${root}.getElementById('chat-entries').children.length`),afterChats.value.length);
   });
   const backgroundChat=afterChats.value.find(chat=>!beforeChats.value.some(old=>old.id===chat.id));
@@ -159,15 +170,77 @@ try {
     await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});await chrome.tabs.sendMessage(tab.id,{type:'engine-event',event:{type:'${type}',conversationId:${JSON.stringify(backgroundChat.id)}}});})()`);
     await browser('tab','t1');
     await check(`background conversation indicator follows ${type}`,async()=>{
-      const indicators=await evaluate(`[...${root}.querySelectorAll('#chat-entries button')].map(row=>({id:row.dataset.chatId,running:!row.querySelector('.chat-running').hidden}))`);
+      const indicators=await evaluate(`[...${root}.querySelectorAll('#chat-entries .chat-row')].map(row=>({id:row.dataset.chatId,running:!row.querySelector('.chat-running').hidden}))`);
       assert.equal(indicators.find(row=>row.id===String(backgroundChat.id)).running,type==='run_start');
       assert.ok(indicators.filter(row=>row.id!==String(backgroundChat.id)).every(row=>!row.running));
     });
     if(type==='run_start')await browser('screenshot',join(directory,'conversation-running.png'));
   }
+  await browser('tab','t2');
+  const currentId=beforeChats.value[0].id;
+  const engine = async (method,args=[],chatId,name) => evaluate(`chrome.runtime.sendMessage(${JSON.stringify({target:'engine',site:'127.0.0.1',method,args,chatId,name})})`);
+  const configuration = await engine('agent',[{api:'openai-completions',baseUrl:url+'v1',apiKey:'test-only',model:'test-model',reasoning:false,thinking:'off'}],currentId,'configure');
+  assert.equal(configuration.ok,true,configuration.error);
+  const reply=await engine('agent',['Keep this conversation'],currentId,'prompt');
+  assert.equal(reply.ok,true,reply.error);
+  const keptHistory=await engine('agent',[],currentId,'history');
+  const keptModels=await engine('listModels');
+  holdModel=true;
+  await evaluate(`void chrome.runtime.sendMessage(${JSON.stringify({target:'engine',site:'127.0.0.1',method:'agent',chatId:currentId,name:'prompt',args:['Pending task']})});true`);
+  await browser('wait','--fn',`(async()=>{const r=await chrome.runtime.sendMessage({target:'engine',site:'127.0.0.1',method:'listChats'});return r.value.some(c=>c.id===${currentId}&&c.busy)})()`);
+  await check('running conversation refuses deletion',async()=>{
+    const result=await engine('deleteChat',[currentId]);
+    assert.equal(result.ok,false);assert.match(result.error,/先停止/);
+    assert.ok((await engine('listChats')).value.some(c=>c.id===currentId));
+  });
+  await engine('agent',[],currentId,'abort');
+  holdModel=false;
+  await browser('tab','t1');
+  // Removing the background conversation must not switch the current one.
+  if(await evaluate(`${root}.getElementById('chat-list').dataset.open!=='true'`))await click('chat-switch');
+  const removeSelector=`#chat-entries [data-chat-id="${backgroundChat.id}"] .chat-delete`;
+  await evaluate(`${root}.querySelector(${JSON.stringify(removeSelector)}).click()`);
+  await check('delete asks for inline confirmation',async()=>{
+    assert.equal(await evaluate(`${root}.querySelector(${JSON.stringify(removeSelector)}).textContent`),'确认删除');
+    assert.equal(await evaluate(`${root}.querySelectorAll('.chat-row').length`),2);
+  });
+  await browser('screenshot',join(directory,'delete-confirm.png'));
+  await evaluate(`${root}.querySelector(${JSON.stringify(removeSelector)}).click()`);
+  await browser('wait','--fn',`!${root}.querySelector(${JSON.stringify(removeSelector)})`);
+  await browser('tab','t2');
+  await check('deletion preserves other conversations and model profiles',async()=>{
+    const chats=await engine('listChats');assert.equal(chats.value.length,1);assert.equal(chats.value[0].id,currentId);
+    assert.deepEqual((await engine('listModels')).value,keptModels.value);
+    assert.ok((await engine('agent',[],currentId,'history')).value.entries.length>=keptHistory.value.entries.length);
+    assert.equal((await engine('receiveFromTab',['hello','test'],backgroundChat.id)).ok,false);
+  });
+  await browser('tab','t1');
+  await browser('wait','--fn',`document.querySelectorAll('[data-pi-overlay]')[1].shadowRoot.getElementById('chat-messages').textContent.includes('Test reply')`);
+  await check('other window viewing deleted conversation selects the remaining one',async()=>{
+    assert.ok(await evaluate(`document.querySelectorAll('[data-pi-overlay]')[1].shadowRoot.getElementById('chat-messages').textContent.includes('Test reply')`));
+    assert.equal(await evaluate(`${root}.querySelector('.chat-select[aria-current=true]').closest('.chat-row').dataset.chatId`),String(currentId));
+  });
+  await browser('tab','t2');
+  await check('deleting the last conversation creates a blank one with the same model',async()=>{
+    const removed=await engine('deleteChat',[currentId]);assert.equal(removed.ok,true,removed.error);
+    const chats=(await engine('listChats')).value;assert.equal(chats.length,1);assert.notEqual(chats[0].id,currentId);
+    assert.equal(chats[0].config.model,'test-model');
+    assert.equal((await engine('agent',[],chats[0].id,'history')).value.entries.length,0);
+  });
+  // Restart the offscreen runtime, not only the UI, to exercise persisted data.
+  await evaluate('chrome.offscreen.closeDocument()');
+  await browser('tab','t1');
+  await browser('reload');
+  await activate();
+  await click('chat-switch');
+  await check('removed conversations stay removed after runtime restart and reload',async()=>{
+    const ids=await evaluate(`[...${root}.querySelectorAll('.chat-row')].map(row=>Number(row.dataset.chatId))`);
+    assert.equal(ids.length,1);assert.ok(!ids.includes(currentId));assert.ok(!ids.includes(backgroundChat.id));
+  });
   console.log(`Screenshot: ${join(directory,'window.png')}`);
 } finally {
   await browser('close').catch(()=>{});
+  server.closeAllConnections();
   await new Promise(resolve=>server.close(resolve));
   await rm(extension,{recursive:true,force:true});
 }

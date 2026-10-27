@@ -37,6 +37,7 @@ async function initializeExtension() {
     describeModel:config=>modelConfig.describe(config),
     onEvent(listener){listeners.add(listener);return()=>listeners.delete(listener);},
     async listChats(){const chats=await engineCall('listChats');for(const chat of chats){configs.set(chat.id,chat.config);busy.set(chat.id,chat.busy);}return chats;},
+    deleteChat:id=>engineCall('deleteChat',[id]),
     async createChat({inheritFrom=activeId}={}){
       const id=await engineCall('createChat',[inheritFrom]);
       activeId=id;
@@ -96,6 +97,10 @@ function startExtension(){
 chrome.runtime.onMessage.addListener((message,_sender,respond)=>{
   if(message.type==='engine-event'){
     if(site) {
+      if(message.event.type==='chat_deleted'){
+        configs.delete(message.event.conversationId);busy.delete(message.event.conversationId);
+        if(activeId===message.event.conversationId)activeId=message.event.replacementId;
+      }
       if(message.event.type==='run_start')busy.set(message.event.conversationId,true);
       if(message.event.type==='run_end')busy.set(message.event.conversationId,false);
       for(const listener of listeners)listener(message.event);

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="description" content="把 Pi Tab 保存到浏览器书签栏，随时与当前网页对话。">
+<meta name="description" content="基于 Pi Durable，在浏览器中运行 Pi Agent。支持书签、Chrome 扩展和持久化会话。">
 <title>安装 Pi Tab</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 4' shape-rendering='crispEdges'%3E%3Cpath fill='%23e48a7a' d='M0 0h3v1H0zM2 1h1v1H2z'/%3E%3Cpath fill='%234f8eb3' d='M0 1h1v3H0zM1 2h1v1H1z'/%3E%3Cpath fill='%23eab65d' d='M3 2h1v2H3z'/%3E%3C/svg%3E">
 <style>
@@ -45,7 +45,7 @@ body>header,body>main,body>footer{position:relative;z-index:1}
 <svg id="drag-to-bar" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path id="drag-path"/><path id="drag-head"/><text id="drag-label">拖到书签栏</text></svg>
 <header class="site-header wrap"><div class="brand"><span class="brand-mark" aria-hidden="true"><svg class="pi-icon" viewBox="0 0 4 4" shape-rendering="crispEdges" aria-hidden="true"><path fill="#e48a7a" d="M0 0h3v1H0zM2 1h1v1H2z"/><path fill="#4f8eb3" d="M0 1h1v3H0zM1 2h1v1H1z"/><path fill="#eab65d" d="M3 2h1v2H3z"/></svg></span>Pi Tab</div><nav class="header-nav" aria-label="相关链接"><button id="site-theme" class="theme-toggle" type="button" title="切换浅色和深色" aria-label="切换浅色和深色">◐</button><a class="header-link" href="#help">使用帮助</a><a class="header-link" href="https://github.com/aitimos/pi-tab" target="_blank" rel="noopener noreferrer">GitHub ↗</a></nav></header>
 <main class="wrap">
-<div class="hero"><h1>Pi Agent</h1><p class="desktop-intro">把 Pi Tab 拖到书签栏，让 AI 帮你总结内容、整理表格和操作页面。</p><p class="mobile-intro">填写模型信息，直接开始对话。</p></div>
+<div class="hero"><h1>Pi Agent</h1><p class="desktop-intro">基于 Pi Durable，通过书签或扩展打开，阅读、整理和操作当前网页。</p><p class="mobile-intro">填写模型信息，直接开始对话。</p></div>
 <div class="layout">
 <div id="chat-preview" aria-label="设置模型并试用 Pi Tab"></div>
 <section class="card save-card" id="save-card" aria-labelledby="save-title">
@@ -57,8 +57,13 @@ body>header,body>main,body>footer{position:relative;z-index:1}
 <details class="manual"><summary>手动添加书签</summary><div class="manual-content"><p>复制下方地址，在浏览器的书签管理器中新建书签。填写名称，将地址粘贴到新书签的“网址”栏，再保存。</p><button class="secondary" id="copy-bookmark" type="button">复制书签地址</button><p id="copy-status" role="status" aria-live="polite"></p><textarea id="bookmark-url" readonly aria-label="书签地址" spellcheck="false" hidden></textarea></div></details>
 </section>
 </div>
-<section class="card extension-guide" aria-labelledby="extension-title"><div class="extension-head"><h2 id="extension-title">安装 Chrome 扩展</h2><a class="secondary" href="https://github.com/aitimos/pi-tab/releases/latest/download/pi-tab-extension.zip">下载扩展包</a></div><ol class="instructions"><li><div><strong>解压扩展包</strong><p>得到 pi-tab-extension 文件夹。</p></div></li><li><div><strong>打开扩展程序页面</strong><p>在地址栏输入 <kbd>chrome://extensions</kbd>，开启开发者模式。</p></div></li><li><div><strong>加载并启用</strong><p>点击“加载已解压的扩展程序”，选择 pi-tab-extension 文件夹，再点击工具栏中的 Pi Tab 图标。</p></div></li></ol></section>
-<section class="help" id="help" aria-labelledby="help-title"><h2 id="help-title">使用帮助</h2><div class="help-grid"><details><summary>如何填写模型信息？</summary><p>在模型服务商的网站中获取密钥（API Key）、接口地址和模型名称，并按说明选择接口类型。请选择支持工具调用的模型，Pi Tab 需要这项能力来读取和操作页面。</p></details><details><summary>无法打开或连接模型？</summary><p>请在普通网页中打开 Pi Tab，浏览器设置页等内部页面无法使用。若对话窗口未出现，可能是网页禁止运行书签脚本。若无法获得回复，请核对模型信息，并向服务商确认接口是否允许网页直接访问（CORS）。</p></details></div></section>
+<section class="card extension-guide" aria-labelledby="extension-title"><div class="extension-head"><h2 id="extension-title">安装 Chrome 扩展</h2><a class="secondary" href="https://github.com/aitimos/pi-tab/releases/latest/download/pi-tab-extension.zip">下载扩展包</a></div><ol class="instructions"><li><div><strong>解压扩展包</strong><p>得到 pi-tab-extension 文件夹。更新时替换原目录文件。</p></div></li><li><div><strong>打开扩展程序页面</strong><p>在地址栏输入 <kbd>chrome://extensions</kbd>，开启开发者模式。</p></div></li><li><div><strong>加载并启用</strong><p>点击“加载已解压的扩展程序”，选择 pi-tab-extension 文件夹，在普通网页点击工具栏中的 Pi Tab 图标并配置模型。更新后需重新加载扩展并刷新网页。</p></div></li></ol></section>
+<section class="help" id="help" aria-labelledby="help-title"><h2 id="help-title">使用帮助</h2><div class="help-grid">
+<details><summary>如何添加和切换模型？</summary><p>首次使用填写服务商提供的接口类型、地址和密钥，获取模型后选择并保存。以后从输入框下方的模型下拉切换；「添加模型」和「添加提供商」分别配置模型与连接信息。请选择支持工具调用的模型。</p></details>
+<details><summary>会话保存在哪里？刷新会怎样？</summary><p>扩展会话保存在本机，按完整域名分组，同域的路径、查询参数和标签页共享列表，模型配置跨网站共享。已启用标签页刷新后自动恢复，页面操作仍需要可用的目标标签页。书签需重新点击才能恢复，同源标签页并发使用时可能有独立记录。两种模式的记录不自动合并，也不上传云端同步。</p></details>
+<details><summary>如何管理会话和主题？</summary><p>顶部可新建对话、新开窗口和切换会话，新窗口使用空白会话并继承模型配置。圆环表示会话正在运行。删除时点击会话右侧图标并确认，运行中的任务需先停止。主题、指令和队列选项在「Pi 设置」中。</p></details>
+<details><summary>无法打开或连接模型？</summary><p>扩展用于普通 HTTP 和 HTTPS 网页，不支持本地文件、浏览器设置页或扩展商店。书签可能被网页安全策略拦截，模型接口还需允许网页跨域访问（CORS）。扩展从后台请求模型；连接失败时请核对接口地址、凭据和模型权限。</p></details>
+</div></section>
 </main>
 <footer class="site-footer wrap"><span>Pi Tab</span><span>AI 可读取并操作页面，请在信任的网页使用。</span></footer>
 <script id="pi-runtime" type="application/json">""</script>
@@ -237,7 +242,12 @@ function openChat(initialConfig, options = {}) {
     #chat-entries { display:flex; flex-direction:column; gap:4px; }
     #chat-list button { display:block; width:100%; padding:9px 10px; background:transparent; border:0; border-radius:6px; color:var(--text); text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
     #chat-list button:hover:not(:disabled),#chat-list button[aria-current=true] { background:var(--raised); }
+    #chat-entries .chat-row { display:flex; align-items:center; gap:4px; }
     #chat-entries button { display:flex; align-items:center; gap:12px; min-height:40px; }
+    #chat-entries .chat-select { flex:1; min-width:0; }
+    #chat-entries .chat-delete { flex:none; width:32px; min-height:32px; justify-content:center; padding:6px; color:var(--muted); }
+    #chat-entries .chat-delete[data-confirm=true] { width:auto; color:var(--text); }
+    #chat-menu-error { margin:4px 10px; font-size:12px; color:var(--muted); }
     .chat-title { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .chat-running { display:flex; flex:none; color:var(--muted); }
     .chat-running svg { width:16px; height:16px; animation:chat-running 1s linear infinite; }
@@ -383,6 +393,7 @@ function openChat(initialConfig, options = {}) {
     </header>
     <div id="chat-list" aria-label="对话菜单">
       <div id="chat-entries"></div>
+      <p id="chat-menu-error" role="status" hidden></p>
     </div>
     <div id="content">
       <form id="setup" autocomplete="off">
@@ -406,7 +417,7 @@ function openChat(initialConfig, options = {}) {
         <button id="start" class="primary" type="submit">保存并开始</button>
         <button id="back-chat" class="subtle" type="button" hidden>返回对话</button>
         <p id="setup-error" class="error" role="alert" hidden></p>
-        <div class="hint">设置和对话保存在当前网站的浏览器存储中。</div>
+        <div class="hint">设置和对话保存在本机浏览器中。</div>
       </form>
       <section id="chat" aria-label="对话">
         <div id="chat-tools">${icon('page')}<span id="page-title"></span><span class="context-dot" aria-hidden="true"></span><span>当前网页</span></div>
@@ -1428,6 +1439,12 @@ function openChat(initialConfig, options = {}) {
     const pi = agent;
     if (!pi || typeof pi.onEvent !== 'function') return;
     state.unsubscribe = runtimePi.onEvent(event => {
+      if (event.type === 'chat_deleted') {
+        byId('chat-entries').querySelector(`[data-chat-id="${event.conversationId}"]`)?.remove();
+        rememberWindow(event.conversationId, null);
+        if (pi.id === event.conversationId) void switchConversation(event.replacementId).catch(error => message('system', error.message));
+        return;
+      }
       if (event.type === 'run_start' || event.type === 'run_end' || event.type === 'snapshot') {
         const running = event.type === 'run_start' || (event.type === 'snapshot' && Boolean(event.snapshot?.run));
         for (const row of byId('chat-entries').children) {
@@ -1706,6 +1723,24 @@ function openChat(initialConfig, options = {}) {
     byId('chat-list').dataset.open = 'false';
     byId('chat-switch').setAttribute('aria-expanded', 'false');
   }
+  async function switchConversation(id) {
+    const previousId = agent.id;
+    await agent.selectChat(id);
+    rememberWindow(previousId, agent.id);
+    state.pending = state.pendingByChat.get(agent.id) || 0;
+    state.activeConfig = await agent.savedConfig();
+    if (state.activeConfig) syncModelControls(state.activeConfig);
+    subscribeEvents();
+    closeChatMenu();
+    byId('chat-messages').replaceChildren();
+    state.tools.clear();
+    state.trace = null;
+    state.traces = [];
+    state.stream = null;
+    setBusy(agent.busy || state.pending > 0);
+    if (state.activeConfig) showChat();
+    else { state.connected = false; showSetup(); }
+  }
   byId('chat-switch').addEventListener('click', async () => {
     const menu = byId('chat-list');
     const open = menu.dataset.open !== 'true';
@@ -1715,12 +1750,16 @@ function openChat(initialConfig, options = {}) {
     menu.style.right = `${Math.max(10, shell.getBoundingClientRect().right - byId('chat-switch').getBoundingClientRect().right)}px`;
     const entries = byId('chat-entries');
     entries.replaceChildren();
+    byId('chat-menu-error').hidden = true;
     byId('new-agent').disabled = !agent;
     let untitled = 0;
     for (const chat of agent ? await agent.listChats() : []) {
+      const row = document.createElement('div');
+      row.className = 'chat-row';
+      row.dataset.chatId = String(chat.id);
       const button = document.createElement('button');
       button.type = 'button';
-      button.dataset.chatId = String(chat.id);
+      button.className = 'chat-select';
       const title = document.createElement('span');
       title.className = 'chat-title';
       title.textContent = chat.title === '新对话' ? `对话 ${++untitled}` : chat.title;
@@ -1735,24 +1774,32 @@ function openChat(initialConfig, options = {}) {
       button.title = chat.title;
       button.setAttribute('aria-current', String(chat.active));
       button.addEventListener('click', async () => {
-        const previousId = agent.id;
-        if (previousId === chat.id) { closeChatMenu(); return; }
-        await agent.selectChat(chat.id);
-        rememberWindow(previousId, agent.id);
-        state.pending = state.pendingByChat.get(agent.id) || 0;
-        state.activeConfig = await agent.savedConfig();
-        if (state.activeConfig) syncModelControls(state.activeConfig);
-        subscribeEvents();
-        closeChatMenu();
-        byId('chat-messages').replaceChildren();
-        state.tools.clear();
-        state.trace = null;
-        state.traces = [];
-        state.stream = null;
-        setBusy(agent.busy || state.pending > 0);
-        await restoreHistory();
+        if (agent.id === chat.id) { closeChatMenu(); return; }
+        await switchConversation(chat.id);
       });
-      entries.appendChild(button);
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'chat-delete';
+      remove.title = '删除会话';
+      remove.setAttribute('aria-label', `删除会话：${title.textContent}`);
+      remove.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6"/></svg>';
+      remove.addEventListener('click', async () => {
+        if (remove.dataset.confirm !== 'true') {
+          remove.dataset.confirm = 'true';
+          remove.textContent = '确认删除';
+          remove.setAttribute('aria-label', `确认删除会话：${title.textContent}`);
+          return;
+        }
+        remove.disabled = true;
+        try { await runtimePi.deleteChat(chat.id); row.remove(); }
+        catch (error) {
+          byId('chat-menu-error').textContent = error.message;
+          byId('chat-menu-error').hidden = false;
+          remove.disabled = false;
+        }
+      });
+      row.append(button, remove);
+      entries.appendChild(row);
     }
   });
   root.addEventListener('pointerdown', event => {
