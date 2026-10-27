@@ -274,7 +274,7 @@ async function openChat(initialConfig, options = {}) {
     .chat-running svg { width:16px; height:16px; animation:chat-running 1s linear infinite; }
     @keyframes chat-running { to { transform:rotate(360deg); } }
     @media(prefers-reduced-motion:reduce) { .chat-running svg { animation:none; } }
-    #edge-tab { position:fixed; display:grid; place-items:center; width:28px; height:64px; padding:0; border:.5px solid color-mix(in srgb,var(--edge-text) 45%,var(--edge-line)); background:var(--edge-bg); color:var(--edge-text); box-shadow:0 3px 12px rgba(0,0,0,.2); pointer-events:auto; }
+    #edge-tab { position:fixed; display:grid; place-items:center; width:28px; height:64px; padding:0; border:0; background:var(--edge-bg); color:var(--edge-text); box-shadow:0 4px 16px rgba(0,0,0,.15),0 1px 4px rgba(0,0,0,.1); pointer-events:auto; }
     #edge-tab .pi-icon { width:18px; height:18px; }
     #resize-handle { position:absolute; right:0; bottom:0; width:20px; height:20px; border:0; background:transparent; cursor:nwse-resize; touch-action:none; }
     #shell.embedded #resize-handle,#shell.minimized #resize-handle { display:none; }
@@ -2189,7 +2189,7 @@ async function openChat(initialConfig, options = {}) {
   }
   function showEdge(side) {
     const rect=host.getBoundingClientRect(),style=getComputedStyle(shell);
-    edgeTab.style.cssText=`${side}:0;top:${Math.max(12,Math.min(innerHeight-76,rect.top+rect.height/2-32))}px;border-radius:${side==='left'?'0 9px 9px 0':'9px 0 0 9px'};--edge-bg:${style.getPropertyValue('--bg')};--edge-line:${style.getPropertyValue('--line')};--edge-text:${style.getPropertyValue('--muted')}`;
+    edgeTab.style.cssText=`${side}:0;top:${Math.max(12,Math.min(innerHeight-76,rect.top+rect.height/2-32))}px;border-radius:${side==='left'?'0 9px 9px 0':'9px 0 0 9px'};--edge-bg:${style.getPropertyValue('--bg')};--edge-text:${style.getPropertyValue('--muted')}`;
     edgeTab.hidden=false;
   }
   edgeReducedMotion.addEventListener('change', () => { if(edgeReducedMotion.matches)moveEdge(edgeTarget,true); });
