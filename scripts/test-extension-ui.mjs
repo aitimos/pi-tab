@@ -63,7 +63,7 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const url = `http://127.0.0.1:${server.address().port}/`;
 const failures = [];
 async function browser(...args) {
-  const {stdout} = await run('agent-browser', ['--session', session, '--json', ...args], {maxBuffer:4*1024*1024});
+  const {stdout} = await run('agent-browser', ['--headed','false','--session', session, '--json', ...args], {maxBuffer:4*1024*1024});
   const response = JSON.parse(stdout);
   if (!response.success) throw new Error(JSON.stringify(response.error));
   return response.data;
@@ -114,7 +114,7 @@ try {
   manifest.key = key.toString('base64');
   await writeFile(join(extension,'manifest.json'),JSON.stringify(manifest));
   controller = `chrome-extension://${extensionId}/test-controller.html`;
-  await browser('--headed','--executable-path',chrome,'--extension',extension,'open',url);
+  await browser('--args','--headless=new','--executable-path',chrome,'--extension',extension,'open',url);
   // Match the user's existing saved large window before opening the extension.
   await evaluate(`localStorage.setItem('pi-tab-size',JSON.stringify({width:500,height:670}))`);
   await browser('tab','new',controller);
@@ -192,6 +192,22 @@ try {
     await browser('set','viewport','1100','800');
     assert.ok(await evaluate(`Math.abs(innerWidth-document.querySelector('[data-pi-overlay]').getBoundingClientRect().right-24)<1`));
     await browser('set','viewport','1280','900');
+  });
+
+  await check('docked window folds on mouse leave and expands on hover without losing drafts',async()=>{
+    await evaluate(`${root}.activeElement?.blur()`);
+    await browser('mouse','move','5','5');
+    await browser('wait','--fn',`!${root}.getElementById('edge-tab').hidden`);
+    assert.equal(await evaluate(`getComputedStyle(${root}.getElementById('shell')).visibility`),'hidden');
+    const rail=await evaluate(`(()=>{const r=${root}.getElementById('edge-tab').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,width:r.width}})()`);
+    assert.equal(rail.width,12);
+    await browser('mouse','move',String(Math.round(rail.x)),String(Math.round(rail.y)));
+    await browser('wait','--fn',`${root}.getElementById('edge-tab').hidden`);
+    assert.equal(await evaluate(`getComputedStyle(${root}.getElementById('shell')).visibility`),'visible');
+    await evaluate(`${root}.getElementById('base-url').value='draft';${root}.getElementById('base-url').focus()`);
+    await browser('mouse','move','5','5');await browser('wait','500');
+    assert.equal(await evaluate(`${root}.getElementById('edge-tab').hidden`),true);
+    await evaluate(`${root}.getElementById('base-url').value='';${root}.activeElement?.blur()`);
   });
   await check('dragging away from an edge leaves the window where it was released',async()=>{
     for(const placement of ['center','left','right']) {

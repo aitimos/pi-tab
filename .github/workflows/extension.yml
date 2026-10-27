@@ -43,9 +43,41 @@ jobs:
             pi-bookmarklet-chat-install.html
           if-no-files-found: error
 
+  browser-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [extension-zh, extension-en, tabs, bookmarklet, i18n, stop]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm install --no-save --package-lock=false agent-browser@0.34.0 playwright@1.57.0
+      - run: npx playwright install --with-deps chromium
+      - name: Locate test browser
+        run: node --input-type=module -e "import {chromium} from 'playwright'; console.log('PI_TAB_TEST_CHROME='+chromium.executablePath())" >> "$GITHUB_ENV"
+      - run: npm run build
+      - name: Run headless browser regression
+        env:
+          SUITE: ${{ matrix.suite }}
+          AGENT_BROWSER_HEADED: 'false'
+          AGENT_BROWSER_ARGS: '--headless=new,--no-sandbox'
+        run: |
+          export PATH="$PWD/node_modules/.bin:$PATH"
+          case "$SUITE" in
+            extension-zh) npm run test:extension ;;
+            extension-en) PI_TAB_TEST_LANGUAGE=en npm run test:extension ;;
+            *) npm run "test:$SUITE" ;;
+          esac
+
   release:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: build
+    needs: [build, browser-tests]
     runs-on: ubuntu-latest
     permissions:
       contents: write

@@ -30,6 +30,8 @@ The top **新对话** button starts a blank conversation in the current window. 
 
 Windows support dragging, resizing, snapping to the left or right edge, and minimizing. Windows snap only when released within 20px of either side; positions in the middle stay where you place them. Docked windows remain at the edge when the browser resizes. In **Pi 设置**, choose **跟随** (follow), **浅色** (light), or **深色** (dark). Follow is the default: it uses the page’s CSS color scheme or background, falling back to the browser or system preference. Settings are grouped into General, Instructions, and Execution, with a fixed save button. They include a restore-built-in-instructions action, automatic context compaction, retries, tool execution, and queue options. Model controls are below the composer.
 
+Stop cancels the current conversation and queued messages. Closing its tab in extension mode also stops that tab’s tasks; reloading preserves them. Page actions already performed are not undone. Docked windows collapse to a narrow edge strip when the mouse leaves and expand on hover; active input drafts stay open. Replies support Markdown headings, lists, tables, quotes, and code blocks, and copying preserves the original Markdown.
+
 ## Install the Chrome extension
 
 Use the extension when you want active tasks to resume automatically after a reload or agents in different tabs to collaborate.

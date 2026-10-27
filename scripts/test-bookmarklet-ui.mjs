@@ -38,11 +38,11 @@ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const url=`http://127.0.0.1:${server.address().port}/`;
 const html=await readFile('pi-bookmarklet-chat-install.html','utf8');
 bookmark=createBookmarklet(await readFile('dist/pi-console.js','utf8'),{
-  openChat:html.match(/<script>\s*(function openChat[\s\S]*?)\nconst PI_RUNTIME/)[1],
+  openChat:html.match(/<script>\s*(async function openChat[\s\S]*?)\nconst PI_RUNTIME/)[1],
   config:{api:'openai-completions',baseUrl:url+'v1',apiKey:'test-only',model:'test-model',reasoning:false,thinking:'off'},
 });
 async function browser(...args){
-  const {stdout}=await run('agent-browser',['--session',session,'--json',...args],{maxBuffer:4*1024*1024});
+  const {stdout}=await run('agent-browser',['--headed','false','--session',session,'--json',...args],{maxBuffer:4*1024*1024});
   const reply=JSON.parse(stdout);
   if(!reply.success)throw new Error(JSON.stringify(reply.error));
   return reply.data;
@@ -66,7 +66,7 @@ async function send(text){
   await browser('press','Enter');
 }
 try{
-  await browser('--executable-path',chrome,'open',url);
+  await browser('--args','--headless=new','--executable-path',chrome,'open',url);
   await evaluate(`localStorage.setItem('pi-tab-language',${JSON.stringify(language)})`);
   await launch();
   assert.equal(await evaluate(`${root}.getElementById('message-input').placeholder`),language==='en'?'Message':'输入消息');

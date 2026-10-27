@@ -1,3 +1,4 @@
+export {renderMarkdown} from './markdown.js';
 import { getI18n } from './i18n.js';
 export { getI18n } from './i18n.js';
 import loadModelCatalog from '#model-catalog';
@@ -117,7 +118,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
   let harness, conversation, configuration, disposed = false;
   let releaseStorageLock, storageLock;
   const activeRuns = new Map(), eventStreams = new Map(), configurations = new Map(), durableBusy = new Map(), sharedProfiles = new Map(), sharedProviders = new Map();
-  const titleJobs = new Set();
+  const titleJobs = new Map();
   let promptText = DEFAULT_PROMPT;
   const consoleWrappers = new Map();
   const originalConsole = new Map();
@@ -162,14 +163,15 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
 
   async function updateConversationTitle(id) {
     if (titleJobs.has(id) || disposed) return;
-    titleJobs.add(id);
+    const controller = new AbortController();
+    titleJobs.set(id,controller);
     try {
       const chat = (await harness.snapshot(TabState, ctx))?.chats.find(item => item.id === id);
       const config = configurations.get(id);
       if (!chat || chat.titleGenerated || !config) return;
       const target = await harness.conversation(id, ctx);
       const {entries} = await target.context(ctx);
-      const title = await generateConversationTitle(models, models.getModel(`page-${config.profileId}`, config.model), entries);
+      const title = await generateConversationTitle(models, models.getModel(`page-${config.profileId}`, config.model), entries, controller.signal);
       if (!title || disposed) return;
       const saved = await harness.commit(async tx => {
         const item = (await tx.doc(TabState)).chats.find(chat => chat.id === id);
@@ -180,7 +182,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
       }, ctx);
       if (saved) emit({type:'chat_title_changed',conversationId:id,title});
     } catch (error) {
-      nativeConsole.warn('[Pi Tab] 会话标题生成失败', error.message);
+      if (!controller.signal.aborted) nativeConsole.warn('[Pi Tab] 会话标题生成失败', error.message);
     } finally { titleJobs.delete(id); }
   }
 
@@ -476,6 +478,15 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     }
   }
 
+  async function stopConversation(chatId) {
+    await pi.ready; ensureOpen();
+    titleJobs.get(chatId)?.abort();
+    const target = await harness.conversation(chatId,ctx);
+    await target.abort(ctx,{background:true});
+    await Promise.allSettled([...(activeRuns.get(chatId) ?? [])]);
+    return 'stopped';
+  }
+
   const prompt = text => submitMessage(text, 'reject');
 
   function queueAgentMessage(to, message, author, from) {
@@ -660,10 +671,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
           }
           emit({ type: 'queue_changed', conversationId: chatId });
         },
-        abort: async () => {
-          await (await harness.conversation(chatId, ctx)).abort(ctx);
-          await Promise.allSettled([...(activeRuns.get(chatId) ?? [])]);
-        },
+        abort: () => stopConversation(chatId),
         newChat: async () => { chatId = await createChat({ inheritFrom: chatId }); return pi.listChats(); },
         selectChat: async id => {
           const chats = await pi.listChats();
@@ -695,15 +703,15 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     tools: () => [...toolMap.values()].map(({ name, description, parameters }) => ({ name, description, parameters })),
     unregisterTool(name) { ensureOpen(); const removed = toolMap.delete(name); refreshTools(); return removed; },
     onEvent(listener) { if (typeof listener !== 'function') throw new TypeError('listener 必须是函数。'); listeners.add(listener); return () => listeners.delete(listener); },
-    async runTool(name, args = {}) {
+    async runTool(name, args = {}, {signal} = {}) {
       await pi.ready; ensureOpen();
       const tool = toolMap.get(name); if (!tool) throw new Error(`未知工具: ${name}`);
       const validated = validateToolArguments(tool, { type: 'toolCall', id: crypto.randomUUID(), name, arguments: args });
-      const controller = new AbortController();
-      const output = await tool.execute(validated, { models, output: text => nativeConsole.info('[pi tool]', text), details: async () => {}, diagnostic: () => {} }, withAbortSignal(controller.signal, ctx));
+      signal?.throwIfAborted();
+      const output = await tool.execute(validated, { models, output: text => nativeConsole.info('[pi tool]', text), details: async () => {}, diagnostic: () => {} }, withAbortSignal(signal ?? new AbortController().signal, ctx));
       return output;
     },
-    async abort() { await pi.ready; ensureOpen(); await conversation.abort(ctx); await Promise.allSettled([...(activeRuns.get(conversation.id) ?? [])]); return 'stopped'; },
+    async abort() { await pi.ready; return stopConversation(conversation.id); },
     async reset() { await pi.abort(); await conversation.reset(undefined, ctx); events.length = 0; return 'conversation reset'; },
     async history() { await pi.ready; ensureOpen(); return conversation.context(ctx); },
     async usage() { await pi.ready; ensureOpen(); return harness.usage(ctx); },

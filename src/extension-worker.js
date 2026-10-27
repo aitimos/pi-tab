@@ -12,6 +12,7 @@ const siteOf = url => {
   return parsed.hostname.toLowerCase();
 };
 let openingEngine;
+const pageTools = new Map();
 
 async function ensureEngine() {
   if (await chrome.offscreen.hasDocument()) return;
@@ -52,14 +53,19 @@ chrome.action.onClicked.addListener(async tab => {
     await chrome.action.setTitle({tabId:tab.id,title:`Pi Tab: ${(await actionLocale()).t(error.message)}`});
   }
 });
-chrome.tabs.onRemoved.addListener(tabId => { void chrome.storage.session.remove(activeKey(tabId)); });
+chrome.tabs.onRemoved.addListener(async tabId => {
+  await chrome.storage.session.remove(activeKey(tabId));
+  if (!await chrome.offscreen.hasDocument()) return;
+  const response = await chrome.runtime.sendMessage({type:'tab-closed',tabId});
+  if (!response?.ok) console.error('[Pi Tab]',response?.error || 'Could not stop closed tab tasks');
+});
 chrome.tabs.onUpdated.addListener((tabId,change) => {
   if(change.status!=='complete')return;
   void chrome.storage.session.get(activeKey(tabId)).then(saved=>{if(saved[activeKey(tabId)])return activate(tabId);}).catch(error=>console.error('[Pi Tab]',error));
 });
 
 chrome.runtime.onMessage.addListener((message,sender,respond) => {
-  if(message.target==='engine'||message.type==='shared-config-updated')return false;
+  if(message.target==='engine'||message.type==='shared-config-updated'||message.type==='tab-closed')return false;
   (async()=>{
     if(message.type==='shared-config'){
       if(message.operation==='get')return chrome.storage.local.get(['profiles','providers']);
@@ -84,21 +90,32 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
       if(!tabId)throw new Error('无法确定当前标签页。');
       return engineCall(siteOf(sender.tab.url),tabId,message.method,message.args,message.chatId,message.name);
     }
+    if(message.type==='cancel-page-tool'){
+      pageTools.get(message.requestId)?.abort();
+      await chrome.tabs.sendMessage(message.tabId,{type:'cancel-tool',requestId:message.requestId}).catch(()=>{});
+      return true;
+    }
     if(message.type==='page-tool'){
-      for(let attempt=0;attempt<20;attempt++){
-        const tab=await chrome.tabs.get(message.tabId);
-        if(!tab?.url || siteOf(tab.url)!==message.site)throw new Error('目标网页已关闭或离开当前站点，请重新选择目标页面。');
-        let response;
-        try{
-          response=await chrome.tabs.sendMessage(tab.id,{type:'execute-tool',name:message.name,args:message.args});
-        }catch(error){
-          if(attempt===19 || !/Receiving end does not exist|Could not establish connection|message port closed/i.test(error.message))throw error;
-          await new Promise(resolve=>setTimeout(resolve,300));
-          continue;
+      const controller=new AbortController();
+      pageTools.set(message.requestId,controller);
+      try {
+        for(let attempt=0;attempt<20;attempt++){
+          controller.signal.throwIfAborted();
+          const tab=await chrome.tabs.get(message.tabId);
+          if(!tab?.url || siteOf(tab.url)!==message.site)throw new Error('目标网页已关闭或离开当前站点，请重新选择目标页面。');
+          controller.signal.throwIfAborted();
+          let response;
+          try{
+            response=await chrome.tabs.sendMessage(tab.id,{type:'execute-tool',requestId:message.requestId,name:message.name,args:message.args});
+          }catch(error){
+            if(attempt===19 || !/Receiving end does not exist|Could not establish connection|message port closed/i.test(error.message))throw error;
+            await new Promise(resolve=>setTimeout(resolve,300));
+            continue;
+          }
+          if(!response?.ok)throw new Error(response?.error||'网页工具执行失败。');
+          return response.value;
         }
-        if(!response?.ok)throw new Error(response?.error||'网页工具执行失败。');
-        return response.value;
-      }
+      } finally { pageTools.delete(message.requestId); }
     }
     if(message.type==='engine-event'){
       const tabs=await chrome.tabs.query({});

@@ -10,6 +10,7 @@ const engineCall = (method, args, chatId, name) => extensionRequest({type:'engin
 const listeners = new Set();
 const configs = new Map();
 const busy = new Map();
+const toolRuns = new Map();
 let extensionStarted = false;
 let extensionStarting;
 let pageTools;
@@ -96,7 +97,7 @@ async function initializeExtension() {
   const savedOpenIds=sessionStorage.getItem('pi-tab-open-chats');
   const openIds=savedOpenIds===null?[activeId]:JSON.parse(savedOpenIds);
   const chats=await remotePi.listChats();
-  for(const chatId of openIds)if(chats.some(chat=>chat.id===chatId))openChat(undefined,{forceNew:true,chatId});
+  for(const chatId of openIds)if(chats.some(chat=>chat.id===chatId))await openChat(undefined,{forceNew:true,chatId});
   extensionStarted=true;
 }
 
@@ -108,6 +109,11 @@ function startExtension(){
 }
 
 chrome.runtime.onMessage.addListener((message,_sender,respond)=>{
+  if(message.type==='cancel-tool'){
+    toolRuns.get(message.requestId)?.abort();
+    respond({ok:true});
+    return false;
+  }
   if(message.type==='engine-event'){
     if(site) {
       if(message.event.type==='chat_deleted'){
@@ -131,12 +137,15 @@ chrome.runtime.onMessage.addListener((message,_sender,respond)=>{
         const windows=window.__piQuickChatOverlay?.instances;
         if(windows?.size){
           for(const instance of windows.values())instance.open();
-        }else openChat(undefined,{forceNew:true,chatId:activeId});
+        }else await openChat(undefined,{forceNew:true,chatId:activeId});
       }
       return {active:true};
     }
     if(!extensionStarted||!pageTools)throw new Error('Pi Tab 尚未在此网页启动。');
-    return pageTools.runTool(message.name,message.args);
+    const controller=new AbortController();
+    toolRuns.set(message.requestId,controller);
+    try { return await pageTools.runTool(message.name,message.args,{signal:controller.signal}); }
+    finally { toolRuns.delete(message.requestId); }
   })().then(value=>respond({ok:true,value}),error=>respond({ok:false,error:error.message||String(error)}));
   return true;
 });

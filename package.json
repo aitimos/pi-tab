@@ -1,6 +1,6 @@
 {
   "name": "pi-tab",
-  "version": "1.0.18",
+  "version": "1.0.19",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -12,17 +12,20 @@
     "test:extension": "node scripts/test-extension-ui.mjs",
     "test:tabs": "node scripts/test-extension-tabs.mjs",
     "test:bookmarklet": "node scripts/test-bookmarklet-ui.mjs",
-    "test:i18n": "node scripts/test-i18n-ui.mjs"
+    "test:i18n": "node scripts/test-i18n-ui.mjs",
+    "test:stop": "node scripts/test-stop-markdown.mjs"
   },
   "dependencies": {
     "@earendil-works/chord": "1.4.0",
     "@earendil-works/pi-ai": "1.4.0",
     "@earendil-works/pi-durable": "1.4.0",
+    "marked": "18.1.2",
     "sval": "0.6.12",
     "typebox": "1.3.27"
   },
   "devDependencies": {
+    "@radix-ui/colors": "3.0.0",
     "esbuild": "0.25.12",
-    "@radix-ui/colors": "3.0.0"
+    "terser": "5.44.1"
   }
 }

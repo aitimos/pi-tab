@@ -23,7 +23,7 @@ export function createBookmarklet(source, { openChat, config } = {}) {
         else launch.chatId=previous.id;
       }
     }
-    (${openChat.toString()})(${JSON.stringify(config || {})},launch);` : ''}
+    await (${openChat.toString()})(${JSON.stringify(config || {})},launch);` : ''}
   }catch(error){
     console.error('[Pi Tab]',error);
     const notice=document.createElement('div');

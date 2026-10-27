@@ -1,4 +1,5 @@
 import { build, transform } from 'esbuild';
+import { minify } from 'terser';
 import { mkdir, readFile, rm, writeFile, cp } from 'node:fs/promises';
 import { builtinProviders } from '@earendil-works/pi-ai/providers/all';
 import { makeBookmarklet } from './make-bookmarklet.mjs';
@@ -58,11 +59,15 @@ await build({
     },
   ],
 });
+// Keep the complete runtime below Chromium's bookmark URL limit.
+const optimized = await minify(await readFile('dist/pi-console.js','utf8'), {compress:{passes:2},mangle:true,format:{comments:'some',ascii_only:true}});
+const markdownLicense = await readFile('node_modules/marked/LICENSE','utf8');
+await writeFile('dist/pi-console.js',optimized.code + '\n/*! Marked license\n' + markdownLicense.replace(/\*\//g,'* /') + '\n*/');
 await makeBookmarklet();
 
 const installer = 'pi-bookmarklet-chat-install.html';
 const html = await readFile('src/install-template.html', 'utf8');
-const css = html.match(/<style>([\s\S]*?)<\/style>/)?.[1] + html.match(/style\.textContent = `([\s\S]*?)`;/)?.[1];
+const css = html.match(/<style>([\s\S]*?)<\/style>/)?.[1] + html.match(/const chatStyles = `([\s\S]*?)`;/)?.[1];
 const radixValues = new Set(Object.values(radixColors).flatMap(scale => Object.values(scale)).filter(value => typeof value === 'string' && value.startsWith('#')));
 for (const color of css.match(/#[\da-fA-F]{3,8}\b/g) || []) {
   if (!radixValues.has(color)) throw new Error(`界面颜色 ${color} 不在 Radix Colors 中`);
@@ -70,8 +75,11 @@ for (const color of css.match(/#[\da-fA-F]{3,8}\b/g) || []) {
 const source = await readFile('dist/pi-console.js', 'utf8');
 const runtime = JSON.stringify(source).replace(/</g, '\\u003c');
 const codec = (await readFile('src/bookmarklet.js', 'utf8')).replace(/^export /gm, '');
-const originalChat = html.match(/<script>\s*(function openChat[\s\S]*?)\nconst PI_RUNTIME/)[1];
-const chatSource = (await transform(originalChat, {minifyWhitespace:true,minifyIdentifiers:true,minifySyntax:true,legalComments:'none'})).code.trim();
+const originalChat = html.match(/<script>\s*(async function openChat[\s\S]*?)\nconst PI_RUNTIME/)[1];
+const chatCss = originalChat.match(/const chatStyles = `([\s\S]*?)`;/)[1];
+const packedCss = gzipSync((await transform(chatCss,{loader:'css',minify:true})).code,{level:9}).toString('base64');
+const packedChat = originalChat.replace(/const chatStyles = `[\s\S]*?`;/, () => `const chatStyles = await new Response(new Blob([Uint8Array.from(atob('${packedCss}'), c => c.charCodeAt(0))]).stream().pipeThrough(new DecompressionStream('gzip'))).text();`);
+const chatSource = (await transform(packedChat, {minifyWhitespace:true,minifyIdentifiers:true,minifySyntax:true,legalComments:'none'})).code.trim();
 // Check the actual chat bookmark too, with room for saved model credentials.
 const chatBookmark = createBookmarklet(source, { openChat:chatSource, config:{apiKey:'k'.repeat(16384)} });
 console.log(`聊天书签长度：${chatBookmark.length} 个字符（含 16 KB 配置预留）`);

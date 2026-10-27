@@ -62,7 +62,7 @@ test('shipped chat and Console bookmarks stay below the browser URL limit', asyn
   const runtime = JSON.parse(html.match(/<script id="pi-runtime"[^>]*>(.*?)<\/script>/s)[1]);
   const source = await readFile(new URL('../dist/pi-console.js', import.meta.url), 'utf8');
   assert.equal(runtime, source);
-  const openChatSource = html.match(/<script>\s*(function openChat[\s\S]*?)\nconst PI_RUNTIME/)[1];
+  const openChatSource = html.match(/<script>\s*(async function openChat[\s\S]*?)\nconst PI_RUNTIME/)[1];
   const openChat = runInNewContext(openChatSource + ';openChat');
   const chat = createBookmarklet(source, { openChat, config:{ api:'openai-completions',apiKey:'k'.repeat(16384) } });
   const consoleBookmark = await readFile(new URL('../dist/pi-bookmarklet.txt', import.meta.url), 'utf8');

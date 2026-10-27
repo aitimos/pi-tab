@@ -19,13 +19,13 @@ test('extension shares one site engine across paths and tabs, routes tasks and p
   let missingReceiver=false;
   let startupError;
   let toolError;
-  let onMessage,onClick,engineOpened=false;
+  let onRemoved,onMessage,onClick,engineOpened=false;
   const chrome={
     i18n:{getAcceptLanguages:async()=>['zh-CN']},
     action:{onClicked:{addListener:listener=>{onClick=listener;}},setBadgeText:async value=>badges.push(value),setTitle:async value=>titles.push(value)},
     scripting:{executeScript:async request=>{injected.push(request);missingReceiver=false;}},
     tabs:{
-      onRemoved:{addListener(){}},onUpdated:{addListener(){}},
+      onRemoved:{addListener:fn=>{onRemoved=fn;}},onUpdated:{addListener(){}},
       query:async()=>[...tabs.values()],get:async id=>tabs.get(id),
       create:async({url})=>{const tab={id:13,url,title:'New'};tabs.set(tab.id,tab);return tab;},
       update:async(id,change)=>{Object.assign(tabs.get(id),change);return tabs.get(id);},
@@ -56,7 +56,7 @@ test('extension shares one site engine across paths and tabs, routes tasks and p
       remove:async key=>session.delete(key),
     }},
   };
-  vm.runInNewContext((await readFile('src/extension-worker.js','utf8')).replace(/^import .*;\n/,''),{createI18n,chrome,URL,Promise,setTimeout,console:{error(){}}});
+  vm.runInNewContext((await readFile('src/extension-worker.js','utf8')).replace(/^import .*;\n/,''),{createI18n,chrome,URL,AbortController,Promise,setTimeout,console:{error(){}}});
   const send=(message,from=10)=>new Promise(resolve=>onMessage(message,{tab:tabs.get(from)},resolve));
 
   assert.equal((await send({type:'identity'})).value.active,false);
@@ -116,4 +116,8 @@ test('extension shares one site engine across paths and tabs, routes tasks and p
   await onClick({id:99,url:'chrome://extensions/'});
   assert.match(titles.at(-1).title,/只能在普通网页使用/);
   assert.equal(session.has('active:99'),false);
+  await onRemoved(10);
+  assert.equal(session.has('active:10'),false);
+  assert.equal(engineCalls.at(-1).type,'tab-closed');
+  assert.equal(engineCalls.at(-1).tabId,10);
 });

@@ -75,31 +75,8 @@ body>header,body>main,body>footer{position:relative;z-index:1}
 <script id="pi-bookmark-codec"></script>
 <script id="pi-landing-locale" type="application/json">{}</script>
 <script>
-function openChat(initialConfig, options = {}) {
-  const runtimePi = window.pi?.__piConsolePlugin ? window.pi : window.__piTabAgent;
-  const i18n = runtimePi.i18n;
-  const t = i18n.t;
-  const piIcon = () => `<svg class="pi-icon" viewBox="0 0 4 4" shape-rendering="crispEdges" aria-hidden="true"><path fill="#e48a7a" d="M0 0h3v1H0zM2 1h1v1H2z"/><path fill="#4f8eb3" d="M0 1h1v3H0zM1 2h1v1H1z"/><path fill="#eab65d" d="M3 2h1v2H3z"/></svg>`;
-  const globalName = '__piQuickChatOverlay';
-  const prior = window[globalName];
-  if (prior && !options.mount && !options.forceNew && typeof prior.open === 'function') {
-    prior.open(initialConfig);
-    return;
-  }
-
-  const host = document.createElement('div');
-  host.id = options.mount ? '__pi_quick_chat_host' : `__pi_quick_chat_host_${crypto.randomUUID()}`;
-  host.setAttribute('data-pi-overlay', 'true');
-  host.style.cssText = 'all:initial;position:fixed;right:12px;top:12px;z-index:2147483647;display:block;color-scheme:dark;';
-  if (!options.mount && prior) {
-    const column = (prior.floatingCount || 0) % Math.max(1, Math.floor((innerWidth - 24) / 440));
-    host.style.right = `${12 + column * 440}px`;
-    host.style.top = `${12 + Math.floor((prior.floatingCount || 0) / 3) * 36}px`;
-  }
-  if (options.mount) host.style.cssText = 'all:initial;display:block;min-width:0;color-scheme:dark;';
-  const root = host.attachShadow({ mode: 'open' });
-  const style = document.createElement('style');
-  style.textContent = `
+async function openChat(initialConfig, options = {}) {
+  const chatStyles = `
     :host { all:initial; color-scheme:dark; }
     *, *::before, *::after { box-sizing:border-box; }
     #shell,.form-body,#chat-messages,#chat-list,#manual-model-results,#model-menu,#attachments,.message-file pre { overscroll-behavior:contain; }
@@ -110,7 +87,7 @@ function openChat(initialConfig, options = {}) {
     #shell[data-theme=light] { box-shadow:0 16px 48px rgba(0,0,0,.15),0 2px 8px rgba(0,0,0,.05); }
     #shell :is(#top,#chat-list,#model-dialog,#tool-dialog) { background:var(--bg); }
     #shell :is(#composer,.human .bubble) { background:var(--surface); }
-    #shell[data-theme=light] :is(label,.ai .speaker,.subtle,.source-link) { color:var(--text); }
+    #shell[data-theme=light] :is(label,.ai .speaker,.subtle) { color:var(--text); }
     #shell[data-theme=light] :is(input,textarea)::placeholder { color:var(--muted); }
     #shell[data-theme=light] .primary:not(#send) { background:#3e63dd; color:#fdfdfe; }
     #shell[data-theme=light] .primary:not(#send):hover:not(:disabled) { background:#3358d4; }
@@ -256,13 +233,26 @@ function openChat(initialConfig, options = {}) {
     .queue-edit-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:6px; }
     .queue-edit-actions button { padding:5px 9px; border:.5px solid var(--line); border-radius:7px; background:var(--raised); color:var(--text); }
     .bubble { white-space:pre-wrap; overflow-wrap:anywhere; user-select:text; font-size:13px; line-height:1.8; }
+    .markdown { white-space:normal; }
+    .markdown > :first-child { margin-top:0; }
+    .markdown > :last-child { margin-bottom:0; }
+    .markdown :is(p,ul,ol,pre,blockquote,table) { margin:10px 0; }
+    .markdown :is(h1,h2,h3,h4,h5,h6) { font-size:14px; line-height:1.5; font-weight:600; margin:16px 0 8px; }
+    .markdown :is(ul,ol) { padding-left:22px; }
+    .markdown li + li { margin-top:4px; }
+    .markdown li > p { margin:4px 0; }
+    .markdown blockquote { margin-left:0; padding-left:12px; border-left:.5px solid var(--line); color:var(--muted); }
+    .markdown code { font:12px/1.7 ui-monospace,SFMono-Regular,Consolas,monospace; background:var(--raised); padding:2px 4px; border-radius:3px; }
+    .markdown pre { padding:12px; border:.5px solid var(--line); border-radius:6px; background:var(--surface); overflow:auto; white-space:pre; overscroll-behavior:contain; }
+    .markdown pre code { background:none; padding:0; border:0; }
+    .markdown table { display:block; max-width:100%; overflow:auto; border-collapse:collapse; font-size:12px; overscroll-behavior:contain; }
+    .markdown :is(th,td) { border:.5px solid var(--line); padding:6px 9px; text-align:left; }
+    .markdown th { font-weight:600; background:var(--surface); }
+    .markdown a { color:var(--accent); text-decoration:underline; text-underline-offset:2px; }
+    .markdown hr { border:0; border-top:.5px solid var(--line); margin:16px 0; }
     .human .bubble { padding:9px 13px; border-radius:14px 14px 4px 14px; background:var(--raised); border:.5px solid #ffffff09; }
     .system .speaker { display:none; }
     .system .bubble { color:var(--muted); font-size:12px; border-left:2px solid #6e6e6e; padding:3px 0 3px 12px; }
-    .source-link { display:inline-flex; align-items:center; gap:4px; max-width:100%; padding:0 5px; border-radius:5px; background:var(--raised); color:#d6e1ff; text-decoration:none; font-size:12px; vertical-align:baseline; overflow-wrap:anywhere; }
-    .source-link svg { width:11px; height:11px; }
-    .source-link:hover { background:#484848; }
-    .source-link:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
     .answer-actions { display:flex; align-items:center; gap:6px; color:var(--muted); }
     .answer-actions .icon-button { width:26px; height:26px; }
     .answer-action-status { font-size:12px; }
@@ -284,6 +274,8 @@ function openChat(initialConfig, options = {}) {
     .chat-running svg { width:16px; height:16px; animation:chat-running 1s linear infinite; }
     @keyframes chat-running { to { transform:rotate(360deg); } }
     @media(prefers-reduced-motion:reduce) { .chat-running svg { animation:none; } }
+    #edge-tab { position:fixed; width:12px; height:64px; padding:0; border:.5px solid var(--edge-line); background:var(--edge-bg); color:var(--edge-text); box-shadow:0 2px 8px rgba(0,0,0,.15); pointer-events:auto; }
+    #edge-tab::after { content:""; display:block; width:3px; height:24px; margin:auto; border-radius:2px; background:currentColor; opacity:.55; }
     #resize-handle { position:absolute; right:0; bottom:0; width:20px; height:20px; border:0; background:transparent; cursor:nwse-resize; touch-action:none; }
     #shell.embedded #resize-handle,#shell.minimized #resize-handle { display:none; }
     .thinking,.tool-row { flex:none; min-width:0; }
@@ -394,6 +386,30 @@ function openChat(initialConfig, options = {}) {
       #chat-messages { padding-left:16px; padding-right:16px; }
     }
   `;
+  const runtimePi = window.pi?.__piConsolePlugin ? window.pi : window.__piTabAgent;
+  const i18n = runtimePi.i18n;
+  const t = i18n.t;
+  const piIcon = () => `<svg class="pi-icon" viewBox="0 0 4 4" shape-rendering="crispEdges" aria-hidden="true"><path fill="#e48a7a" d="M0 0h3v1H0zM2 1h1v1H2z"/><path fill="#4f8eb3" d="M0 1h1v3H0zM1 2h1v1H1z"/><path fill="#eab65d" d="M3 2h1v2H3z"/></svg>`;
+  const globalName = '__piQuickChatOverlay';
+  const prior = window[globalName];
+  if (prior && !options.mount && !options.forceNew && typeof prior.open === 'function') {
+    prior.open(initialConfig);
+    return;
+  }
+
+  const host = document.createElement('div');
+  host.id = options.mount ? '__pi_quick_chat_host' : `__pi_quick_chat_host_${crypto.randomUUID()}`;
+  host.setAttribute('data-pi-overlay', 'true');
+  host.style.cssText = 'all:initial;position:fixed;right:12px;top:12px;z-index:2147483647;display:block;color-scheme:dark;';
+  if (!options.mount && prior) {
+    const column = (prior.floatingCount || 0) % Math.max(1, Math.floor((innerWidth - 24) / 440));
+    host.style.right = `${12 + column * 440}px`;
+    host.style.top = `${12 + Math.floor((prior.floatingCount || 0) / 3) * 36}px`;
+  }
+  if (options.mount) host.style.cssText = 'all:initial;display:block;min-width:0;color-scheme:dark;';
+  const root = host.attachShadow({ mode: 'open' });
+  const style = document.createElement('style');
+  style.textContent = chatStyles;
   root.appendChild(style);
 
   const icons = {
@@ -1040,26 +1056,10 @@ function openChat(initialConfig, options = {}) {
   function renderAnswer(node, text) {
     node._answer = text;
     const body = node.querySelector('.bubble');
-    const fragment = document.createDocumentFragment();
-    // Only explicit HTTP(S) links supplied in the answer become source chips.
-    const links = /\[([^\]\n]+)\]\((https?:\/\/[^\s<>]+?)\)/g;
-    let cursor = 0;
-    for (const match of text.matchAll(links)) {
-      fragment.append(document.createTextNode(text.slice(cursor, match.index)));
-      const link = document.createElement('a');
-      link.className = 'source-link';
-      link.href = match[2];
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
-      link.title = match[2];
-      link.innerHTML = icon('page');
-      link.append(document.createTextNode(match[1]));
-      fragment.append(link);
-      cursor = match.index + match[0].length;
-    }
-    fragment.append(document.createTextNode(text.slice(cursor)));
-    body.replaceChildren(fragment);
+    body.classList.add('markdown');
+    body.replaceChildren(PiConsolePlugin.renderMarkdown(text));
   }
+
   function addAnswerActions(node) {
     if (node.querySelector('.answer-actions')) return;
     const actions = document.createElement('div');
@@ -1420,6 +1420,7 @@ function openChat(initialConfig, options = {}) {
     bubble.className = 'bubble';
     i18n.text(bubble, value);
     wrap.append(speaker, bubble);
+    if (kind === 'ai' && value) { renderAnswer(wrap,value); addAnswerActions(wrap); }
     const list = byId('chat-messages');
     list.appendChild(wrap);
     while (list.children.length > 160) list.firstElementChild.remove();
@@ -2117,6 +2118,7 @@ function openChat(initialConfig, options = {}) {
   });
   function setMinimized(value) {
     if (options.mount || state.minimized === value) return;
+    expandEdge();
     cancelSnap();
     const before = host.getBoundingClientRect();
     state.minimized = value;
@@ -2139,9 +2141,41 @@ function openChat(initialConfig, options = {}) {
     }
     setMinimized(false);
   });
-  byId('close').addEventListener('click', () => { cancelSnap(); host.style.display = 'none'; rememberWindow(); });
+  byId('close').addEventListener('click', () => { expandEdge(); cancelSnap(); host.style.display = 'none'; rememberWindow(); });
   let dockSide = null;
   let snapFrame = null;
+  let edgeTimer;
+  const edgeTab = document.createElement('button');
+  edgeTab.id = 'edge-tab';edgeTab.type = 'button';edgeTab.hidden = true;
+  i18n.attr(edgeTab,'aria-label',()=>t("打开 Pi Tab"));
+  root.append(edgeTab);
+  function expandEdge() {
+    clearTimeout(edgeTimer);
+    edgeTab.hidden = true;
+    shell.style.visibility = '';
+    shell.inert = false;
+    host.style.pointerEvents = '';
+  }
+  if (!options.mount) {
+    host.addEventListener('pointerleave',event=>{
+      if(event.pointerType!=='mouse')return;
+      clearTimeout(edgeTimer);
+      edgeTimer=setTimeout(()=>{
+        const editing=root.activeElement;
+        if(!dockSide||state.minimized||drag||resizing||shell.querySelector('dialog[open]')||
+          (editing?.matches('input,textarea')&&editing.value))return;
+        const rect=host.getBoundingClientRect(),style=getComputedStyle(shell);
+        edgeTab.style.cssText=`${dockSide}:0;top:${Math.max(12,Math.min(innerHeight-76,rect.top+rect.height/2-32))}px;border-radius:${dockSide==='left'?'0 6px 6px 0':'6px 0 0 6px'};--edge-bg:${style.getPropertyValue('--bg')};--edge-line:${style.getPropertyValue('--line')};--edge-text:${style.getPropertyValue('--muted')}`;
+        shell.style.visibility='hidden';shell.inert=true;
+        host.style.pointerEvents='none';edgeTab.hidden=false;
+      },300);
+    });
+    host.addEventListener('pointerenter',expandEdge);
+    edgeTab.addEventListener('pointerenter',expandEdge);
+    edgeTab.addEventListener('click',expandEdge);
+    edgeTab.addEventListener('focus',expandEdge);
+  }
+
   function cancelSnap() {
     if (snapFrame !== null) cancelAnimationFrame(snapFrame);
     snapFrame = null;
@@ -2162,6 +2196,7 @@ function openChat(initialConfig, options = {}) {
   }
   function clampPosition() {
     if (options.mount) return;
+    expandEdge();
     cancelSnap();
     const rect = host.getBoundingClientRect();
     const bounds = windowBounds();
@@ -2271,6 +2306,7 @@ function openChat(initialConfig, options = {}) {
   if (!prior) window[globalName] = manager;
   const instance = {
     open(config) {
+      expandEdge();
       host.style.display = 'block';
       if (agent) rememberWindow();
       refreshPageContext();
@@ -2280,7 +2316,7 @@ function openChat(initialConfig, options = {}) {
       else if (state.connected) byId('message-input').focus();
       if (options.mount) host.scrollIntoView({ block:'nearest', behavior:'auto' });
     },
-    hide() { cancelSnap(); host.style.display = 'none'; rememberWindow(); },
+    hide() { expandEdge(); cancelSnap(); host.style.display = 'none'; rememberWindow(); },
     get id() { return agent?.id; },
     get visible() { return !options.mount && host.style.display !== 'none'; },
   };
@@ -2367,6 +2403,7 @@ bookmark.addEventListener('dragend', () => { delete bookmark.closest('.drop-area
 if (!PI_RUNTIME) {
   location.replace(new URL('../pi-bookmarklet-chat-install.html', location.href));
 } else {
+  void (async () => {
   try {
     (0, eval)(PI_RUNTIME);
     i18n = PiConsolePlugin.getI18n();
@@ -2381,7 +2418,7 @@ if (!PI_RUNTIME) {
     i18n.onChange(syncLanguage);
     syncLanguage();
     generateBookmark();
-    openChat(undefined, {
+    await openChat(undefined, {
       mount:document.getElementById('chat-preview'),
       onConfigCancel:generateBookmark,
       onConfigSaved(config) {
@@ -2393,7 +2430,7 @@ if (!PI_RUNTIME) {
     void runtime.ready.then(async () => {
       const chats = await runtime.listChats();
       const openIds = JSON.parse(sessionStorage.getItem('pi-tab-open-chats') || '[]');
-      for (const chatId of openIds) if (chats.some(chat => chat.id === chatId)) openChat(undefined, { forceNew:true, chatId });
+      for (const chatId of openIds) if (chats.some(chat => chat.id === chatId)) await openChat(undefined, { forceNew:true, chatId });
     });
   } catch (error) {
     const message = document.createElement('p');
@@ -2403,6 +2440,7 @@ if (!PI_RUNTIME) {
     message.textContent = t ? t("Pi Tab 启动失败，请刷新页面重试：{0}", detail) : `Pi Tab failed to start: ${detail}`;
     document.getElementById('chat-preview').appendChild(message);
   }
+  })();
 }
 </script>
 </body>

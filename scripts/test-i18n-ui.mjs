@@ -25,17 +25,17 @@ const server=createServer((request,response)=>{
 });
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const url=`http://127.0.0.1:${server.address().port}/`;
-async function browser(...args){const {stdout}=await run('agent-browser',['--session',session,'--json',...args],{maxBuffer:5*1024*1024});const r=JSON.parse(stdout);if(!r.success)throw new Error(JSON.stringify(r.error));return r.data;}
+async function browser(...args){const {stdout}=await run('agent-browser',['--headed','false','--session',session,'--json',...args],{maxBuffer:5*1024*1024});const r=JSON.parse(stdout);if(!r.success)throw new Error(JSON.stringify(r.error));return r.data;}
 const evaluate=async code=>(await browser('eval','-b',Buffer.from(code).toString('base64'))).result;
 const root=`document.querySelector('[data-pi-overlay]').shadowRoot`;
 const click=async id=>evaluate(`${root}.getElementById(${JSON.stringify(id)}).click()`);
-async function ready(){await browser('wait','--fn',`${root}.getElementById('api').options.length>0`);}
+async function ready(){try{await browser('wait','--fn',`${root}.getElementById('api').options.length>0`);}catch(error){console.log(await browser('errors'));console.log(await evaluate('document.body.innerText'));throw error;}}
 async function scanEnglish(){
   const remaining=await evaluate(`(()=>{const out=[];for(const scope of [document.body,${root}]){const w=document.createTreeWalker(scope,NodeFilter.SHOW_TEXT);while(w.nextNode()){const n=w.currentNode,p=n.parentElement;if(!p||p.closest('script,style,textarea,pre')||!p.getClientRects().length)continue;const text=n.textContent.trim();if(/[\\u3400-\\u9fff]/.test(text)&&text!=='中文'&&!text.includes('English reply')&&!text.includes('中文消息'))out.push(text)}}return out})()`);
   assert.deepEqual(remaining,[],'visible English interface has no untranslated Chinese');
 }
 try{
-  await browser('--executable-path',chrome,'open',url);await ready();
+  await browser('--args','--headless=new','--executable-path',chrome,'open',url);await ready();
   assert.equal(await evaluate('pi.i18n.mode'),'auto');
   assert.equal(await evaluate('document.documentElement.lang'),await evaluate(`(navigator.languages.find(x=>/^(zh|en)(-|$)/i.test(x))||'en').toLowerCase().startsWith('zh')?'zh-CN':'en'`));
   for(const languages of [['zh-TW','en-US'],['en-GB','zh-CN']]){

@@ -9,7 +9,7 @@ test('title generation uses the first exchange without tools, thoughts or image 
     {kind:'pi.user',model:[{role:'user',content:[{type:'text',text:'分析页面卡顿'},{type:'image',data:'PRIVATE_IMAGE_BYTES'}]}]},
     {kind:'tool',model:[{role:'toolResult',content:[{type:'text',text:'PRIVATE_TOOL_DATA'}]}]},
     answer([{type:'thinking',thinking:'PRIVATE_THOUGHT'},{type:'text',text:'图片资源加载过慢'}]),
-    user('SECOND_TURN'),
+    user('SECOND_TURN'),answer([{type:'text',text:'SECOND_REPLY'}]),
   ];
   const model={id:'configured-model'};
   const title=await generateConversationTitle({completeSimple:async(received,context,options)=>{
@@ -48,4 +48,13 @@ test('an interrupted opening exchange does not prevent naming the next completed
     return {stopReason:'stop',content:[{type:'text',text:'页面表格整理'}]};
   }},{},entries);
   assert.equal(title,'页面表格整理');
+});
+
+test('stopping a conversation cancels its title request and interrupted runs do not start one',async()=>{
+  const controller=new AbortController();
+  const entries=[user('hello'),answer([{type:'text',text:'Hello'}])];
+  const pending=generateConversationTitle({completeSimple:async(_model,_context,{signal})=>new Promise((_,reject)=>signal.addEventListener('abort',()=>reject(signal.reason)))},{},entries,controller.signal);
+  controller.abort();
+  await assert.rejects(pending,{name:'AbortError'});
+  assert.equal(await generateConversationTitle({completeSimple:()=>{throw Error('must not run');}},{},[...entries,user('second'),{kind:'pi.assistant',model:[{role:'assistant',stopReason:'aborted',content:[]}]}]),null);
 });

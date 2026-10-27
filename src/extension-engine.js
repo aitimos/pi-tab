@@ -30,10 +30,26 @@ async function engineFor(site) {
     for (const tool of pi.tools().filter(item => pageToolNames.has(item.name))) {
       pi.unregisterTool(tool.name);
       pi.registerTool({ ...tool, replay: ['page_snapshot', 'inspect_dom', 'get_console', 'get_network'].includes(tool.name) ? 'safe' : 'unsafe',
-        execute: async (args, api) => {
+        execute: async (args, api, context) => {
           const tabId = targets.get(api.conversationId);
           if (!tabId) throw new Error('请先在网页中打开这个 agent，再操作页面。');
-          return background({ type:'page-tool', site, tabId, name:tool.name, args });
+          const signal = context.abortSignal;
+          signal?.throwIfAborted();
+          const requestId = crypto.randomUUID();
+          let cancel;
+          try {
+            return await Promise.race([
+              background({type:'page-tool',site,tabId,requestId,name:tool.name,args}),
+              new Promise((_,reject) => {
+                cancel = () => {
+                  void background({type:'cancel-page-tool',tabId,requestId}).catch(error=>console.error('[Pi Tab]',error));
+                  reject(signal.reason || new Error('Page tool cancelled'));
+                };
+                signal?.addEventListener('abort',cancel,{once:true});
+                if(signal?.aborted)cancel();
+              }),
+            ]);
+          } finally { signal?.removeEventListener('abort',cancel); }
         },
       });
     }
@@ -68,6 +84,15 @@ async function engineFor(site) {
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, respond) => {
+  if (message.type === 'tab-closed') {
+    Promise.all([...engines.values()].map(async engine => {
+      const {pi,targets} = await engine;
+      const owned = [...targets].filter(([,tabId])=>tabId===message.tabId).map(([id])=>id);
+      for(const id of owned)targets.delete(id);
+      await Promise.all(owned.map(id=>pi.agent(id).abort()));
+    })).then(()=>respond({ok:true}),error=>respond({ok:false,error:error.message}));
+    return true;
+  }
   if (message.type === 'shared-config-updated') {
     for(const engine of engines.values())void engine.then(({pi})=>{
       pi.importProfiles(message.profiles);

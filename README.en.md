@@ -23,6 +23,8 @@ Built on Pi Durable, Pi Tab brings an agent into the webpage you are browsing. O
 | Page interaction and debugging | Click, fill forms, inspect DOM and styles, and execute JavaScript |
 | Files and images | Attach text and code files, drop files, or paste images with a vision-capable model |
 | Follow-up messages | Add tasks while a reply is running, edit the queue, or send a message directly to steer the current task |
+| Formatted replies | Markdown headings, lists, tables, quotes, and code blocks; copying preserves the original Markdown |
+| Edge sidebar | Dock to either edge to collapse on mouse leave and expand on hover; active drafts stay open |
 | Conversation management | Generate titles automatically, see running status, switch or delete conversations, and open another task in a new window |
 | Agent collaboration | Exchange messages between agents on the same page; the extension can also open tabs, send tasks, and read results |
 | Chinese and English | Follow your browser language or switch in settings without interrupting conversations or tasks |
@@ -54,6 +56,8 @@ No extension is required. You can also save the bookmark first and configure it 
 | After a reload | Click again for a blank conversation, or to resume an unfinished task | Enabled tabs restore automatically; background tasks keep running |
 | Conversations and settings | Stored within the webpage origin; concurrent tabs may use separate records | Conversations shared by exact hostname; model settings shared across websites |
 | Collaboration | Multiple agents on the current page | Tasks across browser tabs |
+
+Stop cancels the current conversation and its queued messages. In extension mode, closing the task’s tab also stops its tasks; reloading preserves them. Page actions already performed are not undone.
 
 The two modes keep separate conversation records. Start from the extension icon for cross-tab tools; installing the extension does not add those tools to bookmark sessions.
 
