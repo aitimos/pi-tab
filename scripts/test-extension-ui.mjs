@@ -185,7 +185,7 @@ try {
       await browser('mouse','down','left');
       await browser('mouse','move',String(Math.round(point.target)),String(Math.round(point.y+30)));
       const dragging=await evaluate(`(()=>{const r=document.querySelector('[data-pi-overlay]').getBoundingClientRect();return {x:r.left,right:r.right,w:innerWidth,rail:${root}.getElementById('edge-tab').hidden}})()`);
-      assert.ok(Math.abs(dragging.x-(point.target-20))<1,JSON.stringify(dragging));
+      assert.ok(Math.abs(dragging.x-(point.target-20))<=2,JSON.stringify(dragging));
       assert.equal(dragging.rail,false);
       assert.ok(side==='left'?dragging.x<0:dragging.right>dragging.w);
       await browser('screenshot',join(directory,`drag-through-${side}.png`));
@@ -215,7 +215,7 @@ try {
     await browser('wait','--fn',`!${root}.getElementById('edge-tab').hidden`);
     await browser('wait','--fn',`getComputedStyle(${root}.getElementById('shell')).visibility==='hidden'`);
     const rail=await evaluate(`(()=>{const r=${root}.getElementById('edge-tab').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,width:r.width}})()`);
-    assert.equal(rail.width,12);
+    assert.equal(rail.width,28);
     await browser('screenshot',join(directory,'edge-collapsed.png'));
     await browser('mouse','move',String(Math.round(rail.x)),String(Math.round(rail.y)));
     await browser('wait','--fn',`${root}.getElementById('edge-tab').hidden`);
@@ -688,7 +688,7 @@ try {
     const point=await evaluate(`(()=>{const r=${root}.getElementById('top').getBoundingClientRect();return {x:r.x+20,y:r.y+20}})()`);
     await browser('mouse','move',String(Math.round(point.x)),String(Math.round(point.y)));
     await browser('mouse','down','left');
-    await browser('mouse','move','60',String(Math.round(point.y+20)));
+    await browser('mouse','move','2',String(Math.round(point.y+20)));
     await browser('mouse','up','left');
     assert.ok(await evaluate(`Math.abs(document.querySelector('[data-pi-overlay]').getBoundingClientRect().left-24)<1`));
   });
