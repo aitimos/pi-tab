@@ -78,25 +78,20 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
       return engineCall(siteOf(sender.tab.url),tabId,message.method,message.args,message.chatId,message.name);
     }
     if(message.type==='page-tool'){
-      const tabs=await chrome.tabs.query({});
-      const candidates=tabs.filter(tab=>tab.id&&tab.url&&(()=>{try{return siteOf(tab.url)===message.site;}catch{return false;}})());
-      const ordered=[...candidates.filter(tab=>tab.id===message.tabId),...candidates.filter(tab=>tab.id!==message.tabId)];
-      if(!ordered.length)throw new Error('当前站点没有可用的网页。');
-      let failure;
-      for(const tab of ordered){
-        for(let attempt=0;attempt<20;attempt++){
-          try{
-            const response=await chrome.tabs.sendMessage(tab.id,{type:'execute-tool',name:message.name,args:message.args});
-            if(!response?.ok)throw new Error(response?.error||'网页工具执行失败。');
-            return response.value;
-          }catch(error){
-            if(!/Receiving end does not exist|Could not establish connection|message port closed/i.test(error.message))throw error;
-            failure=error;
-            if(attempt<19)await new Promise(resolve=>setTimeout(resolve,300));
-          }
+      for(let attempt=0;attempt<20;attempt++){
+        const tab=await chrome.tabs.get(message.tabId);
+        if(!tab?.url || siteOf(tab.url)!==message.site)throw new Error('目标网页已关闭或离开当前站点，请重新选择目标页面。');
+        let response;
+        try{
+          response=await chrome.tabs.sendMessage(tab.id,{type:'execute-tool',name:message.name,args:message.args});
+        }catch(error){
+          if(attempt===19 || !/Receiving end does not exist|Could not establish connection|message port closed/i.test(error.message))throw error;
+          await new Promise(resolve=>setTimeout(resolve,300));
+          continue;
         }
+        if(!response?.ok)throw new Error(response?.error||'网页工具执行失败。');
+        return response.value;
       }
-      throw failure;
     }
     if(message.type==='engine-event'){
       const tabs=await chrome.tabs.query({});

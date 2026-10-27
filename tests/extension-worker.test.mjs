@@ -17,6 +17,7 @@ test('extension shares one site engine across paths and tabs, routes tasks and p
   const injected=[];
   let missingReceiver=false;
   let startupError;
+  let toolError;
   let onMessage,onClick,engineOpened=false;
   const chrome={
     action:{onClicked:{addListener:listener=>{onClick=listener;}},setBadgeText:async value=>badges.push(value),setTitle:async value=>titles.push(value)},
@@ -30,6 +31,7 @@ test('extension shares one site engine across paths and tabs, routes tasks and p
         pageCalls.push({id,message});
         if(missingReceiver)throw new Error('Could not establish connection. Receiving end does not exist.');
         if(startupError&&message.type==='activate')return {ok:false,error:startupError};
+        if(message.type==='execute-tool' && toolError)return {ok:false,error:toolError};
         if(message.type==='execute-tool')return {ok:true,value:{output:[{type:'text',text:'page result'}]}};
         return {ok:true,value:{active:true}};
       },
@@ -82,6 +84,20 @@ test('extension shares one site engine across paths and tabs, routes tasks and p
   assert.equal((await send({type:'tabs-read',tabId:11,chatId:1,limit:3})).value[0].text,'完成');
   assert.equal((await send({type:'page-tool',site:'www.example.com',tabId:11,name:'page_snapshot',args:{}})).value.output[0].text,'page result');
   assert.equal(pageCalls.at(-1).id,11);
+  // A missing or navigated target must never fall back to another same-site tab.
+  const target=tabs.get(11);
+  tabs.delete(11);
+  const beforeClosed=pageCalls.length;
+  assert.equal((await send({type:'page-tool',site:'www.example.com',tabId:11,name:'click',args:{}})).ok,false);
+  assert.equal(pageCalls.length,beforeClosed);
+  tabs.set(11,{...target,url:'https://other.example/'});
+  assert.equal((await send({type:'page-tool',site:'www.example.com',tabId:11,name:'set_value',args:{}})).ok,false);
+  assert.equal(pageCalls.length,beforeClosed);
+  tabs.set(11,target);
+  toolError='message port closed in application';
+  assert.equal((await send({type:'page-tool',site:'www.example.com',tabId:11,name:'js_eval',args:{}})).ok,false);
+  assert.equal(pageCalls.length,beforeClosed+1,'application errors are not retried as connection errors');
+  toolError=null;
   missingReceiver=true;
   await onClick(tabs.get(10));
   assert.equal(injected.length,1);

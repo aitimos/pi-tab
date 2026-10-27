@@ -20,7 +20,12 @@ const server=createServer((request,response)=>{
     response.end(`<!doctype html><title>${request.url}</title><h1>${request.url}</h1>`);return;
   }
   let body='';request.on('data',chunk=>body+=chunk);request.on('end',()=>{
-    const input=JSON.parse(body);requests.push(input);
+    const input=JSON.parse(body);
+    if(input.messages.some(message=>['system','developer'].includes(message.role) && JSON.stringify(message.content).includes('你是会话标题生成器'))) {
+      response.writeHead(200,{'Content-Type':'text/event-stream'});
+      response.end('data: '+JSON.stringify({id:'title',object:'chat.completion.chunk',created:1,model:'test-model',choices:[{index:0,delta:{role:'assistant',content:'标签页协作'},finish_reason:'stop'}]})+'\n\ndata: [DONE]\n\n');return;
+    }
+    requests.push(input);
     const last=input.messages.at(-1);
     let delta,finish;
     if(last.role==='tool') {delta={role:'assistant',content:typeof last.content==='string'?last.content:JSON.stringify(last.content)};finish='stop';}

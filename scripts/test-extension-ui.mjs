@@ -17,13 +17,27 @@ const extension = join(directory, 'extension');
 const session = `pi-tab-ui-${process.pid}`;
 let holdModel = false;
 let lastModelRequest;
+const titleRequests=[];
+let releaseTitle;
+let holdTitles=true;
 let failModels = false;
 const server = createServer((request, response) => {
   if (request.url.endsWith('/chat/completions')) {
     let body='';
     request.on('data',chunk=>body+=chunk);
     request.on('end',()=>{
-    lastModelRequest=JSON.parse(body);
+    const input=JSON.parse(body);
+    if (input.messages.some(message=>['system','developer'].includes(message.role) && JSON.stringify(message.content).includes('你是会话标题生成器'))) {
+      titleRequests.push(input);
+      const finish=()=>{
+        response.writeHead(200,{'Content-Type':'text/event-stream'});
+        for(const choice of [{delta:{role:'assistant',content:'附件内容分析'},finish_reason:null},{delta:{},finish_reason:'stop'}])response.write('data: '+JSON.stringify({id:'title',object:'chat.completion.chunk',created:1,model:input.model,choices:[{index:0,...choice}]})+'\n\n');
+        response.end('data: [DONE]\n\n');
+      };
+      if(holdTitles)releaseTitle=finish;else finish();
+      return;
+    }
+    lastModelRequest=input;
     if (holdModel) return; // Keep a real run pending until the test aborts it.
     response.writeHead(200, {'Content-Type':'text/event-stream'});
     for (const choice of [
@@ -304,7 +318,16 @@ try {
   assert.equal(await evaluate(`${root}.getElementById('preferences').style.display`),'none');
   await check('provider creation leads to searchable models with reasoning defaults',async()=>{
     await click('model-settings');
-    await click('model-menu-provider');
+    await click('model-menu-add');
+    await browser('wait','--fn',`!${root}.getElementById('manual-model-discover').disabled`);
+    assert.equal(await evaluate(`${root}.getElementById('manual-model-options').hidden`),true);
+    assert.equal(await evaluate(`${root}.getElementById('manual-model-status').textContent`),'');
+    await browser('screenshot',join(directory,'model-choices.png'));
+    await click('manual-add-provider');
+    await click('model-dialog-close');
+    assert.equal(await evaluate(`${root}.getElementById('manual-model-form').hidden`),false);
+    await click('manual-add-provider');
+    await browser('screenshot',join(directory,'add-provider.png'));
     await evaluate(`(()=>{const r=${root};r.getElementById('provider-name').value='Local test';r.getElementById('provider-url').value=${JSON.stringify(url+'v1')};r.getElementById('provider-key').value='test-only';r.getElementById('provider-form').requestSubmit()})()`);
     await browser('wait','--fn',`${root}.querySelectorAll('#manual-model-results button').length===2`);
     assert.equal(await evaluate(`${root}.getElementById('manual-model-provider').selectedOptions[0].textContent`),'Local test');
@@ -314,6 +337,15 @@ try {
     assert.equal(await evaluate(`${root}.getElementById('manual-model-reasoning').checked`),true);
     assert.ok(await evaluate(`${root}.getElementById('manual-model-thinking').options.length>1`));
     await browser('screenshot',join(directory,'add-model.png'));
+    await evaluate(`${root}.getElementById('manual-model-reasoning').click()`);
+    assert.equal(await evaluate(`${root}.getElementById('manual-model-thinking').closest('label').hidden`),true);
+    await evaluate(`${root}.getElementById('manual-model-reasoning').click()`);
+    assert.equal(await evaluate(`${root}.getElementById('manual-model-thinking').closest('label').hidden`),false);
+    await click('manual-add-provider');await click('model-dialog-close');
+    assert.equal(await evaluate(`${root}.getElementById('manual-model-id').value`),'test-reasoning');
+    await browser('set','media','dark');
+    await browser('screenshot',join(directory,'add-model-dark.png'));
+    await browser('set','media','light');
     await click('manual-model-discover');
     await browser('wait','--fn',`!${root}.getElementById('manual-model-discover').disabled`);
     assert.equal(await evaluate(`${root}.getElementById('manual-model-id').value`),'test-reasoning');
@@ -321,7 +353,13 @@ try {
     await evaluate(`${root}.getElementById('manual-model-form').requestSubmit()`);
     await browser('wait','--fn',`${root}.getElementById('chat-model').textContent==='test-reasoning'`);
   });
-  await check('image and text attachments reach the model and survive history reload',async()=>{
+  await check('composer text and attachment icon share a left edge',async()=>{
+    const delta=await evaluate(`(()=>{const r=${root};return Math.abs(r.getElementById('message-input').getBoundingClientRect().left-r.querySelector('#attach svg').getBoundingClientRect().left)})()`);
+    assert.ok(delta<1);
+    assert.equal(await evaluate(`${root}.getElementById('attachment-error').textContent`),'');
+    await browser('screenshot',join(directory,'composer.png'));
+  });
+  await check('attachments, automatic title updates and persistence survive an engine restart',async()=>{
     await attachFiles();
     await browser('wait','--fn',`${root}.getElementById('attachments').children.length===2`);
     await browser('screenshot',join(directory,'attachments.png'));
@@ -339,8 +377,23 @@ try {
     const user=lastModelRequest.messages.findLast(message=>message.role==='user');
     assert.ok(user.content.some(part=>part.type==='image_url'&&part.image_url.url==='data:image/png;base64,'+pixel));
     assert.ok(user.content.some(part=>part.type==='text'&&part.text.includes('attachment test <b>plain text</b>')));
+    await click('chat-switch');
+    for(let i=0;i<40&&!releaseTitle;i++)await new Promise(resolve=>setTimeout(resolve,50));
+    assert.ok(releaseTitle,'first completed exchange requests an automatic title');
+    assert.equal(titleRequests.length,1);
+    assert.ok(titleRequests[0].max_tokens===1024 || titleRequests[0].max_completion_tokens===1024);
+    assert.ok(!titleRequests[0].tools?.length);
+    assert.equal(await evaluate(`${root}.getElementById('shell').dataset.busy`),'false');
+    holdTitles=false;releaseTitle();
+    await browser('wait','--fn',`${root}.querySelector('.chat-select[aria-current=true] .chat-title').textContent==='附件内容分析'`);
+    await browser('screenshot',join(directory,'generated-title.png'));
+    await browser('tab','t2');await evaluate('chrome.offscreen.closeDocument()');await browser('tab','t1');
     await browser('reload');await activate();
     await browser('wait','--fn',`${root}.querySelector('.message-image')?.complete`);
+    await click('chat-switch');
+    await browser('wait','--fn',`${root}.querySelector('.chat-select[aria-current=true] .chat-title').textContent==='附件内容分析'`);
+    await click('chat-switch');
+    assert.equal(titleRequests.length,1,'saved titles do not regenerate on reload');
     assert.equal(await evaluate(`${root}.querySelector('.message-file summary').textContent`),'文件：notes.txt');
     assert.equal(await evaluate(`${root}.querySelector('.message-file pre').textContent`),'attachment test <b>plain text</b>');
     assert.equal(await evaluate(`${root}.querySelector('.message-file b')`),null);
@@ -392,6 +445,23 @@ try {
     await browser('tab','t1');
     assert.equal(await evaluate(`${root}.querySelector('[data-chat-id="${currentId}"] .chat-running').hidden`),false);
     await browser('tab','t2');
+  });
+  await check('agent queue and delayed completion preserve a live run and its output',async()=>{
+    const deliver=event=>evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});await chrome.tabs.sendMessage(tab.id,{type:'engine-event',event:${JSON.stringify({...event,conversationId:currentId})}});})()`);
+    await deliver({type:'message_start',message:{role:'assistant',content:[{type:'text',text:'Before'}]}});
+    await browser('tab','t1');
+    try {
+      await browser('wait','--fn',`${root}.querySelector('.streaming .bubble')?.textContent==='Before'`);
+      await browser('tab','t2');
+      await deliver({type:'agent_task_queued'});
+      await deliver({type:'message_update',changes:[{type:'text_delta',contentIndex:0,delta:' after'}]});
+      await deliver({type:'agent_task_done'});
+      await browser('tab','t1');
+      await browser('wait','--fn',`${root}.querySelector('.streaming .bubble')?.textContent==='Before after'`);
+      assert.equal(await evaluate(`${root}.querySelectorAll('.streaming').length`),1);
+      assert.equal(await evaluate(`${root}.getElementById('shell').dataset.busy`),'true');
+      assert.equal(await evaluate(`${root}.getElementById('busy-text').hidden`),false);
+    } finally { await browser('tab','t2'); }
   });
   await check('queued attachment editing keeps image and file contents',async()=>{
     await browser('tab','t1');
@@ -479,13 +549,19 @@ try {
     const point=await evaluate(`(()=>{const title=${root}.querySelector('.chat-title').getBoundingClientRect();return {x:title.x+20,y:title.y+title.height/2}})()`);
     const before=await evaluate('window.scrollY');
     await wheel(point,300);
-    await browser('wait','--fn',`${root}.getElementById('chat-list').scrollTop>0`);
+    try { await browser('wait','--fn',`${root}.getElementById('chat-list').scrollTop>0`); }
+    catch(error) {
+      console.error('Scroll geometry',await evaluate(`(()=>{const r=${root},menu=r.getElementById('chat-list'),hit=r.elementFromPoint(${point.x},${point.y});return {menu:menu.getBoundingClientRect().toJSON(),scrollHeight:menu.scrollHeight,clientHeight:menu.clientHeight,point:${JSON.stringify(point)},hit:hit?.outerHTML.slice(0,300)}})()`));
+      await browser('screenshot',join(directory,'scroll-failure.png'));throw error;
+    }
     await evaluate(`${root}.getElementById('chat-list').scrollTop=100000`);
     await wheel(point,600);
     assert.equal(await evaluate('window.scrollY'),before);
     const end=await evaluate(`${root}.getElementById('chat-list').scrollTop`);
     await wheel(point,-180);
     await browser('wait','--fn',`${root}.getElementById('chat-list').scrollTop<${end}`);
+    const row=await evaluate(`(()=>{const row=${root}.querySelector('.chat-row'),button=row.querySelector('.chat-select'),remove=row.querySelector('.chat-delete');return {height:row.getBoundingClientRect().height,button:getComputedStyle(button).backgroundColor,remove:getComputedStyle(remove).backgroundColor}})()`);
+    assert.equal(row.height,32);assert.equal(row.button,'rgba(0, 0, 0, 0)');assert.equal(row.remove,row.button);
     await browser('screenshot',join(directory,'conversation-scroll.png'));
   });
   await check('narrow windows keep header controls inside the frame',async()=>{
@@ -497,7 +573,10 @@ try {
     assert.equal(await evaluate(`(()=>{const r=${root},body=r.querySelector('.settings-body');return body.scrollWidth===body.clientWidth&&r.querySelector('#preferences .primary').getBoundingClientRect().bottom<=r.getElementById('shell').getBoundingClientRect().bottom})()`),true);
     await browser('screenshot',join(directory,'narrow-settings.png'));
     await click('preferences-back');
-
+    await click('model-settings');await click('model-menu-add');await click('manual-add-provider');
+    assert.equal(await evaluate(`(()=>{const r=${root},body=r.querySelector('#provider-form .form-body');return body.scrollWidth===body.clientWidth})()`),true);
+    await browser('screenshot',join(directory,'narrow-provider.png'));
+    await click('model-dialog-close');await click('model-dialog-close');
     await browser('set','viewport','1280','900');
   });
   await check('reduced motion docks without leaving an animation running',async()=>{

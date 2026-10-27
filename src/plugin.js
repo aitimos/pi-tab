@@ -1,4 +1,5 @@
 import loadModelCatalog from '#model-catalog';
+import { generateConversationTitle } from './conversation-title.js';
 import { createModelConfig } from './model-config.js';
 import { normalizeUserContent, userContentText, editUserContent } from './message-content.js';
 import { BACKGROUND_CONTEXT, withAbortSignal } from '@earendil-works/chord/context';
@@ -114,6 +115,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
   let harness, conversation, configuration, disposed = false;
   let releaseStorageLock, storageLock;
   const activeRuns = new Map(), eventStreams = new Map(), configurations = new Map(), durableBusy = new Map(), sharedProfiles = new Map(), sharedProviders = new Map();
+  const titleJobs = new Set();
   let promptText = DEFAULT_PROMPT;
   const consoleWrappers = new Map();
   const originalConsole = new Map();
@@ -151,8 +153,33 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
         if (event.type === 'run_end') durableBusy.set(id, false);
         if (event.type === 'snapshot') durableBusy.set(id, Boolean(event.run));
         emit({ ...event, conversationId: id });
+        if (event.type === 'run_end') void updateConversationTitle(id);
       }
     });
+  }
+
+  async function updateConversationTitle(id) {
+    if (titleJobs.has(id) || disposed) return;
+    titleJobs.add(id);
+    try {
+      const chat = (await harness.snapshot(TabState, ctx))?.chats.find(item => item.id === id);
+      const config = configurations.get(id);
+      if (!chat || chat.titleGenerated || !config) return;
+      const target = await harness.conversation(id, ctx);
+      const {entries} = await target.context(ctx);
+      const title = await generateConversationTitle(models, models.getModel(`page-${config.profileId}`, config.model), entries);
+      if (!title || disposed) return;
+      const saved = await harness.commit(async tx => {
+        const item = (await tx.doc(TabState)).chats.find(chat => chat.id === id);
+        if (!item || item.titleGenerated) return false;
+        item.title = title;
+        item.titleGenerated = true;
+        return true;
+      }, ctx);
+      if (saved) emit({type:'chat_title_changed',conversationId:id,title});
+    } catch (error) {
+      nativeConsole.warn('[Pi Tab] 会话标题生成失败', error.message);
+    } finally { titleJobs.delete(id); }
   }
 
   async function listChats() {
@@ -381,7 +408,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     next.profileId = profileId;
     const providerId = `page-${profileId}`;
     const model = { ...resolved, id:next.model, api:next.api, provider:providerId, baseUrl:next.baseUrl, contextWindow:next.contextWindow, maxTokens:next.maxTokens };
-    const streamOptions = opts => ({ ...opts, maxTokens:next.maxTokens, transport:'sse', ...(usesOwnFetch ? {} : {fetch:requestFetch}) });
+    const streamOptions = opts => ({ ...opts, maxTokens:opts?.maxTokens ?? next.maxTokens, transport:'sse', ...(usesOwnFetch ? {} : {fetch:requestFetch}) });
     models.setProvider(createProvider({ id: providerId, name: next.providerName || next.baseUrl, baseUrl: next.baseUrl, models: [model],
       auth: { apiKey: { name: 'Configured key', resolve: async () => ({ auth: { apiKey: next.apiKey || 'no-key', headers: next.headers } }) } },
       api: {
