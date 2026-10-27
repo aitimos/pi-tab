@@ -29,9 +29,12 @@ export function createBookmarklet(source, { openChat, config } = {}) {
     const notice=document.createElement('div');
     notice.setAttribute('role','alert');
     notice.style.cssText='position:fixed;right:16px;bottom:16px;z-index:2147483647;max-width:min(400px,calc(100vw - 32px));padding:12px 14px;border:.5px solid #484848;border-radius:10px;background:#191919;color:#eeeeee;font:13px/1.5 system-ui,sans-serif';
-    notice.textContent='Pi Tab 无法启动：'+String(error?.message||error).slice(0,240);
+    const locale=window.pi?.i18n||window.__piTabAgent?.i18n;
+    const language=localStorage.getItem('pi-tab-language')||'auto';
+    const chinese=language==='zh-CN'||(language==='auto'&&(navigator.languages.find(value=>/^(zh|en)(-|$)/i.test(value))||'en').toLowerCase().startsWith('zh'));
+    notice.textContent=(chinese?'Pi Tab 无法启动：':'Pi Tab could not start: ')+(locale?locale.t(error?.message||error):String(error?.message||error)).slice(0,240);
     const close=document.createElement('button');
-    close.type='button';close.textContent='关闭';close.style.cssText='margin-left:12px;padding:4px 8px;border:.5px solid #484848;border-radius:6px;background:#2a2a2a;color:#eeeeee;cursor:pointer';
+    close.type='button';close.textContent=chinese?'关闭':'Close';close.style.cssText='margin-left:12px;padding:4px 8px;border:.5px solid #484848;border-radius:6px;background:#2a2a2a;color:#eeeeee;cursor:pointer';
     close.onclick=()=>notice.remove();notice.append(close);
     (document.body||document.documentElement).append(notice);
   }})()`;

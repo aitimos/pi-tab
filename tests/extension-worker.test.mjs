@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {test} from 'node:test';
 import vm from 'node:vm';
+import {createI18n} from '../src/i18n.js';
 
 test('extension shares one site engine across paths and tabs, routes tasks and page tools', async () => {
   const session=new Map();
@@ -20,6 +21,7 @@ test('extension shares one site engine across paths and tabs, routes tasks and p
   let toolError;
   let onMessage,onClick,engineOpened=false;
   const chrome={
+    i18n:{getAcceptLanguages:async()=>['zh-CN']},
     action:{onClicked:{addListener:listener=>{onClick=listener;}},setBadgeText:async value=>badges.push(value),setTitle:async value=>titles.push(value)},
     scripting:{executeScript:async request=>{injected.push(request);missingReceiver=false;}},
     tabs:{
@@ -48,13 +50,13 @@ test('extension shares one site engine across paths and tabs, routes tasks and p
         return {ok:true,value:{activeId:1}};
       },
     },
-    storage:{session:{
+    storage:{local:{get:async()=>({})},onChanged:{addListener(){}},session:{
       get:async key=>({[key]:session.get(key)}),
       set:async values=>{for(const [key,value]of Object.entries(values))session.set(key,value);},
       remove:async key=>session.delete(key),
     }},
   };
-  vm.runInNewContext(await readFile('src/extension-worker.js','utf8'),{chrome,URL,Promise,setTimeout,console:{error(){}}});
+  vm.runInNewContext((await readFile('src/extension-worker.js','utf8')).replace(/^import .*;\n/,''),{createI18n,chrome,URL,Promise,setTimeout,console:{error(){}}});
   const send=(message,from=10)=>new Promise(resolve=>onMessage(message,{tab:tabs.get(from)},resolve));
 
   assert.equal((await send({type:'identity'})).value.active,false);

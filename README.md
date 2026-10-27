@@ -25,6 +25,7 @@ Pi Tab 基于 Pi Durable，把 Agent 带进你正在浏览的网页。点击书�
 | 连续对话 | 运行时追加任务、编辑待发送队列，或直接发送消息介入当前任务 |
 | 会话管理 | 自动生成标题、显示运行状态、切换和删除会话，也可在新窗口继续另一项任务 |
 | 多 Agent 协作 | 同页 Agent 互发消息；扩展还可打开其他标签页、发送任务并读取结果 |
+| 中英双语 | 默认跟随浏览器语言，也可在设置中切换；切换不影响会话和正在执行的任务 |
 | 界面与偏好 | 跟随网页或系统主题，也可选浅色、深色；支持拖动、缩放、最小化和贴边放置 |
 
 可以试试：“总结这个页面”“把表格整理成 CSV”“检查页面为什么出现横向滚动条”。
@@ -66,6 +67,6 @@ Pi Tab 基于 Pi Durable，把 Agent 带进你正在浏览的网页。点击书�
 
 ## 参与项目
 
-[反馈问题与建议](https://github.com/aitimos/pi-tab/issues/new/choose) | [开发与贡献](CONTRIBUTING.md) | [行为准则](CODE_OF_CONDUCT.md) | [安全报告](SECURITY.md)
+欢迎通过 [Issues](https://github.com/aitimos/pi-tab/issues) 反馈问题，或提交 Pull Request。
 
 本项目采用 [Apache License 2.0](LICENSE)。

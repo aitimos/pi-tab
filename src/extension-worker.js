@@ -1,3 +1,10 @@
+import { createI18n } from './i18n.js';
+
+async function actionLocale() {
+  const saved = await chrome.storage.local.get('pi-tab-language');
+  return createI18n({mode:saved['pi-tab-language'] || 'auto',languages:await chrome.i18n.getAcceptLanguages()});
+}
+
 const activeKey = tabId => `active:${tabId}`;
 const siteOf = url => {
   const parsed = new URL(url);
@@ -38,11 +45,11 @@ chrome.action.onClicked.addListener(async tab => {
     siteOf(tab.url);
     await activate(tab.id,true);
     await chrome.action.setBadgeText({tabId:tab.id,text:''});
-    await chrome.action.setTitle({tabId:tab.id,title:'打开 Pi Tab'});
+    await chrome.action.setTitle({tabId:tab.id,title:(await actionLocale()).t('打开 Pi Tab')});
   } catch (error) {
     console.error('[Pi Tab]',error);
     await chrome.action.setBadgeText({tabId:tab.id,text:'!'});
-    await chrome.action.setTitle({tabId:tab.id,title:`Pi Tab：${error.message}`});
+    await chrome.action.setTitle({tabId:tab.id,title:`Pi Tab: ${(await actionLocale()).t(error.message)}`});
   }
 });
 chrome.tabs.onRemoved.addListener(tabId => { void chrome.storage.session.remove(activeKey(tabId)); });
@@ -130,4 +137,13 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
     throw new Error('未知扩展消息。');
   })().then(value=>respond({ok:true,value}),error=>respond({ok:false,error:error.message||String(error)}));
   return true;
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local' || !changes['pi-tab-language']) return;
+  void (async () => {
+    const title = (await actionLocale()).t('打开 Pi Tab');
+    await chrome.action.setTitle({title});
+    for (const tab of await chrome.tabs.query({})) await chrome.action.setTitle({tabId:tab.id,title});
+  })();
 });

@@ -1,5 +1,5 @@
 import { build, transform } from 'esbuild';
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile, cp } from 'node:fs/promises';
 import { builtinProviders } from '@earendil-works/pi-ai/providers/all';
 import { makeBookmarklet } from './make-bookmarklet.mjs';
 import { deflateSync, gzipSync } from 'node:zlib';
@@ -71,11 +71,13 @@ const source = await readFile('dist/pi-console.js', 'utf8');
 const runtime = JSON.stringify(source).replace(/</g, '\\u003c');
 const codec = (await readFile('src/bookmarklet.js', 'utf8')).replace(/^export /gm, '');
 const originalChat = html.match(/<script>\s*(function openChat[\s\S]*?)\nconst PI_RUNTIME/)[1];
-const chatSource = (await transform(originalChat, {minifyWhitespace:true,legalComments:'none'})).code.trim();
+const chatSource = (await transform(originalChat, {minifyWhitespace:true,minifyIdentifiers:true,minifySyntax:true,legalComments:'none'})).code.trim();
 // Check the actual chat bookmark too, with room for saved model credentials.
 const chatBookmark = createBookmarklet(source, { openChat:chatSource, config:{apiKey:'k'.repeat(16384)} });
 console.log(`聊天书签长度：${chatBookmark.length} 个字符（含 16 KB 配置预留）`);
+const landingLocale = await readFile('src/locales/landing.en.json', 'utf8');
 const builtHtml = html
+  .replace(/(<script id="pi-landing-locale"[^>]*>)[\s\S]*?(<\/script>)/, (_match, open, close) => open + landingLocale.replace(/</g,'\\u003c') + close)
   .replace(originalChat, () => chatSource)
   .replace(/(<script id="pi-runtime"[^>]*>)[\s\S]*?(<\/script>)/, (_match, open, close) => open + runtime + close)
   .replace(/(<script id="pi-bookmark-codec">)[\s\S]*?(<\/script>)/, (_match, open, close) => open + '\n' + codec + close);
@@ -87,7 +89,8 @@ await mkdir('dist/extension', { recursive: true });
 await writeFile('dist/extension/LICENSE', await readFile('LICENSE'));
 await writeFile('dist/extension/NOTICE', await readFile('NOTICE'));
 await writeFile('dist/extension/manifest.json', await readFile('extension/manifest.json'));
-await writeFile('dist/extension/worker.js', await readFile('src/extension-worker.js'));
+await cp('extension/_locales','dist/extension/_locales',{recursive:true});
+await build({entryPoints:['src/extension-worker.js'],bundle:true,format:'esm',platform:'browser',target:'chrome110',minify:true,outfile:'dist/extension/worker.js'});
 const extensionBootstrap = await readFile('src/extension-content.js', 'utf8');
 await writeFile('dist/extension/content.js', `if (!globalThis.__piTabExtensionLoaded) {\nglobalThis.__piTabExtensionLoaded = true;\n(() => {\nglobalThis.__piTabDeferredInstall = true;\n${source}\n${chatSource}\n${extensionBootstrap}\n})();\n}`);
 const engineBootstrap = await readFile('src/extension-engine.js', 'utf8');
@@ -126,7 +129,7 @@ await writeFile('dist/extension/icon.png', Buffer.concat([
   Buffer.from('89504e470d0a1a0a', 'hex'), pngChunk('IHDR', header), pngChunk('IDAT', deflateSync(rows)), pngChunk('IEND', Buffer.alloc(0)),
 ]));
 
-const extensionFiles = ['LICENSE', 'NOTICE', 'manifest.json', 'worker.js', 'content.js', 'engine.html', 'engine.js', 'icon.png'];
+const extensionFiles = ['LICENSE', 'NOTICE', 'manifest.json', 'worker.js', 'content.js', 'engine.html', 'engine.js', 'icon.png', '_locales/en/messages.json', '_locales/zh_CN/messages.json'];
 const localParts = [], centralParts = [];
 let offset = 0;
 for (const filename of extensionFiles) {

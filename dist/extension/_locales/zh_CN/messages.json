@@ -1,0 +1,8 @@
+{
+  "description": {
+    "message": "在网页中运行可恢复的 Pi agent，并在标签页之间协作。"
+  },
+  "open": {
+    "message": "打开 Pi Tab"
+  }
+}

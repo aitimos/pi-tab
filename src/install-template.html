@@ -23,6 +23,7 @@ body>header,body>main,body>footer{position:relative;z-index:1}
 .theme-toggle{display:grid;place-items:center;width:30px;height:30px;padding:0;border:.5px solid var(--line);border-radius:6px;background:var(--surface);color:var(--text);font-size:16px}
 .theme-toggle:hover{background:var(--raised)}
 .theme-toggle svg{width:16px;height:16px}
+.site-language{display:flex;gap:2px;padding:2px;border:.5px solid var(--line);border-radius:7px}.site-language button{border:0;border-radius:4px;padding:3px 7px;background:transparent;color:var(--muted);font-size:12px}.site-language button[aria-pressed=true]{background:var(--raised);color:var(--text)}@media(max-width:480px){.header-nav{gap:8px}.header-nav .header-link{display:none}.site-header{gap:8px}}
 
 
 :root[data-theme=light] :is(input,select,textarea,#bookmark-url){background:#fcfcfc;border-color:#cecece;color:#202020}
@@ -45,7 +46,7 @@ body>header,body>main,body>footer{position:relative;z-index:1}
 </head>
 <body>
 <svg id="drag-to-bar" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path id="drag-path"/><path id="drag-head"/><text id="drag-label">拖到书签栏</text></svg>
-<header class="site-header wrap"><div class="brand"><span class="brand-mark" aria-hidden="true"><svg class="pi-icon" viewBox="0 0 4 4" shape-rendering="crispEdges" aria-hidden="true"><path fill="#e48a7a" d="M0 0h3v1H0zM2 1h1v1H2z"/><path fill="#4f8eb3" d="M0 1h1v3H0zM1 2h1v1H1z"/><path fill="#eab65d" d="M3 2h1v2H3z"/></svg></span>Pi Tab</div><nav class="header-nav" aria-label="相关链接"><button id="site-theme" class="theme-toggle" type="button" aria-label="主题：跟随" title="主题：跟随"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></svg></button><a class="header-link" href="#help">使用帮助</a><a class="header-link" href="https://github.com/aitimos/pi-tab" target="_blank" rel="noopener noreferrer">GitHub ↗</a></nav></header>
+<header class="site-header wrap"><div class="brand"><span class="brand-mark" aria-hidden="true"><svg class="pi-icon" viewBox="0 0 4 4" shape-rendering="crispEdges" aria-hidden="true"><path fill="#e48a7a" d="M0 0h3v1H0zM2 1h1v1H2z"/><path fill="#4f8eb3" d="M0 1h1v3H0zM1 2h1v1H1z"/><path fill="#eab65d" d="M3 2h1v2H3z"/></svg></span>Pi Tab</div><nav class="header-nav" aria-label="相关链接"><div class="site-language" role="group" aria-label="语言"><button type="button" data-language="auto">自动</button><button type="button" data-language="zh-CN" lang="zh-CN">中文</button><button type="button" data-language="en" lang="en">English</button></div><button id="site-theme" class="theme-toggle" type="button" aria-label="主题：跟随" title="主题：跟随"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/></svg></button><a class="header-link" href="#help">使用帮助</a><a class="header-link" href="https://github.com/aitimos/pi-tab" target="_blank" rel="noopener noreferrer">GitHub ↗</a></nav></header>
 <main class="wrap">
 <div class="hero"><h1>Pi Agent</h1><p class="desktop-intro">基于 Pi Durable，通过书签或扩展打开，阅读、整理和操作当前网页。</p><p class="mobile-intro">填写模型信息，直接开始对话。</p></div>
 <div class="layout">
@@ -72,9 +73,12 @@ body>header,body>main,body>footer{position:relative;z-index:1}
 <footer class="site-footer wrap"><span>Pi Tab</span><span>AI 可读取并操作页面，请在信任的网页使用。</span></footer>
 <script id="pi-runtime" type="application/json">""</script>
 <script id="pi-bookmark-codec"></script>
+<script id="pi-landing-locale" type="application/json">{}</script>
 <script>
 function openChat(initialConfig, options = {}) {
   const runtimePi = window.pi?.__piConsolePlugin ? window.pi : window.__piTabAgent;
+  const i18n = runtimePi.i18n;
+  const t = i18n.t;
   const piIcon = () => `<svg class="pi-icon" viewBox="0 0 4 4" shape-rendering="crispEdges" aria-hidden="true"><path fill="#e48a7a" d="M0 0h3v1H0zM2 1h1v1H2z"/><path fill="#4f8eb3" d="M0 1h1v3H0zM1 2h1v1H1z"/><path fill="#eab65d" d="M3 2h1v2H3z"/></svg>`;
   const globalName = '__piQuickChatOverlay';
   const prior = window[globalName];
@@ -162,6 +166,9 @@ function openChat(initialConfig, options = {}) {
     .settings-tabs { display:flex; gap:4px; margin:0 20px 16px; padding:3px; background:var(--surface); border:.5px solid var(--line); border-radius:8px; }
     .settings-tabs button { flex:1; border:0; padding:6px 8px; border-radius:5px; color:var(--muted); background:transparent; }
     .settings-tabs button[aria-selected=true] { background:var(--raised); color:var(--text); }
+    .language-options { display:flex; gap:2px; padding:2px; border:.5px solid var(--line); border-radius:7px; }
+    .language-options button { border:0; padding:3px 8px; border-radius:4px; background:transparent; color:var(--muted); font:inherit; font-size:12px; }
+    .language-options button[aria-pressed=true] { background:var(--raised); color:var(--text); }
     #preferences .settings-body { padding-top:0; }
     #preferences label { margin-bottom:14px; }
     #preferences textarea { min-height:240px; resize:vertical; line-height:1.7; }
@@ -413,8 +420,8 @@ function openChat(initialConfig, options = {}) {
   const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name]}</svg>`;
   const shell = document.createElement('section');
   shell.id = 'shell';
-  shell.setAttribute('aria-label', 'Pi Tab 对话');
-  shell.innerHTML = `
+  i18n.attr(shell, 'aria-label', () => t("Pi Tab 对话"));
+  i18n.html(shell, `
     <button id="chat-ball" type="button" title="打开 Pi Tab" aria-label="打开 Pi Tab" aria-expanded="false" aria-controls="content"><span aria-hidden="true">${piIcon()}</span></button>
     <header id="top">
       <div id="mark" aria-hidden="true">${piIcon()}</div>
@@ -486,6 +493,7 @@ function openChat(initialConfig, options = {}) {
         </div>
         <div class="form-body settings-body">
           <section id="settings-general" role="tabpanel" aria-labelledby="settings-general-tab">
+            <div class="setting-row"><span>语言</span><div class="language-options" role="group" aria-label="语言"><button type="button" data-language="auto">自动</button><button type="button" data-language="zh-CN" lang="zh-CN">中文</button><button type="button" data-language="en" lang="en">English</button></div></div>
             <label class="setting-row"><span>主题</span><select id="theme"><option value="auto">跟随</option><option value="light">浅色</option><option value="dark">深色</option></select></label>
             <label class="setting-row"><span>自动压缩上下文</span><input id="setting-compact" type="checkbox" checked></label>
             <label class="setting-row"><span>失败重试</span><select id="setting-retries"><option value="0">不重试</option><option value="1">1 次</option><option value="2">2 次</option><option value="3">3 次</option></select></label>
@@ -540,7 +548,7 @@ function openChat(initialConfig, options = {}) {
       <div class="tool-panel" id="tool-result-panel" role="tabpanel" aria-labelledby="tool-result-tab" tabindex="0" hidden><pre id="tool-result-data"></pre></div>
     </dialog>
     <button id="resize-handle" type="button" aria-label="拖动调整窗口大小" title="拖动调整窗口大小"></button>
-  `;
+  `);
   shell.classList.toggle('embedded', Boolean(options.mount));
   root.appendChild(shell);
   (options.mount || document.documentElement || document.body).appendChild(host);
@@ -591,13 +599,13 @@ function openChat(initialConfig, options = {}) {
   }
   function syncModelControls(config) {
     if (!config) return;
-    byId('attachment-error').textContent='';
+    i18n.text(byId('attachment-error'), '');
     byId('api').value=config.api;
     updateEndpoints();
     byId('model').value=config.model || '';
     byId('setup-model-options').hidden=!config.model;
     state.selectedModel=config.modelInfo || agent.describeModel(config);
-    byId('setup-model-select').replaceChildren(new Option(config.model || '选择模型',config.model || ''));
+    byId('setup-model-select').replaceChildren(i18n.option(() => config.model || t("选择模型"), config.model || ''));
     byId('setup-model-select').hidden=!config.model;
     byId('model').hidden=Boolean(config.model);
     byId('model').required=!config.model;
@@ -609,11 +617,11 @@ function openChat(initialConfig, options = {}) {
   function updateEndpoints() {
     const api=agent.apis().find(item=>item.id===byId('api').value);
     const endpoints=(api?.endpoints || []).filter(item=>item.url);
-    const placeholder=new Option('选择接口地址','');placeholder.disabled=true;
+    const placeholder=i18n.option(() => t("选择接口地址"), '');placeholder.disabled=true;
     byId('endpoint').replaceChildren(placeholder,...endpoints.map(item=>new Option(`${item.name}：${item.url}`,item.url)));
     byId('endpoint').value='';
     byId('endpoint').disabled=!endpoints.length;
-    byId('key-label').textContent=api?.id==='openai-codex-responses' ? 'Codex OAuth Access Token' : api?.id==='google-vertex' ? 'Vertex Express API Key' : api?.id==='bedrock-converse-stream' ? 'Bedrock API Key' : '密钥（API Key）';
+    i18n.text(byId('key-label'), () => api?.id==='openai-codex-responses' ? 'Codex OAuth Access Token' : api?.id==='google-vertex' ? 'Vertex Express API Key' : api?.id==='bedrock-converse-stream' ? 'Bedrock API Key' : t("密钥（API Key）"));
   }
   function initializeModelControls() {
     const apis=agent.apis();
@@ -630,7 +638,7 @@ function openChat(initialConfig, options = {}) {
     byId('discover-models').disabled=false;
   }
   function setDiscoveryStatus(text) {
-    byId('discovery-status').textContent=text;
+    i18n.text(byId('discovery-status'), () => t(text));
   }
   function showManualModel() {
     byId('setup-model-select').hidden=true;
@@ -661,14 +669,14 @@ function openChat(initialConfig, options = {}) {
     const version=state.discoveryVersion;
     const controller=new AbortController();state.discovery=controller;
     byId('discover-models').disabled=true;
-    setDiscoveryStatus('正在获取模型…');
+    setDiscoveryStatus(t("正在获取模型…"));
     const config=mode==='chat' ? state.activeConfig : draftProvider();
     try {
       const result=await agent.discoverModels(config,{signal:controller.signal});
       if (version!==state.discoveryVersion) return;
       state.candidates=result.models;
       state.candidateProvider=config;
-      setDiscoveryStatus(result.source==='catalog' ? `目录参考：${result.warning}` : (result.models.length ? '' : '未找到模型，请填写模型 ID'));
+      setDiscoveryStatus(result.source==='catalog' ? t("目录参考：{0}", t(result.warning)) : (result.models.length ? '' : t("未找到模型，请填写模型 ID")));
       if(mode==='setup') {
         const current=byId('model').value.trim();
         byId('setup-model-select').replaceChildren(...result.models.map(model=>new Option(model.id,model.id)));
@@ -678,7 +686,7 @@ function openChat(initialConfig, options = {}) {
       if(!byId('model-menu').hidden)renderModelMenu();
     } catch(error) {
       if(version!==state.discoveryVersion || controller.signal.aborted) return;
-      setDiscoveryStatus(error.message || '获取失败，可以重试或手动填写。');
+      setDiscoveryStatus(error.message || t("获取失败，可以重试或手动填写。"));
       if(!byId('model-menu').hidden)renderModelMenu();
     } finally {
       if(version===state.discoveryVersion) {
@@ -721,8 +729,8 @@ function openChat(initialConfig, options = {}) {
     for(const profile of profiles) {
       const button=document.createElement('button');button.type='button';button.setAttribute('role','menuitem');
       button.setAttribute('aria-current',String(profile.id===active?.profileId));
-      const title=document.createElement('span');title.textContent=profile.model;
-      const detail=document.createElement('small');detail.textContent=profile.providerName || new URL(profile.baseUrl).hostname;
+      const title=document.createElement('span');i18n.text(title, profile.model);
+      const detail=document.createElement('small');i18n.text(detail, profile.providerName || new URL(profile.baseUrl).hostname);
       button.append(title,detail);
       button.addEventListener('click',async()=>{
         closeModelMenu();
@@ -736,7 +744,7 @@ function openChat(initialConfig, options = {}) {
     if(sameProvider(state.candidateProvider,active))for(const model of state.candidates) {
       if(known.has(`${active.api}\n${active.baseUrl}\n${model.id}`))continue;
       const button=document.createElement('button');button.type='button';button.setAttribute('role','menuitem');
-      const title=document.createElement('span');title.textContent=model.id;
+      const title=document.createElement('span');i18n.text(title, model.id);
       button.appendChild(title);
       button.addEventListener('click',()=>{
         closeModelMenu();
@@ -746,7 +754,7 @@ function openChat(initialConfig, options = {}) {
       list.appendChild(button);
     }
     if(!list.children.length) {
-      const note=document.createElement('div');note.id='model-menu-empty';note.textContent=state.discovery?'正在获取模型…':'暂无模型';list.appendChild(note);
+      const note=document.createElement('div');note.id='model-menu-empty';i18n.text(note, () => state.discovery?t("正在获取模型…"):t("暂无模型"));list.appendChild(note);
     }
   }
   async function toggleModelMenu() {
@@ -779,7 +787,7 @@ function openChat(initialConfig, options = {}) {
     if (!byId('provider-form').hidden) {
       byId('provider-form').hidden=true;
       byId('manual-model-form').hidden=false;
-      byId('model-dialog-title').textContent='添加模型';
+      i18n.text(byId('model-dialog-title'), () => t("添加模型"));
       byId('manual-model-provider').focus();
     } else closeModelDialog();
   });
@@ -801,11 +809,11 @@ function openChat(initialConfig, options = {}) {
     const matches = manualModels.filter(item => (item.id+' '+item.name).toLowerCase().includes(query));
     if (selectedManualModel) return;
     if (manualModels.length && !matches.length) {
-      const note=document.createElement('span');note.className='hint';note.textContent='没有匹配项，将使用填写的模型 ID';list.appendChild(note);
+      const note=document.createElement('span');note.className='hint';i18n.text(note, () => t("没有匹配项，将使用填写的模型 ID"));list.appendChild(note);
     }
     for (const model of matches) {
       const button = document.createElement('button');
-      button.type = 'button'; button.className = 'model-option'; button.textContent = model.id;
+      button.type = 'button'; button.className = 'model-option'; i18n.text(button, model.id);
       button.setAttribute('aria-current',String(model.id === selectedManualModel?.id));
       button.addEventListener('click', () => {
         selectedManualModel = model;
@@ -830,19 +838,19 @@ function openChat(initialConfig, options = {}) {
     renderManualModels(); updateManualThinking();
     const provider = manualProvider();
     byId('manual-model-form').querySelector('[type=submit]').disabled = !provider;
-    if (!provider) { byId('manual-model-status').textContent = '请先添加提供商'; return; }
+    if (!provider) { i18n.text(byId('manual-model-status'), () => t("请先添加提供商")); return; }
     byId('manual-model-discover').disabled = true;
-    byId('manual-model-status').textContent = '正在获取模型…';
+    i18n.text(byId('manual-model-status'), () => t("正在获取模型…"));
     try {
       const result = await agent.discoverModels(provider);
       if (version !== manualDiscoveryVersion) return;
       manualModels = result.models;
-      byId('manual-model-status').textContent = result.source === 'catalog' ? `目录参考：${result.warning}` : (manualModels.length ? '' : '未找到模型，请填写模型 ID');
+      i18n.text(byId('manual-model-status'), () => result.source === 'catalog' ? t("目录参考：{0}", t(result.warning)) : (manualModels.length ? '' : t("未找到模型，请填写模型 ID")));
       selectedManualModel = manualModels.find(model => model.id === byId('manual-model-id').value.trim()) || selectedManualModel;
       if (selectedManualModel) { byId('manual-model-reasoning').checked = selectedManualModel.reasoning; byId('manual-model-vision').checked = selectedManualModel.input.includes('image'); updateManualThinking(); }
       renderManualModels();
     } catch (error) {
-      if (version === manualDiscoveryVersion) byId('manual-model-status').textContent = error.message || '获取失败，可手动填写模型 ID';
+      if (version === manualDiscoveryVersion) i18n.text(byId('manual-model-status'), () => t(error.message) || t("获取失败，可手动填写模型 ID"));
     } finally {
       if (version === manualDiscoveryVersion) byId('manual-model-discover').disabled = false;
     }
@@ -866,7 +874,7 @@ function openChat(initialConfig, options = {}) {
     state.selectedProviderId=null;
     byId('provider-form').hidden=true;
     byId('manual-model-form').hidden=false;
-    byId('model-dialog-title').textContent='添加模型';
+    i18n.text(byId('model-dialog-title'), () => t("添加模型"));
     byId('manual-model-id').focus();
     void discoverManualModels(true);
   }
@@ -886,7 +894,7 @@ function openChat(initialConfig, options = {}) {
   byId('manual-add-provider').addEventListener('click',()=>{
     byId('manual-model-form').hidden=true;
     byId('provider-form').hidden=false;
-    byId('model-dialog-title').textContent='添加提供商';
+    i18n.text(byId('model-dialog-title'), () => t("添加提供商"));
     byId('provider-api').replaceChildren(...agent.apis().map(api=>new Option(api.name,api.id)));
     byId('provider-api').value=state.activeConfig?.api || 'openai-completions';
     byId('provider-name').value='';
@@ -904,7 +912,7 @@ function openChat(initialConfig, options = {}) {
       state.selectedProviderId=saved.id;
       await openManualModelForm();
     } catch(failure) {
-      error.textContent=failure.message || String(failure);
+      i18n.text(error, () => t(failure.message || String(failure)));
       error.hidden=false;
     }
   });
@@ -928,10 +936,10 @@ function openChat(initialConfig, options = {}) {
       } else {
         row.innerHTML = icon('page');
         const text = document.createElement('span'),name = document.createElement('b'),size = document.createElement('small');
-        name.textContent = file.name; size.textContent = file.size < 1024 ? `${file.size} B` : file.size < 1048576 ? `${Math.ceil(file.size/1024)} KB` : `${(file.size/1048576).toFixed(1)} MB`;
+        i18n.text(name, file.name); i18n.text(size, file.size < 1024 ? `${file.size} B` : file.size < 1048576 ? `${Math.ceil(file.size/1024)} KB` : `${(file.size/1048576).toFixed(1)} MB`);
         text.append(name,size); row.append(text);
       }
-      const remove = document.createElement('button'); remove.type = 'button'; remove.innerHTML = icon('close'); remove.setAttribute('aria-label',`移除 ${file.name}`);
+      const remove = document.createElement('button'); remove.type = 'button'; remove.innerHTML = icon('close'); i18n.attr(remove, 'aria-label', () => t("移除 {0}", file.name));
       remove.addEventListener('click', () => { attachments.splice(attachments.indexOf(file),1); renderAttachments(); });
       row.append(remove); byId('attachments').append(row);
     }
@@ -941,26 +949,26 @@ function openChat(initialConfig, options = {}) {
     const target = attachments;
     const config = state.activeConfig;
     readingAttachments++; updateComposer();
-    byId('attachment-error').textContent = '';
+    i18n.text(byId('attachment-error'), '');
     try {
       for (const file of files) {
-        if (target.length >= 8 || file.size > 5*1024*1024 || target.reduce((size,item) => size+item.size,0)+file.size > 10*1024*1024) throw new Error('最多 8 个附件，单个不超过 5 MB，总计不超过 10 MB。');
+        if (target.length >= 8 || file.size > 5*1024*1024 || target.reduce((size,item) => size+item.size,0)+file.size > 10*1024*1024) throw new Error(t("最多 8 个附件，单个不超过 5 MB，总计不超过 10 MB。"));
         let part;
         if (['image/png','image/jpeg','image/webp','image/gif'].includes(file.type)) {
-          if (!agent.describeModel(config || {}).input.includes('image')) throw new Error('当前模型不支持图片，请先切换支持图片的模型。');
-          const data = await new Promise((resolve,reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result.split(',')[1]); reader.onerror = () => reject(new Error('无法读取图片。')); reader.readAsDataURL(file); });
+          if (!agent.describeModel(config || {}).input.includes('image')) throw new Error(t("当前模型不支持图片，请先切换支持图片的模型。"));
+          const data = await new Promise((resolve,reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result.split(',')[1]); reader.onerror = () => reject(new Error(t("无法读取图片。"))); reader.readAsDataURL(file); });
           part = {type:'image',mimeType:file.type,data};
         } else {
-          if (!file.type.startsWith('text/') && !/\.(txt|md|csv|json|jsonl|log|js|mjs|cjs|ts|tsx|jsx|html|css|xml|yaml|yml|py|sh|sql|toml|ini|rs|go|java|c|h|cpp)$/i.test(file.name)) throw new Error(`${file.name}：暂不支持此格式，请使用文本、代码文件或图片。`);
+          if (!file.type.startsWith('text/') && !/\.(txt|md|csv|json|jsonl|log|js|mjs|cjs|ts|tsx|jsx|html|css|xml|yaml|yml|py|sh|sql|toml|ini|rs|go|java|c|h|cpp)$/i.test(file.name)) throw new Error(t("{0}：暂不支持此格式，请使用文本、代码文件或图片。", file.name));
           let text;
           try { text = new TextDecoder('utf-8',{fatal:true}).decode(await file.arrayBuffer()); }
-          catch { throw new Error(`${file.name}：请使用 UTF-8 编码的文本。`); }
-          if (text.includes('\0')) throw new Error(`${file.name} 不是文本文件。`);
+          catch { throw new Error(t("{0}：请使用 UTF-8 编码的文本。", file.name)); }
+          if (text.includes('\0')) throw new Error(t("{0} 不是文本文件。", file.name));
           part = {type:'text',text:`文件：${file.name}\n${text}`};
         }
         target.push({name:file.name,size:file.size,part});
       }
-    } catch (error) { if (target === attachments) byId('attachment-error').textContent = error.message; }
+    } catch (error) { if (target === attachments) i18n.text(byId('attachment-error'), () => t(error.message)); }
     finally { readingAttachments--; renderAttachments(); }
   }
   byId('attach').addEventListener('click', () => byId('attachment-input').click());
@@ -975,21 +983,21 @@ function openChat(initialConfig, options = {}) {
     const draft = composerDrafts.get(agent.id);
     byId('message-input').value = draft?.text || '';
     attachments = draft?.attachments || [];
-    byId('attachment-error').textContent = '';
+    i18n.text(byId('attachment-error'), '');
     renderAttachments();
   }
   function renderUserContent(bubble, content) {
     bubble.replaceChildren();
-    if (typeof content === 'string') { bubble.textContent = content; return; }
+    if (typeof content === 'string') { i18n.text(bubble, content); return; }
     for (const [index,part] of content.entries()) {
       if (part.type === 'image') {
-        const img = document.createElement('img'); img.className = 'message-image'; img.alt = '图片附件'; img.src = `data:${part.mimeType};base64,${part.data}`; bubble.append(img);
+        const img = document.createElement('img'); img.className = 'message-image'; i18n.attr(img, 'alt', () => t('图片附件')); img.src = `data:${part.mimeType};base64,${part.data}`; bubble.append(img);
       } else if (part.type === 'text') {
         if (index && part.text.startsWith('文件：')) {
           const details = document.createElement('details'); details.className = 'message-file';
-          const summary = document.createElement('summary'); summary.textContent = part.text.split('\n')[0];
-          const body = document.createElement('pre'); body.textContent = part.text.slice(part.text.indexOf('\n')+1); details.append(summary,body); bubble.append(details);
-        } else { const text = document.createElement('div'); text.textContent = part.text; bubble.append(text); }
+          const summary = document.createElement('summary'); i18n.text(summary, part.text.split('\n')[0].slice(3));
+          const body = document.createElement('pre'); i18n.text(body, part.text.slice(part.text.indexOf('\n')+1)); details.append(summary,body); bubble.append(details);
+        } else { const text = document.createElement('div'); i18n.text(text, part.text); bubble.append(text); }
       }
     }
   }
@@ -997,7 +1005,7 @@ function openChat(initialConfig, options = {}) {
     const input = byId('message-input');
     byId('send').hidden = !input.value.trim() && !attachments.length;
     byId('send').disabled = !state.connected || readingAttachments;
-    byId('send').title = state.busy ? '排队发送，长按可选直接发送' : '发送消息';
+    i18n.attr(byId('send'), 'title', () => state.busy ? t("排队发送，长按可选直接发送") : t("发送消息"));
     byId('send').setAttribute('aria-label', byId('send').title);
     input.style.height = 'auto';
     input.style.height = `${Math.min(180, input.scrollHeight)}px`;
@@ -1007,15 +1015,15 @@ function openChat(initialConfig, options = {}) {
     if (list.children.length) return;
     const welcome = document.createElement('div');
     welcome.id = 'welcome';
-    welcome.innerHTML = `<div class="welcome-mark" aria-hidden="true">${piIcon()}</div><h2>需要我做什么？</h2><a class="github-link github-star" href="https://github.com/aitimos/pi-tab" target="_blank" rel="noopener noreferrer" aria-label="在 GitHub 给 Pi Tab 点 Star">${icon('github')}在 GitHub 点 Star ↗</a>`;
+    i18n.html(welcome, `<div class="welcome-mark" aria-hidden="true">${piIcon()}</div><h2>需要我做什么？</h2><a class="github-link github-star" href="https://github.com/aitimos/pi-tab" target="_blank" rel="noopener noreferrer" aria-label="在 GitHub 给 Pi Tab 点 Star">${icon('github')}在 GitHub 点 Star ↗</a>`);
     list.appendChild(welcome);
   }
   function refreshPageContext() {
-    const title = document.title || location.hostname || '当前网页';
-    byId('page-title').textContent = title;
+    const title = document.title || location.hostname || t("当前网页");
+    i18n.text(byId('page-title'), title);
     byId('page-title').title = title;
   }
-  function reportProgress(text) { byId('progress-label').textContent = text; }
+  function reportProgress(text) { i18n.text(byId('progress-label'), () => t(text)); }
   function followOutput(update) {
     const list = byId('chat-messages');
     const nearBottom = list.scrollHeight - list.clientHeight - list.scrollTop < 64;
@@ -1027,7 +1035,7 @@ function openChat(initialConfig, options = {}) {
     try { text = typeof value === 'string' ? value : JSON.stringify(value, null, 2); }
     catch { text = String(value); }
     text ??= '';
-    return text.length > 6000 ? `${text.slice(0, 6000)}\n… 仅显示前 6000 个字符` : text;
+    return text.length > 6000 ? t("{0}\n… 仅显示前 6000 个字符", text.slice(0, 6000)) : text;
   }
   function renderAnswer(node, text) {
     node._answer = text;
@@ -1056,20 +1064,20 @@ function openChat(initialConfig, options = {}) {
     if (node.querySelector('.answer-actions')) return;
     const actions = document.createElement('div');
     actions.className = 'answer-actions';
-    actions.innerHTML = `<button class="icon-button" type="button" title="复制回复" aria-label="复制回复">${icon('copy')}</button><span class="answer-action-status" role="status"></span>`;
+    i18n.html(actions, `<button class="icon-button" type="button" title="复制回复" aria-label="复制回复">${icon('copy')}</button><span class="answer-action-status" role="status"></span>`);
     const copy = actions.querySelector('button');
     copy.addEventListener('click', async () => {
       try {
         await navigator.clipboard.writeText(node._answer || '');
         copy.innerHTML = icon('check');
-        actions.querySelector('.answer-action-status').textContent = '已复制';
+        i18n.text(actions.querySelector('.answer-action-status'), () => t("已复制"));
       } catch {
         const range = document.createRange();
         range.selectNodeContents(node.querySelector('.bubble'));
         const selection = window.getSelection();
         selection.removeAllRanges();
         selection.addRange(range);
-        actions.querySelector('.answer-action-status').textContent = '自动复制失败，请选中回复后手动复制。';
+        i18n.text(actions.querySelector('.answer-action-status'), () => t("自动复制失败，请选中回复后手动复制。"));
       }
     });
     node.append(actions);
@@ -1129,17 +1137,17 @@ function openChat(initialConfig, options = {}) {
       trace.header.dataset.state = current.dataset.state || '';
       for (const selector of ['.thinking-caption', '.tool-preview', '.tool-state']) {
         const source = current.querySelector(selector), target = trace.header.querySelector(selector);
-        if (source && target) target.textContent = source.textContent;
+        if (source && target) i18n.text(target, selector === '.tool-state' ? () => t(source.textContent) : source.textContent);
       }
-      trace.header.setAttribute('aria-label', `展开步骤：${current.querySelector('.thinking-caption,.tool-name').textContent}`);
+      i18n.attr(trace.header, 'aria-label', () => t("展开步骤：{0}", current.querySelector('.thinking-caption,.tool-name').textContent));
     } else if (grouped) {
       const tools = trace.items.filter(item => item.classList.contains('tool-row'));
       const failed = tools.some(item => item.dataset.state === 'error');
       const interrupted = tools.some(item => item.dataset.state === 'interrupted');
-      const summary = trace.open && (live || running.length) ? '执行步骤' : failed ? '工具调用失败' : interrupted ? '已停止' : tools.length ? `已调用 ${tools.length} 次工具` : '思考过程';
+      const summary = trace.open && (live || running.length) ? t("执行步骤") : failed ? t("工具调用失败") : interrupted ? t("已停止") : tools.length ? t("已调用 {0} 次工具", tools.length) : t("思考过程");
       trace.header.innerHTML = `${icon(tools.length ? 'wrench' : 'brain')}<span class="trace-summary"></span><span class="trace-chevron">${icon('right')}</span>`;
-      trace.header.querySelector('.trace-summary').textContent = summary;
-      trace.header.setAttribute('aria-label', `${trace.open ? '收起' : '展开'}步骤：${summary}`);
+      i18n.text(trace.header.querySelector('.trace-summary'), () => t(summary));
+      i18n.attr(trace.header, 'aria-label', () => t("{0}步骤：{1}", trace.open ? t("收起") : t("展开"), t(summary)));
       trace.header.dataset.running = 'false';
       trace.header.dataset.state = '';
     }
@@ -1182,7 +1190,8 @@ function openChat(initialConfig, options = {}) {
     for (const item of state.stream.nodes.values()) {
       if (item.kind !== 'thinking' || item.node.dataset.running !== 'true') continue;
       item.node.dataset.running = 'false';
-      item.node.querySelector('.thinking-time').textContent = `${((performance.now() - item.started) / 1000).toFixed(1)} 秒`;
+      const elapsed = ((performance.now() - item.started) / 1000).toFixed(1);
+      i18n.text(item.node.querySelector('.thinking-time'), () => t("{0} 秒", elapsed));
       item.stopFollow();
     }
   }
@@ -1205,7 +1214,7 @@ function openChat(initialConfig, options = {}) {
             const node = document.createElement('details');
             node.className = 'thinking';
             node.dataset.running = 'true';
-            node.innerHTML = `<summary class="trace-trigger" aria-label="查看思考过程">${icon('brain')}<span class="thinking-viewport"><span class="thinking-caption"></span></span><span class="thinking-time sr-only"></span><span class="trace-chevron">${icon('right')}</span></summary><div class="thinking-body"></div>`;
+            i18n.html(node, `<summary class="trace-trigger" aria-label="查看思考过程">${icon('brain')}<span class="thinking-viewport"><span class="thinking-caption"></span></span><span class="thinking-time sr-only"></span><span class="trace-chevron">${icon('right')}</span></summary><div class="thinking-body"></div>`);
             appendTrace(node);
             item = { kind:'thinking', node, body:node.querySelector('.thinking-body'), started:performance.now(), stopFollow:followThinking(node) };
           } else {
@@ -1218,8 +1227,8 @@ function openChat(initialConfig, options = {}) {
         }
         if (item.kind === 'text') renderAnswer(item.node, content);
         else {
-          item.body.textContent = content;
-          item.node.querySelector('.thinking-caption').textContent = content.replace(/\s+/g, ' ');
+          i18n.text(item.body, content);
+          i18n.text(item.node.querySelector('.thinking-caption'), content.replace(/\s+/g, ' '));
           item.node.querySelector('.thinking-viewport').title = content;
         }
       });
@@ -1251,8 +1260,8 @@ function openChat(initialConfig, options = {}) {
     }
     renderStream();
     if (state.stream?.ended) finishStream();
-    if (state.stream?.blocks.some(block => block?.type === 'text' && block.text)) reportProgress('正在回复');
-    else if (state.stream?.blocks.some(block => block?.type === 'thinking' && block.thinking)) reportProgress('正在思考');
+    if (state.stream?.blocks.some(block => block?.type === 'text' && block.text)) reportProgress(t("正在回复"));
+    else if (state.stream?.blocks.some(block => block?.type === 'thinking' && block.thinking)) reportProgress(t("正在思考"));
   }
   function showFinalAnswer(answer) {
     const stream = state.stream;
@@ -1301,9 +1310,9 @@ function openChat(initialConfig, options = {}) {
   function refreshToolDialog() {
     const row = state.selectedTool;
     if (!row) return;
-    byId('tool-dialog-title').textContent = `${row._call.name} 工具详情`;
-    byId('tool-call-data').textContent = readable(row._call);
-    byId('tool-result-data').textContent = row._result ?? '等待结果…';
+    i18n.text(byId('tool-dialog-title'), () => t("{0} 工具详情", row._call.name));
+    i18n.text(byId('tool-call-data'), readable(row._call));
+    i18n.text(byId('tool-result-data'), () => row._result ?? t("等待结果…"));
   }
   function openToolDialog(row) {
     state.selectedTool = row;
@@ -1332,12 +1341,12 @@ function openChat(initialConfig, options = {}) {
       if (!row) {
         row = document.createElement('div');
         row.className = 'tool-row';
-        row._call = { name:event.toolName || '工具', id:event.toolCallId, arguments:null };
+        row._call = { name:event.toolName || t("工具"), id:event.toolCallId, arguments:null };
         row.innerHTML = `<button class="trace-trigger" type="button">${icon('wrench')}<span class="tool-name"></span><span class="tool-preview"></span><span class="tool-state"></span><span class="trace-chevron">${icon('right')}</span></button>`;
         const button = row.querySelector('button');
-        button.setAttribute('aria-label', `查看工具调用详情：${row._call.name}`);
+        i18n.attr(button, 'aria-label', () => t("查看工具调用详情：{0}", row._call.name));
         button.addEventListener('click', () => openToolDialog(row));
-        row.querySelector('.tool-name').textContent = row._call.name;
+        i18n.text(row.querySelector('.tool-name'), row._call.name);
         row.querySelector('.tool-name').title = row._call.name;
         appendTrace(row);
         state.tools.set(event.toolCallId, row);
@@ -1350,27 +1359,27 @@ function openChat(initialConfig, options = {}) {
       if (event.type === 'tool_execution_end') {
         const result = event.entry?.model?.find(item => item.role === 'toolResult');
         row.dataset.state = result ? (result.isError ? 'error' : 'done') : 'interrupted';
-        row.querySelector('.tool-state').textContent = result ? (result.isError ? '失败' : '已完成') : '已结束';
-        const content = result?.content?.map(item => item.text || (item.type === 'image' ? '图片结果' : item.type)).join('\n');
-        row._result = result ? readable(content) : '未收到执行结果。';
+        i18n.text(row.querySelector('.tool-state'), () => result ? (result.isError ? t("失败") : t("已完成")) : t("已结束"));
+        const content = result?.content?.map(item => item.text || (item.type === 'image' ? t("图片结果") : item.type)).join('\n');
+        row._result = result ? readable(content) : t("未收到执行结果。");
         const preview = row.querySelector('.tool-preview');
-        preview.textContent = result ? toolPreview(content) : '未收到结果';
+        i18n.text(preview, () => result ? toolPreview(content) : t("未收到结果"));
         preview.title = preview.textContent;
       } else {
         row.dataset.state = 'running';
-        row.querySelector('.tool-state').textContent = '执行中';
+        i18n.text(row.querySelector('.tool-state'), () => t("执行中"));
       }
-      row.querySelector('button').setAttribute('aria-label', `查看工具调用详情：${row._call.name}，${row.querySelector('.tool-state').textContent}`);
+      i18n.attr(row.querySelector('button'), 'aria-label', () => t("查看工具调用详情：{0}，{1}", row._call.name, row.querySelector('.tool-state').textContent));
       if (state.selectedTool === row) refreshToolDialog();
       refreshTraces();
     });
   }
-  function reportStatus(text) { byId('status').textContent = text; }
+  function reportStatus(text) { i18n.text(byId('status'), () => t(text)); }
   function showSetup() {
     byId('model-dialog').hidden=true;
     byId('content').hidden=false;
     byId('preferences').style.display='none';
-    byId('setup-title').textContent='设置模型';
+    i18n.text(byId('setup-title'), () => t("设置模型"));
     byId('setup').style.display = 'flex';
     byId('chat').style.display = 'none';
     byId('settings').disabled = !agent;
@@ -1393,9 +1402,9 @@ function openChat(initialConfig, options = {}) {
     void restoreHistory();
     updateComposer();
     const config = agent && agent.config;
-    byId('chat-model').textContent = config?.model || '模型已设置';
+    i18n.text(byId('chat-model'), () => config?.model || t("模型已设置"));
     if (config) renderThinking(byId('chat-thinking'), agent.describeModel(config), config.thinking);
-    reportStatus('准备就绪');
+    reportStatus(t("准备就绪"));
     byId('message-input').focus();
   }
   function message(kind, value, scroll = true, preserveTrace = false) {
@@ -1406,10 +1415,10 @@ function openChat(initialConfig, options = {}) {
     const speaker = document.createElement('span');
     speaker.className = 'speaker';
     if (kind === 'ai') speaker.innerHTML = `${piIcon()}Pi Tab`;
-    else speaker.textContent = kind === 'human' ? '你' : kind === 'agent' ? '其他 agent' : '提示';
+    else i18n.text(speaker, () => kind === 'human' ? t("你") : kind === 'agent' ? t("其他 agent") : t("提示"));
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
-    bubble.textContent = value;
+    i18n.text(bubble, value);
     wrap.append(speaker, bubble);
     const list = byId('chat-messages');
     list.appendChild(wrap);
@@ -1429,7 +1438,7 @@ function openChat(initialConfig, options = {}) {
     for (const item of queued) {
       const current = existing.get(String(item.id));
       if (current) {
-        current.querySelector('.queue-status span').textContent = item.mode === 'followUp' ? '排队中' : '直接发送';
+        i18n.text(current.querySelector('.queue-status span'), () => item.mode === 'followUp' ? t("排队中") : t("直接发送"));
         if (!current.querySelector('.queue-edit')) renderUserContent(current.querySelector('.bubble'),item.content);
         const promote = current.querySelector('[data-queue-action="promote"]');
         if (promote) promote.hidden = item.mode !== 'followUp';
@@ -1441,17 +1450,17 @@ function openChat(initialConfig, options = {}) {
       const status = document.createElement('div');
       status.className = 'queue-status';
       const label = document.createElement('span');
-      label.textContent = item.mode === 'followUp' ? '排队中' : '直接发送';
+      i18n.text(label, () => item.mode === 'followUp' ? t("排队中") : t("直接发送"));
       const actions = document.createElement('details');
       const summary = document.createElement('summary');
-      summary.textContent = '⋯';
-      summary.setAttribute('aria-label', '排队消息操作');
+      i18n.text(summary, '⋯');
+      i18n.attr(summary, 'aria-label', () => t("排队消息操作"));
       const menu = document.createElement('div');
       menu.className = 'queue-menu';
-      for (const [title, action] of [['编辑消息', 'edit'], ...(item.mode === 'followUp' ? [['改为直接发送', 'promote']] : []), ['取消消息', 'cancel']]) {
+      for (const [title, action] of [[t("编辑消息"), 'edit'], ...(item.mode === 'followUp' ? [[t("改为直接发送"), 'promote']] : []), [t("取消消息"), 'cancel']]) {
         const button = document.createElement('button');
         button.type = 'button';
-        button.textContent = title;
+        i18n.text(button, () => t(title));
         button.dataset.queueAction = action;
         button.addEventListener('click', () => changeQueueItem(row, item, action));
         menu.appendChild(button);
@@ -1473,10 +1482,10 @@ function openChat(initialConfig, options = {}) {
       const footer = document.createElement('div');
       footer.className = 'queue-edit-actions';
       const cancel = document.createElement('button');
-      cancel.textContent = '取消';
+      i18n.text(cancel, () => t("取消"));
       cancel.addEventListener('click', () => { editor.remove(); footer.remove(); bubble.hidden = false; });
       const save = document.createElement('button');
-      save.textContent = '保存';
+      i18n.text(save, () => t("保存"));
       save.addEventListener('click', () => changeQueueItem(row, item, 'save'));
       footer.append(cancel, save);
       row.append(editor, footer);
@@ -1535,9 +1544,9 @@ function openChat(initialConfig, options = {}) {
   function setBusy(value) {
     state.busy = value;
     shell.dataset.busy = String(value);
-    const ballLabel = value ? '打开 Pi Tab，正在处理' : '打开 Pi Tab';
-    byId('chat-ball').title = ballLabel;
-    byId('chat-ball').setAttribute('aria-label', ballLabel);
+    const ballLabel = value ? t("打开 Pi Tab，正在处理") : t("打开 Pi Tab");
+    i18n.attr(byId('chat-ball'), 'title', () => t(ballLabel));
+    i18n.attr(byId('chat-ball'), 'aria-label', () => t(ballLabel));
     byId('send-menu').hidden = true;
     byId('send').setAttribute('aria-expanded', 'false');
     updateComposer();
@@ -1552,25 +1561,25 @@ function openChat(initialConfig, options = {}) {
       for (const row of state.tools.values()) {
         if (row.dataset.state === 'running') {
           row.dataset.state = 'interrupted';
-          row.querySelector('.tool-state').textContent = '已结束';
-          row._result = '操作已结束，未收到结果。';
-          row.querySelector('.tool-preview').textContent = '未收到结果';
-          row.querySelector('button').setAttribute('aria-label', `查看工具调用详情：${row._call.name}，${row.querySelector('.tool-state').textContent}`);
+          i18n.text(row.querySelector('.tool-state'), () => t("已结束"));
+          row._result = t("操作已结束，未收到结果。");
+          i18n.text(row.querySelector('.tool-preview'), () => t("未收到结果"));
+          i18n.attr(row.querySelector('button'), 'aria-label', () => t("查看工具调用详情：{0}，{1}", row._call.name, row.querySelector('.tool-state').textContent));
           if (state.selectedTool === row) refreshToolDialog();
         }
       }
       state.trace = null;
       refreshTraces();
       reportProgress('');
-      reportStatus('准备就绪');
+      reportStatus(t("准备就绪"));
       byId('message-input').focus();
     } else {
       state.tools.clear();
       state.trace = null;
       state.traces = [];
       state.stream = null;
-      reportProgress('正在回复');
-      reportStatus('正在处理…');
+      reportProgress(t("正在回复"));
+      reportStatus(t("正在处理…"));
     }
   }
   function subscribeEvents() {
@@ -1581,9 +1590,9 @@ function openChat(initialConfig, options = {}) {
       if (event.type === 'chat_title_changed') {
         const row = byId('chat-entries').querySelector(`[data-chat-id="${event.conversationId}"]`);
         if (row) {
-          row.querySelector('.chat-title').textContent=event.title;
+          i18n.text(row.querySelector('.chat-title'), event.title);
           row.querySelector('.chat-select').title=event.title;
-          row.querySelector('.chat-delete').setAttribute('aria-label',`删除会话：${event.title}`);
+          i18n.attr(row.querySelector('.chat-delete'), 'aria-label', () => t("删除会话：{0}", event.title));
         }
         return;
       }
@@ -1617,16 +1626,16 @@ function openChat(initialConfig, options = {}) {
         const busy = pi.busy || state.pending > 0;
         if (state.busy !== busy) setBusy(busy);
         if (!busy) void restoreHistory();
-        if (event.detail) message('system', `其他 agent 的任务失败：${event.detail}`);
+        if (event.detail) message('system', t("其他 agent 的任务失败：{0}", event.detail));
         return;
       }
       if (!state.busy) return;
       if (event.type === 'tool_execution_start') {
         updateToolCall(event);
-        reportProgress('正在操作页面');
+        reportProgress(t("正在操作页面"));
       } else if (event.type === 'tool_execution_end') {
         updateToolCall(event);
-        reportProgress('正在整理回复');
+        reportProgress(t("正在整理回复"));
       } else if (event.type === 'tool_execution_update') {
         updateToolCall(event);
       } else if (['message_start', 'message_update', 'message_end'].includes(event.type)) {
@@ -1638,14 +1647,14 @@ function openChat(initialConfig, options = {}) {
     const input = byId('message-input');
     const text = input.value.trim();
     if ((!text && !attachments.length) || !state.connected || readingAttachments) return;
-    if (attachments.some(file => file.part.type === 'image') && !agent.describeModel(state.activeConfig).input.includes('image')) { byId('attachment-error').textContent = '当前模型不支持图片，请切换模型或移除图片。'; return; }
-    const content = attachments.length ? [{type:'text',text:text || '请查看附件。'},...attachments.map(file => file.part)] : text;
+    if (attachments.some(file => file.part.type === 'image') && !agent.describeModel(state.activeConfig).input.includes('image')) { i18n.text(byId('attachment-error'), () => t("当前模型不支持图片，请切换模型或移除图片。")); return; }
+    const content = attachments.length ? [{type:'text',text:text || t("请查看附件。")},...attachments.map(file => file.part)] : text;
     const pi = agent;
     const chatId = pi?.id;
-    if (!pi?.prompt) { message('system','Pi Tab 不可用，请重新点击书签。'); return; }
+    if (!pi?.prompt) { message('system',t("Pi Tab 不可用，请重新点击书签。")); return; }
     input.value = '';
     attachments = []; renderAttachments();
-    byId('attachment-error').textContent = '';
+    i18n.text(byId('attachment-error'), '');
     if (!state.busy) renderUserContent(message('human','').querySelector('.bubble'),content);
     console.log('human:', text);
     const wasBusy = state.busy;
@@ -1654,13 +1663,13 @@ function openChat(initialConfig, options = {}) {
     if (!wasBusy) setBusy(true);
     try {
       const result = await (wasBusy ? mode === 'followUp' ? pi.followUp(content) : pi.steer(content) : pi.prompt(content));
-      const answer = result && String(result).trim() ? String(result) : '模型未返回文字回复。';
+      const answer = result && String(result).trim() ? String(result) : t("模型未返回文字回复。");
       if (agent.id === chatId) showFinalAnswer(answer);
       console.log('ai:', answer);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       if (!/agent 未完成: aborted/.test(detail)) {
-        const text = /abort|cancel|停止|取消/i.test(detail) ? '已停止本次任务。' : `未能完成请求：${detail}`;
+        const text = /abort|cancel|停止|取消/i.test(detail) ? t("已停止本次任务。") : t("未能完成请求：{0}", detail);
         if (agent.id === chatId) message('system', text);
         console.error('[Pi Tab]', text);
       }
@@ -1678,11 +1687,11 @@ function openChat(initialConfig, options = {}) {
     if (state.started) return;
     state.started = true;
     showSetup();
-    reportStatus('正在启动 Pi Tab…');
+    reportStatus(t("正在启动 Pi Tab…"));
     try {
       const pi = runtimePi;
       if (!pi?.ready || !pi?.agent) {
-        throw new Error('Pi Tab 无法在此页面启动，请刷新页面后重试。');
+        throw new Error(t("Pi Tab 无法在此页面启动，请刷新页面后重试。"));
       }
       await pi.ready;
       const chatId = options.chatId || (options.newAgent ? await pi.createChat({ inheritFrom: options.inheritFrom || pi.conversation.id }) : pi.conversation.id);
@@ -1700,12 +1709,12 @@ function openChat(initialConfig, options = {}) {
       } else if (initialConfig) {
         await applyBookmarkConfig(initialConfig);
       } else {
-        reportStatus('请填写模型信息');
+        reportStatus(t("请填写模型信息"));
       }
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      reportStatus('启动失败');
-      byId('setup-error').textContent = detail;
+      reportStatus(t("启动失败"));
+      i18n.text(byId('setup-error'), () => t(detail));
       byId('setup-error').hidden = false;
       console.error('[Pi Tab]', detail);
     }
@@ -1713,7 +1722,7 @@ function openChat(initialConfig, options = {}) {
 
   async function applyBookmarkConfig(config) {
     if (state.configuring || state.busy || agent?.busy) {
-      message('system', '当前任务尚未结束，请稍后再修改模型设置。');
+      message('system', t("当前任务尚未结束，请稍后再修改模型设置。"));
       return;
     }
     byId('api').value = config.api || 'openai-completions';
@@ -1727,7 +1736,7 @@ function openChat(initialConfig, options = {}) {
     } else {
       syncModelControls(config);
       showSetup();
-      reportStatus('请补全模型信息');
+      reportStatus(t("请补全模型信息"));
       for (const id of ['base-url', 'api-key', 'model']) {
         if (!byId(id).value) { byId(id).focus(); break; }
       }
@@ -1736,7 +1745,7 @@ function openChat(initialConfig, options = {}) {
 
   async function configureModel(config) {
     if (state.configuring || state.busy || agent?.busy) {
-      message('system', '当前任务尚未结束，请稍后再修改模型设置。');
+      message('system', t("当前任务尚未结束，请稍后再修改模型设置。"));
       return;
     }
     stopDiscovery();
@@ -1748,11 +1757,11 @@ function openChat(initialConfig, options = {}) {
     errorNode.hidden = true;
     state.configuring = true;
     byId('start').disabled = true;
-    byId('start').textContent = '保存中…';
-    reportStatus('正在保存模型设置…');
+    i18n.text(byId('start'), () => t("保存中…"));
+    reportStatus(t("正在保存模型设置…"));
     try {
       const pi = agent;
-      if (!pi?.configure) throw new Error('找不到 Pi Tab，请重新点击书签。');
+      if (!pi?.configure) throw new Error(t("找不到 Pi Tab，请重新点击书签。"));
       await pi.ready;
       await pi.configure(config);
       state.activeConfig = { ...config, ...await pi.savedConfig() };
@@ -1766,14 +1775,14 @@ function openChat(initialConfig, options = {}) {
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       showSetup();
-      reportStatus('设置失败');
-      errorNode.textContent = detail;
+      reportStatus(t("设置失败"));
+      i18n.text(errorNode, () => t(detail));
       errorNode.hidden = false;
       console.error('[Pi Tab] 设置失败:', detail);
     } finally {
       state.configuring = false;
       byId('start').disabled = false;
-      byId('start').textContent = '保存并开始';
+      i18n.text(byId('start'), () => t("保存并开始"));
     }
   }
   byId('setup').addEventListener('input', () => options.onConfigDraft?.());
@@ -1838,9 +1847,9 @@ function openChat(initialConfig, options = {}) {
   });
   byId('abort').addEventListener('click', async () => {
     if (!state.busy) return;
-    reportProgress('正在停止…');
+    reportProgress(t("正在停止…"));
     try { await agent.abort(); }
-    catch (error) { message('system', `停止失败：${error.message || error}`); }
+    catch (error) { message('system', t("停止失败：{0}", error.message || error)); }
   });
   byId('new-chat').addEventListener('click', async () => {
     if (!state.connected || state.configuring) return;
@@ -1864,7 +1873,7 @@ function openChat(initialConfig, options = {}) {
       byId('message-input').focus();
       console.info('[Pi Tab] 新对话');
     } catch (error) {
-      message('system', `无法新建对话：${error.message || error}`);
+      message('system', t("无法新建对话：{0}", error.message || error));
     } finally { byId('new-chat').disabled = false; }
   });
   byId('new-agent').addEventListener('click', async () => {
@@ -1916,16 +1925,17 @@ function openChat(initialConfig, options = {}) {
       button.className = 'chat-select';
       const title = document.createElement('span');
       title.className = 'chat-title';
-      title.textContent = chat.title === '新对话' ? `对话 ${++untitled}` : chat.title;
+      const number = ++untitled;
+      i18n.text(title, () => chat.title === '新对话' ? t('对话 {0}', number) : chat.title);
       const running = document.createElement('span');
       running.className = 'chat-running';
       running.setAttribute('role', 'img');
-      running.setAttribute('aria-label', '正在运行');
-      running.title = '正在运行';
+      i18n.attr(running, 'aria-label', () => t("正在运行"));
+      i18n.attr(running, 'title', () => t("正在运行"));
       running.hidden = !chat.busy;
       running.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6" opacity=".2"/><path d="M8 2a6 6 0 0 1 6 6" stroke-linecap="round"/></svg>';
       button.append(title, running);
-      button.title = title.textContent;
+      i18n.attr(button, 'title', () => title.textContent);
       button.setAttribute('aria-current', String(chat.active));
       button.addEventListener('click', async () => {
         if (agent.id === chat.id) { closeChatMenu(); return; }
@@ -1934,20 +1944,20 @@ function openChat(initialConfig, options = {}) {
       const remove = document.createElement('button');
       remove.type = 'button';
       remove.className = 'chat-delete';
-      remove.title = '删除会话';
-      remove.setAttribute('aria-label', `删除会话：${title.textContent}`);
+      i18n.attr(remove, 'title', () => t("删除会话"));
+      i18n.attr(remove, 'aria-label', () => t("删除会话：{0}", title.textContent));
       remove.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M9 6V4h6v2M5 6l1 14h12l1-14M10 10v6M14 10v6"/></svg>';
       remove.addEventListener('click', async () => {
         if (remove.dataset.confirm !== 'true') {
           remove.dataset.confirm = 'true';
-          remove.textContent = '确认删除';
-          remove.setAttribute('aria-label', `确认删除会话：${title.textContent}`);
+          i18n.text(remove, () => t("确认删除"));
+          i18n.attr(remove, 'aria-label', () => t("确认删除会话：{0}", title.textContent));
           return;
         }
         remove.disabled = true;
         try { await runtimePi.deleteChat(chat.id); row.remove(); }
         catch (error) {
-          byId('chat-menu-error').textContent = error.message;
+          i18n.text(byId('chat-menu-error'), () => t(error.message));
           byId('chat-menu-error').hidden = false;
           remove.disabled = false;
         }
@@ -1965,6 +1975,18 @@ function openChat(initialConfig, options = {}) {
       byId('chat-switch').focus();
     }
   });
+  let defaultInstructions = t(runtimePi.defaultPrompt);
+  function syncLanguage() {
+    host.lang = i18n.language;
+    for (const button of root.querySelectorAll('[data-language]')) button.setAttribute('aria-pressed', String(button.dataset.language === i18n.mode));
+    const field = byId('setting-prompt');
+    if (field.value === defaultInstructions) field.value = t(runtimePi.defaultPrompt);
+    defaultInstructions = t(runtimePi.defaultPrompt);
+    updateComposer();
+    syncTheme();
+  }
+  for (const button of root.querySelectorAll('[data-language]')) button.addEventListener('click', () => i18n.setMode(button.dataset.language));
+  i18n.onChange(syncLanguage);
   const themeKey = 'pi-tab-theme';
   const systemTheme = matchMedia('(prefers-color-scheme:dark)');
   function syncTheme() {
@@ -1991,8 +2013,8 @@ function openChat(initialConfig, options = {}) {
     if (options.mount) {
       if (document.documentElement.dataset.theme !== theme) document.documentElement.dataset.theme = theme;
       const button = document.getElementById('site-theme');
-      const labels = {auto:'跟随',light:'浅色',dark:'深色'};
-      button.title = `主题：${labels[mode]}`;
+      const labels = {auto:t("跟随"),light:t("浅色"),dark:t("深色")};
+      i18n.attr(button, 'title', () => t("主题：{0}", labels[mode]));
       button.setAttribute('aria-label', button.title);
       button.querySelector('svg').innerHTML = mode === 'auto'
         ? '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8m-4-4v4"/>'
@@ -2014,7 +2036,7 @@ function openChat(initialConfig, options = {}) {
       themeObserver.observe(element, { attributes:true });
     }
   }
-  syncTheme();
+  syncLanguage();
   if (!options.mount) {
     const savedSize = JSON.parse(localStorage.getItem('pi-tab-size') || 'null');
     if (savedSize?.width && savedSize?.height) {
@@ -2023,11 +2045,11 @@ function openChat(initialConfig, options = {}) {
     }
   }
   byId('settings').addEventListener('click', () => {
-    if (state.busy || state.configuring) return;
+    if (state.configuring) return;
     closeChatMenu();
     void runtimePi.getPreferences().then(saved => {
       syncTheme();
-      byId('setting-prompt').value = saved.systemPrompt || runtimePi.defaultPrompt;
+      byId('setting-prompt').value = saved.systemPrompt || t(runtimePi.defaultPrompt);
       byId('setting-compact').checked = saved.autoCompact ?? true;
       byId('setting-retries').value = String(saved.maxRetries ?? 0);
       byId('setting-tools').value = saved.toolExecution || 'sequential';
@@ -2062,7 +2084,7 @@ function openChat(initialConfig, options = {}) {
     });
   }
   byId('restore-prompt').addEventListener('click', () => {
-    byId('setting-prompt').value = runtimePi.defaultPrompt;
+    byId('setting-prompt').value = t(runtimePi.defaultPrompt);
     byId('setting-prompt').focus();
     byId('setting-prompt').setSelectionRange(0,0);
     byId('setting-prompt').scrollTop = 0;
@@ -2073,7 +2095,7 @@ function openChat(initialConfig, options = {}) {
     byId('preferences-error').hidden = true;
     try {
       await runtimePi.setPreferences({
-        systemPrompt: byId('setting-prompt').value.trim(),
+        systemPrompt: byId('setting-prompt').value === t(runtimePi.defaultPrompt) ? '' : byId('setting-prompt').value.trim(),
         autoCompact: byId('setting-compact').checked,
         maxRetries: Number(byId('setting-retries').value),
         toolExecution: byId('setting-tools').value,
@@ -2083,7 +2105,7 @@ function openChat(initialConfig, options = {}) {
       });
       state.connected ? showChat() : showSetup();
     } catch (error) {
-      byId('preferences-error').textContent = error.message || String(error);
+      i18n.text(byId('preferences-error'), () => t(error.message || String(error)));
       byId('preferences-error').hidden = false;
     }
   });
@@ -2270,6 +2292,7 @@ function openChat(initialConfig, options = {}) {
 
 
 const PI_RUNTIME = JSON.parse(document.getElementById('pi-runtime').textContent);
+let i18n, t;
 const bookmark = document.getElementById('pi-bookmarklet');
 const dragCue = document.getElementById('drag-to-bar');
 function updateDragCue() {
@@ -2305,7 +2328,7 @@ function generateBookmark() {
   bookmark.removeAttribute('aria-disabled');
   bookmark.draggable = true;
   copyButton.disabled = false;
-  copyStatus.textContent = '';
+  i18n.text(copyStatus, '');
   bookmarkUrl.value = '';
   bookmarkUrl.hidden = true;
 }
@@ -2315,14 +2338,14 @@ copyButton.addEventListener('click', async () => {
   copyButton.disabled = true;
   try {
     await navigator.clipboard.writeText(url);
-    if (bookmark.getAttribute('href') === url) copyStatus.textContent = '已复制，请粘贴到新书签的“网址”栏。';
+    if (bookmark.getAttribute('href') === url) i18n.text(copyStatus, () => t("已复制，请粘贴到新书签的“网址”栏。"));
   } catch {
     if (bookmark.getAttribute('href') === url) {
       bookmarkUrl.value = url;
       bookmarkUrl.hidden = false;
       bookmarkUrl.focus();
       bookmarkUrl.select();
-      copyStatus.textContent = '自动复制失败。地址已选中，请按 ⌘C 或 Ctrl+C 复制。';
+      i18n.text(copyStatus, () => t("自动复制失败。地址已选中，请按 ⌘C 或 Ctrl+C 复制。"));
     }
   } finally { copyButton.disabled = !bookmark.hasAttribute('href'); }
 });
@@ -2345,8 +2368,19 @@ if (!PI_RUNTIME) {
   location.replace(new URL('../pi-bookmarklet-chat-install.html', location.href));
 } else {
   try {
-    generateBookmark();
     (0, eval)(PI_RUNTIME);
+    i18n = PiConsolePlugin.getI18n();
+    t = i18n.t;
+    i18n.addMessages(JSON.parse(document.getElementById('pi-landing-locale').textContent));
+    i18n.mount(document.documentElement);
+    const syncLanguage = () => {
+      document.documentElement.lang = i18n.language;
+      for (const button of document.querySelectorAll('.site-language [data-language]')) button.setAttribute('aria-pressed', String(button.dataset.language === i18n.mode));
+    };
+    for (const button of document.querySelectorAll('.site-language [data-language]')) button.addEventListener('click', () => i18n.setMode(button.dataset.language));
+    i18n.onChange(syncLanguage);
+    syncLanguage();
+    generateBookmark();
     openChat(undefined, {
       mount:document.getElementById('chat-preview'),
       onConfigCancel:generateBookmark,
@@ -2365,7 +2399,8 @@ if (!PI_RUNTIME) {
     const message = document.createElement('p');
     message.className = 'error';
     message.setAttribute('role', 'alert');
-    message.textContent = `Pi Tab 启动失败，请刷新页面重试：${error.message || error}`;
+    const detail = error.message || String(error);
+    message.textContent = t ? t("Pi Tab 启动失败，请刷新页面重试：{0}", detail) : `Pi Tab failed to start: ${detail}`;
     document.getElementById('chat-preview').appendChild(message);
   }
 }

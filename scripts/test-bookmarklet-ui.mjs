@@ -11,6 +11,7 @@ import {createBookmarklet} from '../src/bookmarklet.js';
 const chrome=process.env.PI_TAB_TEST_CHROME;
 if(!chrome)throw new Error('Set PI_TAB_TEST_CHROME to Chrome for Testing.');
 const run=promisify(execFile);
+const language=process.env.PI_TAB_TEST_LANGUAGE || 'zh-CN';
 const session=`pi-tab-bookmark-${process.pid}`;
 const directory=await mkdtemp(join(tmpdir(),'pi-tab-bookmark-'));
 let bookmark, hold=false, requests=0;
@@ -66,15 +67,27 @@ async function send(text){
 }
 try{
   await browser('--executable-path',chrome,'open',url);
+  await evaluate(`localStorage.setItem('pi-tab-language',${JSON.stringify(language)})`);
   await launch();
+  assert.equal(await evaluate(`${root}.getElementById('message-input').placeholder`),language==='en'?'Message':'输入消息');
   const first=await evaluate(selected);
   assert.equal((await evaluate('pi.listChats()')).length,1);
   await send('Completed conversation');
   await browser('wait','--fn',`${root}.getElementById('chat-messages').textContent.includes('Bookmark test reply') && !pi.busyFor(${first})`);
   console.log('PASS first launch and message');
+  await click('#settings');
+  for(const locale of ['en','zh-CN',language]) {
+    await click(`[data-language="${locale}"]`);
+    assert.equal(await evaluate('pi.i18n.language'),locale);
+    assert.equal(await evaluate(`${root}.getElementById('message-input').placeholder`),locale==='en'?'Message':'输入消息');
+    assert.ok(await evaluate(`${root}.getElementById('chat-messages').textContent.includes('Completed conversation')`));
+  }
+  await click('#preferences-back');
+  console.log('PASS bookmark switches both languages without changing messages');
 
   await browser('reload');
   await launch();
+  assert.equal(await evaluate('pi.i18n.language'),language);
   const second=await evaluate(selected);
   assert.notEqual(second,first);
   assert.equal(await evaluate(`${root}.getElementById('chat-messages').textContent.includes('Completed conversation')`),false);

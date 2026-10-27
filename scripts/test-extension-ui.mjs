@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {createHash, generateKeyPairSync} from 'node:crypto';
-import {cp, mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
+import {mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
 import {createServer} from 'node:http';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
@@ -13,8 +13,10 @@ const run = promisify(execFile);
 const chrome = process.env.PI_TAB_TEST_CHROME;
 if (!chrome) throw new Error('Set PI_TAB_TEST_CHROME to the Chrome for Testing executable.');
 const directory = await mkdtemp(join(tmpdir(), 'pi-tab-ui-'));
-const extension = join(directory, 'extension');
+const extension = join(directory, 'pi-tab-extension');
 const session = `pi-tab-ui-${process.pid}`;
+const language = process.env.PI_TAB_TEST_LANGUAGE || 'zh-CN';
+const en = language === 'en';
 let holdModel = false;
 let lastModelRequest;
 const titleRequests=[];
@@ -103,7 +105,7 @@ async function attachFiles(image=true, text=true) {
 const box = async () => evaluate(`(()=>{const shell=${root}.getElementById('shell');const rect=shell.getBoundingClientRect();return {width:rect.width,height:rect.height,minimized:shell.classList.contains('minimized'),visible:!!shell.getClientRects().length};})()`);
 let controller;
 try {
-  await cp(resolve('dist/extension'), extension, {recursive:true});
+  await run('unzip',['-q',resolve('dist/pi-tab-extension.zip'),'-d',directory]);
   // A blank extension page exercises messages without starting a second engine.
   await writeFile(join(extension, 'test-controller.html'), '<!doctype html><title>Extension test controller</title>');
   const key = generateKeyPairSync('rsa', {modulusLength:2048}).publicKey.export({type:'spki',format:'der'});
@@ -116,12 +118,15 @@ try {
   // Match the user's existing saved large window before opening the extension.
   await evaluate(`localStorage.setItem('pi-tab-size',JSON.stringify({width:500,height:670}))`);
   await browser('tab','new',controller);
+  await evaluate(`chrome.storage.local.set({'pi-tab-language':${JSON.stringify(language)}})`);
   async function activate(openWindow=true) {
     await browser('tab','t2');
     const response = await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});await chrome.storage.session.set({['active:'+tab.id]:true});return chrome.tabs.sendMessage(tab.id,{type:'activate',openWindow:${openWindow}})})()`);
     assert.equal(response.ok,true,response.error);
     await browser('tab','t1');
     await browser('wait','[data-pi-overlay]');
+    await browser('wait','--fn',`${root}.getElementById('api').options.length>0 || !${root}.getElementById('setup-error').hidden`);
+    assert.equal(await evaluate(`${root}.getElementById('setup-error').textContent`),'');
   }
   await activate();
   await browser('wait','--fn',`${root}.getElementById('api').options.length>0`);
@@ -263,7 +268,7 @@ try {
   });
   await check('text-only models reject images with an inline explanation',async()=>{
     await attachFiles(true,false);
-    await browser('wait','--fn',`${root}.getElementById('attachment-error').textContent.includes('不支持图片')`);
+    await browser('wait','--fn',`${root}.getElementById('attachment-error').textContent.includes(${JSON.stringify(en?'does not support images':'不支持图片')})`);
     assert.equal(await evaluate(`${root}.getElementById('attachments').children.length`),0);
   });
   await browser('tab','t2');
@@ -300,6 +305,21 @@ try {
     await browser('wait','--fn',`${root}.getElementById('shell').dataset.theme==='${theme}'`);
     assert.equal(await evaluate(`${root}.getElementById('theme').value`),'auto');
     await evaluate(`document.documentElement.style.removeProperty('color-scheme')`);
+  });
+  await check('language changes update both windows without resetting drafts or settings',async()=>{
+    await evaluate(`${root}.getElementById('message-input').value='Draft 中文 / English'`);
+    for(const locale of ['en','zh-CN',language]) {
+      await evaluate(`${root}.querySelector('[data-language="${locale}"]').click()`);
+      assert.equal(await evaluate(`${root}.getElementById('settings-general-tab').textContent`),locale==='en'?'General':'常规');
+      assert.equal(await evaluate(`${root}.getElementById('message-input').value`),'Draft 中文 / English');
+      assert.equal(await evaluate(`document.querySelectorAll('[data-pi-overlay]')[1].shadowRoot.getElementById('message-input').placeholder`),locale==='en'?'Message':'输入消息');
+      assert.equal(await evaluate(`${root}.getElementById('chat-model').textContent`),'test-model');
+      await browser('screenshot',join(directory,`settings-${locale}.png`));
+    }
+    await evaluate(`${root}.getElementById('message-input').value=''`);
+    await browser('tab','t2');
+    await browser('wait','--fn',`(async()=> (await chrome.storage.local.get('pi-tab-language'))['pi-tab-language']===${JSON.stringify(language)})()`);
+    await browser('tab','t1');
   });
   await check('settings tabs retain drafts and separate instructions from execution',async()=>{
     assert.equal(await evaluate(`${root}.getElementById('settings-instructions').hidden`),true);
@@ -394,14 +414,14 @@ try {
     await browser('wait','--fn',`${root}.querySelector('.chat-select[aria-current=true] .chat-title').textContent==='附件内容分析'`);
     await click('chat-switch');
     assert.equal(titleRequests.length,1,'saved titles do not regenerate on reload');
-    assert.equal(await evaluate(`${root}.querySelector('.message-file summary').textContent`),'文件：notes.txt');
+    assert.equal(await evaluate(`${root}.querySelector('.message-file summary').textContent`),'notes.txt');
     assert.equal(await evaluate(`${root}.querySelector('.message-file pre').textContent`),'attachment test <b>plain text</b>');
     assert.equal(await evaluate(`${root}.querySelector('.message-file b')`),null);
   });
   await check('model discovery failure still permits manual entry and cancel returns to chat',async()=>{
     failModels=true;
     await click('model-settings');await click('model-menu-add');
-    await browser('wait','--fn',`${root}.getElementById('manual-model-status').textContent.includes('认证失败')`);
+    await browser('wait','--fn',`${root}.getElementById('manual-model-status').textContent.includes(${JSON.stringify(en?'Authentication failed':'认证失败')})`);
     await evaluate(`${root}.getElementById('manual-model-id').value='custom-model'`);
     assert.equal(await evaluate(`${root}.querySelector('#manual-model-form [type=submit]').disabled`),false);
     await click('model-dialog-close');
@@ -438,6 +458,26 @@ try {
     await click('chat-switch');
     await browser('wait','--fn',`${indicator} && !${indicator}.hidden`);
     await browser('screenshot',join(directory,'conversation-running.png'));
+    await browser('tab','t2');
+  });
+  await check('switching language during a real run preserves history, attachments and busy state',async()=>{
+    await browser('tab','t1');
+    await click('chat-switch');
+    await attachFiles(false,true);
+    await evaluate(`${root}.getElementById('message-input').value='Pending draft 中文'`);
+    const before=await evaluate(`${root}.getElementById('chat-messages').textContent`);
+    await click('settings');
+    for(const locale of ['en','zh-CN',language]) {
+      await evaluate(`${root}.querySelector('[data-language="${locale}"]').click()`);
+      assert.equal(await evaluate(`${root}.getElementById('shell').dataset.busy`),'true');
+      assert.equal(await evaluate(`${root}.getElementById('message-input').value`),'Pending draft 中文');
+      assert.equal(await evaluate(`${root}.getElementById('attachments').children.length`),1);
+      assert.ok(await evaluate(`${root}.getElementById('attachments').textContent.includes('notes.txt')`));
+    }
+    assert.equal(await evaluate(`${root}.getElementById('chat-messages').textContent`),before);
+    await click('preferences-back');
+    await evaluate(`${root}.getElementById('message-input').value='';${root}.querySelector('#attachments button').click()`);
+    await click('chat-switch');
     await browser('tab','t2');
   });
   await check('Durable snapshot with a live run preserves the running indicator',async()=>{
@@ -499,7 +539,7 @@ try {
   const removeSelector=`#chat-entries [data-chat-id="${backgroundChat.id}"] .chat-delete`;
   await evaluate(`${root}.querySelector(${JSON.stringify(removeSelector)}).click()`);
   await check('delete asks for inline confirmation',async()=>{
-    assert.equal(await evaluate(`${root}.querySelector(${JSON.stringify(removeSelector)}).textContent`),'确认删除');
+    assert.equal(await evaluate(`${root}.querySelector(${JSON.stringify(removeSelector)}).textContent`),en?'Delete':'确认删除');
     assert.equal(await evaluate(`${root}.querySelectorAll('.chat-row').length`),2);
   });
   await browser('screenshot',join(directory,'delete-confirm.png'));
@@ -545,7 +585,8 @@ try {
     for(let i=0;i<16;i++)assert.equal((await engine('createChat')).ok,true);
     await browser('tab','t1');
     await click('chat-switch');await click('chat-switch');
-    await browser('wait','--fn',`${root}.querySelectorAll('.chat-row').length===17`);
+    try { await browser('wait','--fn',`${root}.querySelectorAll('.chat-row').length===17`); }
+    catch(error) { console.error('Menu state',await evaluate(`(()=>{const r=${root};return {rows:r.querySelectorAll('.chat-row').length,open:r.getElementById('chat-list').dataset.open,status:r.getElementById('status').textContent,error:r.getElementById('setup-error').textContent,windows:document.querySelectorAll('[data-pi-overlay]').length}})()`)); console.error('Browser errors',await browser('errors'));throw error; }
     const point=await evaluate(`(()=>{const title=${root}.querySelector('.chat-title').getBoundingClientRect();return {x:title.x+20,y:title.y+title.height/2}})()`);
     const before=await evaluate('window.scrollY');
     await wheel(point,300);
@@ -588,6 +629,19 @@ try {
     await browser('mouse','up','left');
     assert.ok(await evaluate(`Math.abs(document.querySelector('[data-pi-overlay]').getBoundingClientRect().left-24)<1`));
   });
+  await check('extension language preference is shared with another website',async()=>{
+    const destination=url.replace('127.0.0.1','localhost');
+    await browser('tab','new',destination);
+    await browser('tab','t2');
+    const result=await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(destination+'*')}});await chrome.storage.session.set({['active:'+tab.id]:true});return chrome.tabs.sendMessage(tab.id,{type:'activate',openWindow:true})})()`);
+    assert.equal(result.ok,true,result.error);
+    await browser('tab','t3');
+    await browser('wait','[data-pi-overlay]');
+    await browser('wait','--fn',`${root}.getElementById('api').options.length>0`);
+    assert.equal(await evaluate(`document.querySelector('[data-pi-overlay]').lang`),language);
+    assert.equal(await evaluate(`${root}.getElementById('message-input').placeholder`),en?'Message':'输入消息');
+    await browser('tab','close');await browser('tab','t1');
+  });
   if(process.env.PI_TAB_TEST_LIVE==='1') {
     for(const page of ['https://github.com/aitimos/pi-tab','https://www.bilibili.com/']) {
       await browser('tab','t1');
@@ -623,6 +677,10 @@ try {
     }
   }
   console.log(`Screenshot: ${join(directory,'window.png')}`);
+} catch(error) {
+  console.error('Page errors',await browser('errors'));
+  console.error('Page state',await evaluate(`(()=>{const r=document.querySelector('[data-pi-overlay]')?.shadowRoot;return {error:r?.getElementById('setup-error')?.textContent,status:r?.getElementById('status')?.textContent}})()`));
+  throw error;
 } finally {
   await browser('close').catch(()=>{});
   server.closeAllConnections();

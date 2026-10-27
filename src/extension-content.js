@@ -21,6 +21,18 @@ async function initializeExtension() {
   const identity = await extensionRequest({type:'identity'});
   if (!identity.active) return;
   site = identity.site;
+  const locale = PiConsolePlugin.getI18n();
+  const languageKey = 'pi-tab-language';
+  const storedLanguage = await chrome.storage.local.get(languageKey);
+  locale.setMode(storedLanguage[languageKey] || 'auto', false);
+  locale.onChange(() => {
+    void chrome.storage.local.get(languageKey).then(saved => {
+      if (saved[languageKey] !== locale.mode) return chrome.storage.local.set({[languageKey]:locale.mode});
+    });
+  });
+  chrome.storage.onChanged.addListener((changes,area) => {
+    if (area === 'local' && changes[languageKey] && changes[languageKey].newValue !== locale.mode) locale.setMode(changes[languageKey].newValue || 'auto', false);
+  });
   pageTools = PiConsolePlugin.install({globalName:'__piPageTools',toolOnly:true,log:false});
   const modelConfig = PiConsolePlugin.createModelConfig(await PiConsolePlugin.loadModelCatalog());
   const initial = await engineCall('initialize');
@@ -28,6 +40,7 @@ async function initializeExtension() {
   for (const chat of initial.chats) { configs.set(chat.id,chat.config); busy.set(chat.id,chat.busy); }
   remotePi = {
     __piConsolePlugin:true,
+    i18n:locale,
     ready:Promise.resolve(),
     defaultPrompt:initial.defaultPrompt,
     get conversation(){return {id:activeId};},

@@ -29,6 +29,7 @@ test('startup errors show a dismissible page notice without a browser alert', as
   const source = 'throw new Error("启动测试");';
   const notices = [];
   runInNewContext(decodeURIComponent(createBookmarklet(source).slice(11)), {
+    localStorage:{getItem:()=>null},navigator:{languages:['zh-CN']},
     window:{ alert() { throw new Error('不应弹出浏览器 alert'); } },
     document:{
       createElement(tag) { return {tag,style:{},children:[],setAttribute(){},append(child){this.children.push(child);},remove(){this.removed=true;}}; },

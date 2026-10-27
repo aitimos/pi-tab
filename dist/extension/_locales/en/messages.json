@@ -1,0 +1,8 @@
+{
+  "description": {
+    "message": "Run a resumable Pi agent on webpages and collaborate across browser tabs."
+  },
+  "open": {
+    "message": "Open Pi Tab"
+  }
+}

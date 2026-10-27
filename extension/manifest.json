@@ -1,16 +1,40 @@
 {
   "manifest_version": 3,
   "name": "Pi Tab",
-  "version": "1.0.17",
-  "description": "在网页中运行可恢复的 Pi agent，并在标签页之间协作。",
-  "icons": { "128": "icon.png" },
-  "permissions": ["tabs", "storage", "offscreen", "scripting"],
-  "host_permissions": ["http://*/*", "https://*/*"],
-  "background": { "service_worker": "worker.js", "type": "module" },
-  "action": { "default_title": "打开 Pi Tab", "default_icon": "icon.png" },
-  "content_scripts": [{
-    "matches": ["http://*/*", "https://*/*"],
-    "js": ["content.js"],
-    "run_at": "document_idle"
-  }]
+  "version": "1.0.18",
+  "description": "__MSG_description__",
+  "default_locale": "en",
+  "icons": {
+    "128": "icon.png"
+  },
+  "permissions": [
+    "tabs",
+    "storage",
+    "offscreen",
+    "scripting"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "worker.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "__MSG_open__",
+    "default_icon": "icon.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
 }

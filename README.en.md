@@ -25,6 +25,7 @@ Built on Pi Durable, Pi Tab brings an agent into the webpage you are browsing. O
 | Follow-up messages | Add tasks while a reply is running, edit the queue, or send a message directly to steer the current task |
 | Conversation management | Generate titles automatically, see running status, switch or delete conversations, and open another task in a new window |
 | Agent collaboration | Exchange messages between agents on the same page; the extension can also open tabs, send tasks, and read results |
+| Chinese and English | Follow your browser language or switch in settings without interrupting conversations or tasks |
 | Appearance and preferences | Follow the page or system theme, or choose light or dark; drag, resize, minimize, and dock windows at the edge |
 
 Try: “Summarize this page,” “Turn this table into CSV,” or “Find out why this page scrolls horizontally.”
@@ -66,6 +67,6 @@ See the [user guide](docs/usage.en.md) for detailed controls, attachment formats
 
 ## Contribute
 
-[Issues and suggestions](https://github.com/aitimos/pi-tab/issues/new/choose) | [Development and contributing](CONTRIBUTING.md) | [Code of conduct](CODE_OF_CONDUCT.md) | [Security reports](SECURITY.md)
+Report problems through [Issues](https://github.com/aitimos/pi-tab/issues) or send a pull request.
 
 Licensed under the [Apache License 2.0](LICENSE).

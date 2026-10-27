@@ -1,6 +1,6 @@
 {
   "name": "pi-tab",
-  "version": "1.0.17",
+  "version": "1.0.18",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -11,7 +11,8 @@
     "test": "node --test tests/*.test.mjs",
     "test:extension": "node scripts/test-extension-ui.mjs",
     "test:tabs": "node scripts/test-extension-tabs.mjs",
-    "test:bookmarklet": "node scripts/test-bookmarklet-ui.mjs"
+    "test:bookmarklet": "node scripts/test-bookmarklet-ui.mjs",
+    "test:i18n": "node scripts/test-i18n-ui.mjs"
   },
   "dependencies": {
     "@earendil-works/chord": "1.4.0",

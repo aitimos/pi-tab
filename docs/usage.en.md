@@ -2,6 +2,12 @@
 
 [Back to README](../README.en.md) | [简体中文](usage.md)
 
+## Interface language
+
+The installer and chat support Simplified Chinese and English. Auto follows your browser’s language preference order; Chinese variants use Simplified Chinese, and unmatched languages fall back to English. Change Auto / 中文 / English at the top of the installer or in Settings → General. Changes apply immediately.
+
+Bookmark preferences are saved per website. The extension shares the preference across websites in the same browser profile. Changing language preserves conversations, drafts, attachments, and running tasks. User messages, filenames, and model output remain unchanged; the model replies in the user’s language.
+
 ## Get started
 
 ### [Open the Pi Tab installer](https://aitimos.github.io/pi-tab/)
