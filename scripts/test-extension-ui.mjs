@@ -16,8 +16,14 @@ const directory = await mkdtemp(join(tmpdir(), 'pi-tab-ui-'));
 const extension = join(directory, 'extension');
 const session = `pi-tab-ui-${process.pid}`;
 let holdModel = false;
+let lastModelRequest;
+let failModels = false;
 const server = createServer((request, response) => {
   if (request.url.endsWith('/chat/completions')) {
+    let body='';
+    request.on('data',chunk=>body+=chunk);
+    request.on('end',()=>{
+    lastModelRequest=JSON.parse(body);
     if (holdModel) return; // Keep a real run pending until the test aborts it.
     response.writeHead(200, {'Content-Type':'text/event-stream'});
     for (const choice of [
@@ -25,6 +31,13 @@ const server = createServer((request, response) => {
       {delta:{},finish_reason:'stop'},
     ]) response.write('data: '+JSON.stringify({id:'test',object:'chat.completion.chunk',created:1,model:'test-model',choices:[{index:0,...choice}]})+'\n\n');
     response.end('data: [DONE]\n\n');
+    });
+    return;
+  }
+  if(request.url.endsWith('/models')) {
+    if(failModels){response.writeHead(401);response.end();return;}
+    response.writeHead(200,{'Content-Type':'application/json'});
+    response.end(JSON.stringify({data:[{id:'test-model',reasoning:false},{id:'test-reasoning',reasoning:true,input:['text','image']}]}));
     return;
   }
   response.writeHead(200, {'Content-Type':'text/html'});
@@ -68,6 +81,10 @@ async function click(id) {
   await browser('mouse','move',String(Math.round(point.x)),String(Math.round(point.y)));
   await browser('mouse','down','left');
   await browser('mouse','up','left');
+}
+const pixel = (await readFile('dist/extension/icon.png')).toString('base64');
+async function attachFiles(image=true, text=true) {
+  await evaluate(`(()=>{const r=${root},files=new DataTransfer();${text ? "files.items.add(new File(['attachment test <b>plain text</b>'],'notes.txt',{type:'text/plain'}));" : ''}${image ? `files.items.add(new File([Uint8Array.from(atob('${pixel}'),c=>c.charCodeAt(0))],'pixel.png',{type:'image/png'}));` : ''}r.getElementById('attachment-input').files=files.files;r.getElementById('attachment-input').dispatchEvent(new Event('change',{bubbles:true}));})()`);
 }
 const box = async () => evaluate(`(()=>{const shell=${root}.getElementById('shell');const rect=shell.getBoundingClientRect();return {width:rect.width,height:rect.height,minimized:shell.classList.contains('minimized'),visible:!!shell.getClientRects().length};})()`);
 let controller;
@@ -118,8 +135,8 @@ try {
   });
   await check('window, header buttons and composer have aligned nested corners',async()=>{
     const corners=await evaluate(`(()=>{const r=${root};return ['shell','settings','composer'].map(id=>getComputedStyle(r.getElementById(id)).borderTopRightRadius)})()`);
-    assert.deepEqual(corners,['16px','8px','8px']);
-    const fit=await evaluate(`(()=>{const r=${root},top=r.getElementById('top').getBoundingClientRect(),button=r.getElementById('settings').getBoundingClientRect();return button.top>=top.top+7&&button.bottom<=top.bottom-7})()`);
+    assert.deepEqual(corners,['12px','6px','4px']);
+    const fit=await evaluate(`(()=>{const r=${root},top=r.getElementById('top').getBoundingClientRect(),button=r.getElementById('settings').getBoundingClientRect();return button.top>=top.top+5&&button.bottom<=top.bottom-5})()`);
     assert.equal(fit,true);
   });
   await check('typing remains editable and does not reach host shortcut handlers',async()=>{
@@ -130,17 +147,17 @@ try {
     await evaluate(`${root}.getElementById('base-url').value=''`);
   });
   await check('inner scrolling works and never scrolls the host at the boundary or header',async()=>{
-    await evaluate(`window.scrollTo(0,200);${root}.getElementById('shell').style.setProperty('--window-height','420px');${root}.getElementById('setup').scrollTop=0`);
-    const point=await evaluate(`(()=>{const r=${root}.getElementById('setup').getBoundingClientRect();return {x:r.x+15,y:r.y+40}})()`);
+    await evaluate(`window.scrollTo(0,200);${root}.getElementById('shell').style.setProperty('--window-height','420px');${root}.getElementById('setup-fields').scrollTop=0`);
+    const point=await evaluate(`(()=>{const r=${root}.getElementById('setup-fields').getBoundingClientRect();return {x:r.x+15,y:r.y+40}})()`);
     await browser('mouse','move',String(Math.round(point.x)),String(Math.round(point.y)));
     await wheel(point,300);
-    await browser('wait','--fn',`${root}.getElementById('setup').scrollTop>0`);
-    assert.ok(await evaluate(`${root}.getElementById('setup').scrollTop>0`));
-    await evaluate(`${root}.getElementById('setup').scrollTop=100000`);
+    await browser('wait','--fn',`${root}.getElementById('setup-fields').scrollTop>0`);
+    assert.ok(await evaluate(`${root}.getElementById('setup-fields').scrollTop>0`));
+    await evaluate(`${root}.getElementById('setup-fields').scrollTop=100000`);
     await wheel(point,600);
     await wheel({x:point.x,y:30},600);
     assert.equal(await evaluate('window.scrollY'),200);
-    await evaluate(`window.scrollTo(0,0);${root}.getElementById('shell').style.setProperty('--window-height','670px');${root}.getElementById('setup').scrollTop=0`);
+    await evaluate(`window.scrollTo(0,0);${root}.getElementById('shell').style.setProperty('--window-height','670px');${root}.getElementById('setup-fields').scrollTop=0`);
   });
   await check('drag release docks to either side and follows viewport resize',async()=>{
     for(const side of ['left','right']) {
@@ -203,6 +220,19 @@ try {
     assert.equal((await box()).visible,true);
   });
   await browser('screenshot',join(directory,'window.png'));
+  await check('model setup discovers a model and keeps save actions visible',async()=>{
+    await evaluate(`(()=>{const r=${root};r.getElementById('base-url').value=${JSON.stringify(url+'v1')};r.getElementById('api-key').value='test-only';r.getElementById('base-url').dispatchEvent(new Event('input',{bubbles:true}));r.getElementById('discover-models').click()})()`);
+    await browser('wait','--fn',`${root}.getElementById('setup-model-select').options.length===2`);
+    assert.equal(await evaluate(`${root}.getElementById('setup-model-select').value`),'test-model');
+    assert.equal(await evaluate(`(()=>{const r=${root},shell=r.getElementById('shell').getBoundingClientRect(),save=r.getElementById('start').getBoundingClientRect();return save.bottom<=shell.bottom&&save.top>shell.top})()`),true);
+    await click('start');
+    await browser('wait','--fn',`${root}.getElementById('chat').style.display==='flex'`);
+  });
+  await check('text-only models reject images with an inline explanation',async()=>{
+    await attachFiles(true,false);
+    await browser('wait','--fn',`${root}.getElementById('attachment-error').textContent.includes('不支持图片')`);
+    assert.equal(await evaluate(`${root}.getElementById('attachments').children.length`),0);
+  });
   await browser('tab','t2');
   const beforeChats = await evaluate(`chrome.runtime.sendMessage({target:'engine',site:'127.0.0.1',method:'listChats'})`);
   await browser('tab','t1');
@@ -223,7 +253,7 @@ try {
   });
   await browser('tab','t1');
   await click('settings');
-  await browser('wait','--fn',`${root}.getElementById('preferences').style.display==='block'`);
+  await browser('wait','--fn',`${root}.getElementById('preferences').style.display==='flex'`);
   await check('theme belongs to settings and applies immediately',async()=>{
     assert.equal(await evaluate(`${root}.getElementById('theme').closest('form').id`),'preferences');
     const theme=await evaluate(`${root}.getElementById('shell').dataset.theme`);
@@ -238,9 +268,74 @@ try {
     assert.equal(await evaluate(`${root}.getElementById('theme').value`),'auto');
     await evaluate(`document.documentElement.style.removeProperty('color-scheme')`);
   });
+  await check('settings tabs retain drafts and separate instructions from execution',async()=>{
+    assert.equal(await evaluate(`${root}.getElementById('settings-instructions').hidden`),true);
+    await click('settings-instructions-tab');
+    await evaluate(`${root}.getElementById('setting-prompt').value='Draft instruction'`);
+    await click('settings-execution-tab');
+    assert.equal(await evaluate(`${root}.getElementById('settings-general').hidden`),true);
+    await click('settings-instructions-tab');
+    assert.equal(await evaluate(`${root}.getElementById('setting-prompt').value`),'Draft instruction');
+    await click('restore-prompt');
+    assert.ok((await evaluate(`${root}.getElementById('setting-prompt').value`)).length>100);
+    await browser('screenshot',join(directory,'settings-instructions.png'));
+  });
   await evaluate(`${root}.getElementById('preferences-back').scrollIntoView({block:'nearest'})`);
   await click('preferences-back');
   assert.equal(await evaluate(`${root}.getElementById('preferences').style.display`),'none');
+  await check('provider creation leads to searchable models with reasoning defaults',async()=>{
+    await click('model-settings');
+    await click('model-menu-provider');
+    await evaluate(`(()=>{const r=${root};r.getElementById('provider-name').value='Local test';r.getElementById('provider-url').value=${JSON.stringify(url+'v1')};r.getElementById('provider-key').value='test-only';r.getElementById('provider-form').requestSubmit()})()`);
+    await browser('wait','--fn',`${root}.querySelectorAll('#manual-model-results button').length===2`);
+    assert.equal(await evaluate(`${root}.getElementById('manual-model-provider').selectedOptions[0].textContent`),'Local test');
+    await evaluate(`(()=>{const input=${root}.getElementById('manual-model-id');input.value='reason';input.dispatchEvent(new Event('input',{bubbles:true}))})()`);
+    assert.equal(await evaluate(`${root}.querySelectorAll('#manual-model-results button').length`),1);
+    await evaluate(`${root}.querySelector('#manual-model-results button').click()`);
+    assert.equal(await evaluate(`${root}.getElementById('manual-model-reasoning').checked`),true);
+    assert.ok(await evaluate(`${root}.getElementById('manual-model-thinking').options.length>1`));
+    await browser('screenshot',join(directory,'add-model.png'));
+    await click('manual-model-discover');
+    await browser('wait','--fn',`!${root}.getElementById('manual-model-discover').disabled`);
+    assert.equal(await evaluate(`${root}.getElementById('manual-model-id').value`),'test-reasoning');
+    assert.equal(await evaluate(`${root}.getElementById('manual-model-vision').checked`),true);
+    await evaluate(`${root}.getElementById('manual-model-form').requestSubmit()`);
+    await browser('wait','--fn',`${root}.getElementById('chat-model').textContent==='test-reasoning'`);
+  });
+  await check('image and text attachments reach the model and survive history reload',async()=>{
+    await attachFiles();
+    await browser('wait','--fn',`${root}.getElementById('attachments').children.length===2`);
+    await browser('screenshot',join(directory,'attachments.png'));
+    await click('chat-switch');
+    const current=await evaluate(`${root}.querySelector('.chat-select[aria-current=true]').closest('.chat-row').dataset.chatId`);
+    await evaluate(`${root}.querySelector('.chat-select[aria-current=false]').click()`);
+    await browser('wait','--fn',`${root}.getElementById('attachments').children.length===0`);
+    await click('chat-switch');
+    await evaluate(`${root}.querySelector('[data-chat-id="${current}"] .chat-select').click()`);
+    await browser('wait','--fn',`${root}.getElementById('attachments').children.length===2`);
+
+    await evaluate(`${root}.getElementById('message-input').value='Describe these files';${root}.getElementById('message-input').dispatchEvent(new Event('input',{bubbles:true}))`);
+    await click('send');
+    await browser('wait','--fn',`${root}.getElementById('chat-messages').textContent.includes('Test reply')`);
+    const user=lastModelRequest.messages.findLast(message=>message.role==='user');
+    assert.ok(user.content.some(part=>part.type==='image_url'&&part.image_url.url==='data:image/png;base64,'+pixel));
+    assert.ok(user.content.some(part=>part.type==='text'&&part.text.includes('attachment test <b>plain text</b>')));
+    await browser('reload');await activate();
+    await browser('wait','--fn',`${root}.querySelector('.message-image')?.complete`);
+    assert.equal(await evaluate(`${root}.querySelector('.message-file summary').textContent`),'文件：notes.txt');
+    assert.equal(await evaluate(`${root}.querySelector('.message-file pre').textContent`),'attachment test <b>plain text</b>');
+    assert.equal(await evaluate(`${root}.querySelector('.message-file b')`),null);
+  });
+  await check('model discovery failure still permits manual entry and cancel returns to chat',async()=>{
+    failModels=true;
+    await click('model-settings');await click('model-menu-add');
+    await browser('wait','--fn',`${root}.getElementById('manual-model-status').textContent.includes('认证失败')`);
+    await evaluate(`${root}.getElementById('manual-model-id').value='custom-model'`);
+    assert.equal(await evaluate(`${root}.querySelector('#manual-model-form [type=submit]').disabled`),false);
+    await click('model-dialog-close');
+    assert.equal(await evaluate(`${root}.getElementById('model-dialog').hidden`),true);
+    failModels=false;
+  });
   await click('chat-switch');
   await check('conversation menu contains only conversations',async()=>{
     assert.equal(await evaluate(`${root}.getElementById('chat-menu-error').hidden`),true);
@@ -262,7 +357,7 @@ try {
   await browser('tab','t2');
   const currentId=beforeChats.value[0].id;
   const engine = async (method,args=[],chatId,name) => evaluate(`chrome.runtime.sendMessage(${JSON.stringify({target:'engine',site:'127.0.0.1',method,args,chatId,name})})`);
-  const configuration = await engine('agent',[{api:'openai-completions',baseUrl:url+'v1',apiKey:'test-only',model:'test-model',reasoning:false,thinking:'off'}],currentId,'configure');
+  const configuration = await engine('agent',[{api:'openai-completions',baseUrl:url+'v1',apiKey:'test-only',model:'test-model',reasoning:false,thinking:'off',input:['text','image']}],currentId,'configure');
   assert.equal(configuration.ok,true,configuration.error);
   const reply=await engine('agent',['Keep this conversation'],currentId,'prompt');
   assert.equal(reply.ok,true,reply.error);
@@ -271,6 +366,25 @@ try {
   holdModel=true;
   await evaluate(`void chrome.runtime.sendMessage(${JSON.stringify({target:'engine',site:'127.0.0.1',method:'agent',chatId:currentId,name:'prompt',args:['Pending task']})});true`);
   await browser('wait','--fn',`(async()=>{const r=await chrome.runtime.sendMessage({target:'engine',site:'127.0.0.1',method:'listChats'});return r.value.some(c=>c.id===${currentId}&&c.busy)})()`);
+  await check('queued attachment editing keeps image and file contents',async()=>{
+    await browser('tab','t1');
+    await click('chat-switch');
+    await attachFiles();
+    await browser('wait','--fn',`${root}.getElementById('attachments').children.length===2`);
+    await evaluate(`${root}.getElementById('message-input').value='Queued files';${root}.getElementById('message-input').dispatchEvent(new Event('input',{bubbles:true}))`);
+    await click('send');
+    await browser('wait','--fn',`${root}.querySelector('[data-queue-id] .message-image')!==null`);
+    await browser('tab','t2');
+    const queued=await engine('agent',[],currentId,'queuedMessages');
+    assert.equal(queued.value.length,1);
+    const item=queued.value[0];
+    assert.ok(item.content.some(part=>part.type==='image'));
+    assert.equal((await engine('agent',[item.id,'edit','Edited request'],currentId,'changeQueuedMessage')).ok,true);
+    const edited=(await engine('agent',[],currentId,'queuedMessages')).value[0];
+    assert.equal(edited.text,'Edited request');
+    assert.deepEqual(edited.content.slice(1),item.content.slice(1));
+    await engine('agent',[item.id,'cancel'],currentId,'changeQueuedMessage');
+  });
   await check('running conversation refuses deletion',async()=>{
     const result=await engine('deleteChat',[currentId]);
     assert.equal(result.ok,false);assert.match(result.error,/先停止/);
@@ -330,6 +444,11 @@ try {
     assert.equal(await evaluate(`(()=>{const r=${root},shell=r.getElementById('shell').getBoundingClientRect();return [...r.querySelectorAll('#top .icon-button')].every(button=>{const b=button.getBoundingClientRect();return b.left>=shell.left&&b.right<=shell.right})})()`),true);
     assert.equal(await evaluate(`(()=>{const r=${root},shell=r.getElementById('shell').getBoundingClientRect(),menu=r.getElementById('chat-list').getBoundingClientRect();return menu.left>=shell.left+8&&menu.right<=shell.right-8})()`),true);
     await browser('screenshot',join(directory,'narrow.png'));
+    await click('chat-switch');await click('settings');await click('settings-execution-tab');
+    assert.equal(await evaluate(`(()=>{const r=${root},body=r.querySelector('.settings-body');return body.scrollWidth===body.clientWidth&&r.querySelector('#preferences .primary').getBoundingClientRect().bottom<=r.getElementById('shell').getBoundingClientRect().bottom})()`),true);
+    await browser('screenshot',join(directory,'narrow-settings.png'));
+    await click('preferences-back');
+
     await browser('set','viewport','1280','900');
   });
   await check('reduced motion docks without leaving an animation running',async()=>{
@@ -366,7 +485,7 @@ try {
         assert.equal(await evaluate('window.scrollY'),before);
         await browser('screenshot',join(directory,new URL(page).hostname+'.png'));
         await click('settings');
-        await browser('wait','--fn',`${root}.getElementById('preferences').style.display==='block'`);
+        await browser('wait','--fn',`${root}.getElementById('preferences').style.display==='flex'`);
         for(const theme of ['dark','light','auto']) {
           await evaluate(`(()=>{const select=${root}.getElementById('theme');select.value='${theme}';select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
           if(theme!=='auto')assert.equal(await evaluate(`${root}.getElementById('shell').dataset.theme`),theme);

@@ -1,4 +1,4 @@
-import { build } from 'esbuild';
+import { build, transform } from 'esbuild';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { builtinProviders } from '@earendil-works/pi-ai/providers/all';
 import { makeBookmarklet } from './make-bookmarklet.mjs';
@@ -70,11 +70,13 @@ for (const color of css.match(/#[\da-fA-F]{3,8}\b/g) || []) {
 const source = await readFile('dist/pi-console.js', 'utf8');
 const runtime = JSON.stringify(source).replace(/</g, '\\u003c');
 const codec = (await readFile('src/bookmarklet.js', 'utf8')).replace(/^export /gm, '');
-const chatSource = html.match(/<script>\s*(function openChat[\s\S]*?)\nconst PI_RUNTIME/)[1];
+const originalChat = html.match(/<script>\s*(function openChat[\s\S]*?)\nconst PI_RUNTIME/)[1];
+const chatSource = (await transform(originalChat, {minifyWhitespace:true,legalComments:'none'})).code.trim();
 // Check the actual chat bookmark too, with room for saved model credentials.
 const chatBookmark = createBookmarklet(source, { openChat:chatSource, config:{apiKey:'k'.repeat(16384)} });
 console.log(`聊天书签长度：${chatBookmark.length} 个字符（含 16 KB 配置预留）`);
 const builtHtml = html
+  .replace(originalChat, () => chatSource)
   .replace(/(<script id="pi-runtime"[^>]*>)[\s\S]*?(<\/script>)/, (_match, open, close) => open + runtime + close)
   .replace(/(<script id="pi-bookmark-codec">)[\s\S]*?(<\/script>)/, (_match, open, close) => open + '\n' + codec + close);
 await writeFile(installer, builtHtml);

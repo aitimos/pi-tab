@@ -8,7 +8,7 @@ export function normalizeBaseUrl(value) {
   return url.href.replace(/\/+$/, '');
 }
 export function createModelConfig({ models:catalog = [], apis = [] } = {}) {
-  function describe({ api, baseUrl, model, modelInfo = {}, reasoning, thinking = 'off' }) {
+  function describe({ api, baseUrl, model, modelInfo = {}, reasoning, input, thinking = 'off' }) {
     const matches = catalog.filter(item => item.api === api && (!baseUrl || item.baseUrl?.replace(/\/+$/, '') === baseUrl.replace(/\/+$/, '')) && (item.id === model || item.id === model?.split('/').at(-1)));
     const ref = matches[0];
     const info = { id:model, name:model, api, baseUrl, reasoning:false, input:['text'], contextWindow:128000, maxTokens:16384, cost:{input:0,output:0,cacheRead:0,cacheWrite:0} };
@@ -16,6 +16,7 @@ export function createModelConfig({ models:catalog = [], apis = [] } = {}) {
       if (source[key] !== undefined && (key !== 'compat' || !source.api || source.api === api)) info[key] = source[key];
     }
     if (reasoning !== undefined) info.reasoning = reasoning;
+    if (input !== undefined) info.input = input;
     info.thinkingLevels = getSupportedThinkingLevels(info);
     info.thinking = clampThinkingLevel(info, thinking);
     return info;
@@ -65,6 +66,8 @@ export function createModelConfig({ models:catalog = [], apis = [] } = {}) {
           const id=rawId.trim(), native={};
           const reasoning=row.capabilities?.thinking?.supported ?? row.reasoning ?? row.thinking;
           if (typeof reasoning==='boolean') native.reasoning=reasoning;
+          if (Array.isArray(row.input) && row.input.every(type => ['text','image'].includes(type))) native.input=row.input;
+          if (typeof row.capabilities?.image_input?.supported === 'boolean') native.input=row.capabilities.image_input.supported ? ['text','image'] : ['text'];
           if (row.display_name || row.displayName || row.name && kind!=='google') native.name=row.display_name || row.displayName || row.name;
           const context=row.max_input_tokens || row.inputTokenLimit || row.context_window || row.context_length;
           const output=row.max_tokens || row.outputTokenLimit || row.max_completion_tokens;

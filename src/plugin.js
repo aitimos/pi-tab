@@ -1,5 +1,6 @@
 import loadModelCatalog from '#model-catalog';
 import { createModelConfig } from './model-config.js';
+import { normalizeUserContent, userContentText, editUserContent } from './message-content.js';
 import { BACKGROUND_CONTEXT, withAbortSignal } from '@earendil-works/chord/context';
 import { createModels, createProvider } from '@earendil-works/pi-ai/models';
 import { openAICompletionsApi } from '@earendil-works/pi-ai/api/openai-completions.lazy';
@@ -353,6 +354,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     const resolved = modelConfig.describe(next);
     next.contextWindow ??= resolved.contextWindow; next.maxTokens ??= Math.min(resolved.maxTokens,16384); next.thinking = resolved.thinking; next.reasoning = resolved.reasoning;
     next.modelInfo = resolved;
+    next.input = resolved.input;
     const usesOwnFetch = ['google-generative-ai','google-vertex','bedrock-converse-stream'].includes(next.api);
     if (usesOwnFetch && next.proxyUrl) throw new Error('这个接口不支持本机转发，请使用允许浏览器访问的服务地址。');
     const streamApi = APIS[next.api]();
@@ -409,7 +411,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
   async function submitMessage(text, whenBusy = 'reject', chatId = conversation.id, entry, onAccepted) {
     await pi.ready; ensureOpen();
     if (!configurations.get(chatId)) throw new Error('先配置模型。');
-    if (typeof text !== 'string' || !text.trim()) throw new TypeError('prompt 必须是非空字符串。');
+    text = normalizeUserContent(text, modelConfig.describe(configurations.get(chatId)));
     if (whenBusy === 'reject' && activeRuns.has(chatId)) throw new Error('agent 正在运行。可以使用 steer 或 followUp。');
     const target = chatId === conversation.id ? conversation : await harness.conversation(chatId, ctx);
     if (!target) throw new Error('对话不存在。');
@@ -423,7 +425,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
       const chat = state?.chats.find(item => item.id === chatId);
       if (chat?.title === '新对话') await harness.commit(async tx => {
         const item = (await tx.doc(TabState)).chats.find(entry => entry.id === chatId);
-        if (item?.title === '新对话') item.title = text.trim().slice(0, 36);
+        if (item?.title === '新对话') item.title = userContentText(text).trim().slice(0, 36);
       }, ctx);
       const settled = await submission.wait(ctx);
       emit({ type: 'queue_changed', conversationId: chatId });
@@ -606,7 +608,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
         history: async () => (await harness.conversation(chatId, ctx)).context(ctx),
         queuedMessages: async () => {
           const inbox = await harness.snapshot(InboxDoc, chatId, ctx);
-          return (inbox?.items ?? []).filter(item => item.mode === 'steer' || item.mode === 'followUp').map(item => ({ id: item.id, mode: item.mode, text: item.content }));
+          return (inbox?.items ?? []).filter(item => item.mode === 'steer' || item.mode === 'followUp').map(item => ({ id: item.id, mode: item.mode, text: userContentText(item.content), content: item.content }));
         },
         changeQueuedMessage: async (id, action, text) => {
           if (action === 'cancel') {
@@ -620,7 +622,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
               const item = inbox.items.find(item => item.id === id && (item.mode === 'steer' || item.mode === 'followUp'));
               if (!item) throw new Error('这条消息已经开始执行。');
               if (action === 'promote') item.mode = 'steer';
-              else item.content = text.trim();
+              else item.content = editUserContent(item.content, text.trim());
             }, ctx);
           }
           emit({ type: 'queue_changed', conversationId: chatId });

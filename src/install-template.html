@@ -61,9 +61,10 @@ body>header,body>main,body>footer{position:relative;z-index:1}
 </div>
 <section class="card extension-guide" aria-labelledby="extension-title"><div class="extension-head"><h2 id="extension-title">安装 Chrome 扩展</h2><a class="secondary" href="https://github.com/aitimos/pi-tab/releases/latest/download/pi-tab-extension.zip">下载扩展包</a></div><ol class="instructions"><li><div><strong>解压扩展包</strong><p>得到 pi-tab-extension 文件夹。更新时替换原目录文件。</p></div></li><li><div><strong>打开扩展程序页面</strong><p>在地址栏输入 <kbd>chrome://extensions</kbd>，开启开发者模式。</p></div></li><li><div><strong>加载并启用</strong><p>点击“加载已解压的扩展程序”，选择 pi-tab-extension 文件夹，在普通网页点击工具栏中的 Pi Tab 图标并配置模型。更新后需重新加载扩展并刷新网页。</p></div></li></ol></section>
 <section class="help" id="help" aria-labelledby="help-title"><h2 id="help-title">使用帮助</h2><div class="help-grid">
-<details><summary>如何添加和切换模型？</summary><p>首次使用填写服务商提供的接口类型、地址和密钥，获取模型后选择并保存。以后从输入框下方的模型下拉切换；「添加模型」和「添加提供商」分别配置模型与连接信息。请选择支持工具调用的模型。</p></details>
+<details><summary>如何添加和切换模型？</summary><p>首次使用填写服务商提供的接口类型、地址和密钥，获取模型后选择并保存。以后从输入框下方的模型下拉切换；「添加模型」可复用提供商并搜索或手填模型 ID；「添加提供商」保存连接信息后进入模型选择。请选择支持工具调用的模型。</p></details>
 <details><summary>会话保存在哪里？刷新会怎样？</summary><p>扩展会话保存在本机，按完整域名分组，同域的路径、查询参数和标签页共享列表，模型配置跨网站共享。已启用标签页刷新后自动恢复，页面操作仍需要可用的目标标签页。书签需重新点击才能恢复，同源标签页并发使用时可能有独立记录。两种模式的记录不自动合并，也不上传云端同步。</p></details>
-<details><summary>如何管理会话和主题？</summary><p>顶部可新建对话、新开窗口和切换会话，新窗口使用空白会话并继承模型配置。圆环表示会话正在运行。删除时点击会话右侧图标并确认，运行中的任务需先停止。「Pi 设置」中的主题可选跟随、浅色、深色，默认跟随网页或浏览器；也可设置指令和队列选项。</p></details>
+<details><summary>如何管理会话和主题？</summary><p>顶部可新建对话、新开窗口和切换会话，新窗口使用空白会话并继承模型配置。圆环表示会话正在运行。删除时点击会话右侧图标并确认，运行中的任务需先停止。「Pi 设置」中的主题可选跟随、浅色、深色，默认跟随网页或浏览器；设置分为常规、指令、执行三类。</p></details>
+<details><summary>可以发送文件和图片吗？</summary><p>点击输入框旁的附件图标，或拖入文件、粘贴图片。支持 UTF-8 文本和代码文件，PNG、JPEG、WebP、GIF 图片需模型支持视觉输入。最多 8 个附件，单个 5 MB，总计 10 MB；暂不解析 PDF、Office 文档、音视频和压缩包。附件随消息发送到配置的模型服务并保存到会话。</p></details>
 <details><summary>无法打开或连接模型？</summary><p>扩展用于普通 HTTP 和 HTTPS 网页，不支持本地文件、浏览器设置页或扩展商店。书签可能被网页安全策略拦截，模型接口还需允许网页跨域访问（CORS）。扩展从后台请求模型；连接失败时请核对接口地址、凭据和模型权限。</p></details>
 </div></section>
 </main>
@@ -97,7 +98,7 @@ function openChat(initialConfig, options = {}) {
     :host { all:initial; color-scheme:dark; }
     *, *::before, *::after { box-sizing:border-box; overscroll-behavior:contain; }
     [hidden] { display:none!important; }
-    #shell { position:relative; --bg:#191919; --surface:#222222; --raised:#2a2a2a; --line:#484848; --text:#eeeeee; --muted:#b4b4b4; --accent:#9eb1ff; width:min(var(--window-width,420px),calc(100vw - 24px)); height:min(var(--window-height,660px),calc(100dvh - 24px)); display:flex; flex-direction:column; overflow:hidden; border-radius:16px; background:var(--bg); color:var(--text); border:.5px solid var(--line); font:13px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif; text-align:left; color-scheme:dark; }
+    #shell { position:relative; --bg:#191919; --surface:#222222; --raised:#2a2a2a; --line:#484848; --text:#eeeeee; --muted:#b4b4b4; --accent:#9eb1ff; width:min(var(--window-width,420px),calc(100vw - 24px)); height:min(var(--window-height,660px),calc(100dvh - 24px)); display:flex; flex-direction:column; overflow:hidden; border-radius:12px; background:var(--bg); color:var(--text); border:.5px solid var(--line); font:13px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif; text-align:left; color-scheme:dark; }
     #shell[data-theme=light] { --bg:#fcfcfc; --surface:#f9f9f9; --raised:#f0f0f0; --line:#cecece; --text:#202020; --muted:#646464; --accent:#3a5bc7; color-scheme:light; }
     #shell { background:color-mix(in srgb,var(--bg) 96%,transparent); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); box-shadow:0 16px 48px rgba(0,0,0,.4),0 2px 8px rgba(0,0,0,.15); }
     #shell[data-theme=light] { box-shadow:0 16px 48px rgba(0,0,0,.15),0 2px 8px rgba(0,0,0,.05); }
@@ -121,34 +122,52 @@ function openChat(initialConfig, options = {}) {
     #chat-ball .pi-icon { width:22px; height:22px; }
     #shell.minimized #chat-ball:active { cursor:grabbing; }
     #shell[data-busy=true] #chat-ball::after { content:''; position:absolute; right:2px; bottom:2px; width:10px; height:10px; border:2px solid var(--bg); border-radius:50%; background:#b4b4b4; }
-    #top { cursor:move; touch-action:none; user-select:none; display:flex; align-items:center; gap:8px; flex:none; height:48px; padding:8px; border-bottom:.5px solid var(--line); }
-    #mark,.welcome-mark { display:grid; place-items:center; flex:none; } #mark .pi-icon { width:22px; height:22px; } .welcome-mark .pi-icon { width:45px; height:45px; }
-    #mark { width:24px; height:24px; }
+    #top { cursor:move; touch-action:none; user-select:none; display:flex; align-items:center; gap:6px; flex:none; height:40px; padding:6px; border-bottom:.5px solid var(--line); }
+    #mark,.welcome-mark { display:grid; place-items:center; flex:none; } #mark .pi-icon { width:18px; height:18px; } .welcome-mark .pi-icon { width:45px; height:45px; }
+    #mark { width:20px; height:20px; }
     #brand { min-width:0; }
     #brand strong { font-size:13px; font-weight:600; letter-spacing:-.2px; display:block; line-height:1.4; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     #brand small { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
-    .actions { display:flex; flex:none; gap:4px; align-items:center; }
+    .actions { display:flex; flex:none; gap:2px; align-items:center; }
     .window-actions { margin-left:auto; }
     button { font:inherit; cursor:pointer; transition:background .15s,color .15s,border-color .15s; }
     button:disabled { opacity:.4; cursor:default; }
     button:focus-visible,summary:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
     svg { width:16px; height:16px; flex:none; vertical-align:middle; }
-    .icon-button { width:32px; height:32px; padding:0; display:grid; place-items:center; background:transparent; border:0; border-radius:8px; color:var(--muted); }
-    .actions svg { width:18px; height:18px; }
-    .actions .github-link svg { width:17px; height:17px; }
+    .icon-button { width:28px; height:28px; padding:0; display:grid; place-items:center; background:transparent; border:0; border-radius:6px; color:var(--muted); }
+    .actions svg { width:16px; height:16px; }
+    .actions .github-link svg { width:16px; height:16px; }
     .icon-button:hover:not(:disabled) { background:var(--raised); color:var(--text); }
     #content { min-height:0; flex:1; display:flex; flex-direction:column; }
-    #setup { padding:24px; overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--line) transparent; }
-    #preferences { display:none; flex:1; min-height:0; overflow:auto; padding:24px; }
-    #preferences h2 { margin:0 0 24px; font-size:17px; }
-    #preferences label { margin-bottom:18px; }
-    #preferences textarea { min-height:220px; resize:vertical; line-height:1.7; }
-    #preferences .setting-check { display:flex; align-items:center; gap:8px; color:var(--text); }
-    #preferences .setting-check input { width:16px; height:16px; }
-    #preferences .setting-actions { display:flex; gap:10px; margin-top:22px; }
-    #preferences .setting-actions button { flex:1; }
-    #setup h2 { font-size:21px; letter-spacing:-.6px; margin:0 0 6px; font-weight:600; }
-    #setup p { margin:0 0 20px; color:var(--muted); font-size:12px; }
+    #setup { display:flex; flex-direction:column; flex:1; min-height:0; }
+    .form-body { flex:1; min-height:0; overflow:auto; padding:20px; scrollbar-width:thin; scrollbar-color:var(--line) transparent; }
+    .form-section { min-width:0; margin:0 0 20px; padding:0; border:0; }
+    .form-section:last-child { margin-bottom:0; }
+    .form-section legend { padding:0; margin-bottom:12px; color:var(--text); font-size:13px; font-weight:600; }
+    .field-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    .form-footer { flex:none; display:flex; flex-direction:column; gap:8px; padding:12px 20px; border-top:.5px solid var(--line); background:var(--bg); }
+    .form-footer .form-buttons { display:flex; gap:8px; }
+    .form-footer .form-buttons button { flex:1; margin:0!important; }
+    .form-footer .error:empty { display:none; }
+    .advanced-fields { margin-top:12px; }
+    .advanced-fields summary { cursor:pointer; color:var(--muted); font-size:12px; }
+    .advanced-fields[open] summary { margin-bottom:12px; }
+    #preferences { display:none; flex:1; min-height:0; flex-direction:column; }
+    .settings-heading { display:flex; align-items:center; justify-content:space-between; padding:20px 20px 12px; }
+    .settings-heading h2,#setup h2 { font-size:17px; margin:0; font-weight:600; }
+    #setup h2 { margin-bottom:20px; }
+    .settings-tabs { display:flex; gap:4px; margin:0 20px 16px; padding:3px; background:var(--surface); border:.5px solid var(--line); border-radius:8px; }
+    .settings-tabs button { flex:1; border:0; padding:6px 8px; border-radius:5px; color:var(--muted); background:transparent; }
+    .settings-tabs button[aria-selected=true] { background:var(--raised); color:var(--text); }
+    #preferences .settings-body { padding-top:0; }
+    #preferences label { margin-bottom:14px; }
+    #preferences textarea { min-height:240px; resize:vertical; line-height:1.7; }
+    .setting-row { display:flex; align-items:center; justify-content:space-between; gap:16px; min-height:42px; }
+    .setting-row>span { margin:0; }
+    .setting-row>select { width:auto; max-width:60%; }
+    .setting-row>input[type=checkbox] { width:16px; height:16px; margin:0; accent-color:var(--accent); }
+    #preferences .field-heading { margin:0 0 8px; }
+    #preferences .field-heading label { margin:0; }
     label { display:block; color:#d6e1ff; font-size:12px; margin-bottom:14px; }
     label span { display:block; margin-bottom:6px; }
     input,select,textarea { width:100%; min-width:0; background:var(--surface); border:.5px solid var(--line); border-radius:10px; padding:10px 12px; color:var(--text); outline:none; font:inherit; }
@@ -169,8 +188,6 @@ function openChat(initialConfig, options = {}) {
     .primary:hover:not(:disabled) { background:#fdfdfe; }
     .subtle { border:.5px solid var(--line); background:var(--surface); color:#d6e1ff; padding:7px 10px; border-radius:9px; font-size:12px; }
     .subtle:hover:not(:disabled) { background:var(--raised); }
-    #start { width:100%; margin-top:4px; }
-    #back-chat { margin-top:9px; width:100%; }
     .hint { margin-top:14px; color:var(--muted); font-size:12px; line-height:1.7; }
     .field-heading { display:flex; align-items:center; gap:8px; justify-content:space-between; margin:6px 0; font-size:12px; color:var(--muted); }
     .field-heading label { margin:0; }
@@ -182,15 +199,19 @@ function openChat(initialConfig, options = {}) {
     .reasoning-override input { width:15px; height:15px; }
     #chat-thinking { width:auto; max-width:100px; padding:4px 20px 4px 6px; font-size:12px; border:0; border-radius:6px; background-color:transparent; background-position:right 1px center; background-size:14px 14px; box-shadow:none; }
     #chat-thinking:focus { border:0; box-shadow:none; }
-    #model-dialog { flex:1; min-height:0; display:flex; flex-direction:column; padding:24px; color:var(--text); }
-    #model-dialog .dialog-heading { justify-content:space-between; margin-bottom:24px; }
+    #model-dialog { flex:1; min-height:0; display:flex; flex-direction:column; padding:20px; color:var(--text); }
+    #model-dialog .dialog-heading { justify-content:space-between; margin-bottom:20px; }
     #model-dialog .dialog-heading h2 { margin:0; font-size:17px; line-height:1.5; }
     #model-picker-main { flex:1; min-height:0; display:flex; flex-direction:column; }
     #model-list { flex:1; min-height:0; overflow:auto; margin:10px -12px; display:grid; grid-auto-rows:max-content; align-content:start; gap:4px; }
-    #manual-model-form,#provider-form { flex:1; overflow:auto; display:flex; flex-direction:column; gap:18px; }
-    #manual-model-form label,#provider-form label { margin:0; }
-    #manual-model-form .primary,#provider-form .primary { margin-top:4px; }
-    #manual-model-form .primary,#provider-form .primary { width:100%; }
+    #manual-model-form,#provider-form { flex:1; min-height:0; display:flex; flex-direction:column; margin:0 -20px -20px; }
+    #manual-model-form .form-body,#provider-form .form-body { padding-top:0; }
+    #manual-model-form label,#provider-form label { margin-bottom:14px; }
+    #manual-model-results { display:grid; gap:4px; max-height:180px; overflow:auto; margin:8px 0 14px; }
+    #manual-model-results:empty { display:none; }
+    #manual-model-status { display:block; color:var(--muted); font-size:12px; min-height:20px; }
+    #manual-model-form .field-heading label { margin:0; }
+    #manual-model-provider { margin-bottom:12px; }
     .model-option { display:block; width:100%; text-align:left; padding:10px 12px; border:0; border-radius:8px; background:transparent; color:var(--text); overflow-wrap:anywhere; }
     .model-option:hover,.model-option[aria-current=true] { background:var(--surface); }
     .model-option small { display:block; color:var(--muted); font-size:12px; }
@@ -239,7 +260,7 @@ function openChat(initialConfig, options = {}) {
     .answer-actions { display:flex; align-items:center; gap:6px; color:var(--muted); }
     .answer-actions .icon-button { width:26px; height:26px; }
     .answer-action-status { font-size:12px; }
-    #shell #chat-list { display:none; position:absolute; z-index:2; top:48px; right:clamp(10px,var(--chat-menu-offset,10px),calc(100% - 310px)); width:min(300px,calc(100% - 20px)); max-height:55%; overflow:auto; padding:6px; background:var(--bg); border:.5px solid var(--line); border-radius:10px; }
+    #shell #chat-list { display:none; position:absolute; z-index:2; top:40px; right:clamp(10px,var(--chat-menu-offset,10px),calc(100% - 310px)); width:min(300px,calc(100% - 20px)); max-height:55%; overflow:auto; padding:6px; background:var(--bg); border:.5px solid var(--line); border-radius:10px; }
     #shell #chat-list[data-open=true] { display:flex; flex-direction:column; gap:4px; }
     #chat-entries { display:flex; flex-direction:column; gap:4px; }
     #chat-list button { display:block; width:100%; padding:9px 10px; background:transparent; border:0; border-radius:6px; color:var(--text); text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
@@ -256,7 +277,6 @@ function openChat(initialConfig, options = {}) {
     @keyframes chat-running { to { transform:rotate(360deg); } }
     @media(prefers-reduced-motion:reduce) { .chat-running svg { animation:none; } }
     #resize-handle { position:absolute; right:0; bottom:0; width:20px; height:20px; border:0; background:transparent; cursor:nwse-resize; touch-action:none; }
-    #resize-handle::after { content:''; position:absolute; right:5px; bottom:5px; width:8px; height:8px; border-right:.5px solid var(--muted); border-bottom:.5px solid var(--muted); }
     #shell.embedded #resize-handle,#shell.minimized #resize-handle { display:none; }
     .thinking,.tool-row { flex:none; min-width:0; }
     .trace-group { flex:none; min-width:0; }
@@ -303,11 +323,30 @@ function openChat(initialConfig, options = {}) {
     .pixel-loader i:nth-child(3n+1) { animation-delay:-.4s; }
     .pixel-loader i:nth-child(3n+2) { animation-delay:-.8s; }
     @keyframes pulse { 50% { opacity:.3; } }
-    #composer { position:relative; flex:none; margin:8px; padding:8px 0 2px; border:.5px solid var(--line); border-radius:8px; background:var(--surface); box-shadow:0 5px 18px rgba(0,0,0,.15); transition:border-color .25s ease-out; }
+    #composer { position:relative; flex:none; margin:8px; padding:8px 0 2px; border:.5px solid var(--line); border-radius:4px; background:var(--surface); box-shadow:0 5px 18px rgba(0,0,0,.15); transition:border-color .25s ease-out; }
     #shell[data-theme=light] #composer { box-shadow:0 5px 18px rgba(0,0,0,.05); }
     #composer:focus-within { border-color:var(--accent); }
     #message-input { display:block; width:calc(100% - 36px); margin:0 18px; resize:none; min-height:40px; max-height:180px; padding:4px 0; border:0; border-radius:0; background:transparent; font-size:14px; line-height:1.6; scrollbar-width:thin; }
     .composer-tools { display:flex; align-items:center; gap:8px; min-width:0; height:44px; padding:0 8px 0 18px; }
+    #attach { width:28px; height:28px; flex:none; }
+    #attachments { display:flex; gap:8px; overflow:auto; max-height:72px; margin:0 14px 6px; padding:4px; }
+    #attachments:empty { display:none; }
+    .attachment { position:relative; display:flex; align-items:center; gap:8px; flex:none; width:164px; height:52px; padding:8px 22px 8px 8px; background:var(--raised); border-radius:6px; font-size:12px; }
+    .attachment>svg { width:22px; height:22px; color:var(--muted); }
+    .attachment>span { min-width:0; display:flex; flex-direction:column; }
+    .attachment b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:500; }
+    .attachment small { color:var(--muted); font-size:12px; }
+    .attachment.image { width:52px; padding:0; }
+    .attachment img { width:100%; height:100%; object-fit:cover; border-radius:6px; }
+    .attachment button { position:absolute; top:2px; right:2px; display:grid; place-items:center; padding:0; border:0; border-radius:50%; background:var(--bg); color:var(--muted); width:20px; height:20px; opacity:0; }
+    .attachment button svg { width:12px; height:12px; }
+    .attachment:hover button,.attachment:focus-within button { opacity:1; }
+    @media(hover:none) { .attachment button { opacity:1; } }
+    #attachment-error { margin:0 12px 6px; font-size:12px; color:var(--muted); }
+    #attachment-error:empty { display:none; }
+    .bubble .message-image { display:block; max-width:100%; max-height:200px; margin:6px 0; border-radius:4px; }
+    .bubble .message-file { margin-top:6px; white-space:normal; }
+    .message-file pre { max-height:180px; overflow:auto; white-space:pre-wrap; font:inherit; }
     .model-button { display:flex; align-items:center; gap:6px; flex:0 1 auto; min-width:0; padding:3px 0; border:0; background:transparent; color:var(--muted); font-size:13px; text-align:left; }
     .model-button:hover:not(:disabled) { color:var(--text); }
     #chat-model { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -343,16 +382,14 @@ function openChat(initialConfig, options = {}) {
     @media(max-width:760px) {
       #shell.embedded { height:min(720px,calc(var(--chat-viewport-height,100dvh) - 24px)); }
       #shell input,#shell select,#shell textarea { font-size:16px; }
-      #shell .icon-button { width:32px; height:32px; }
       #send,#abort { width:40px; height:40px; }
-      #setup { padding:20px; }
       #chat-messages { padding-left:16px; padding-right:16px; }
-      #shell.embedded #top { height:48px; padding:8px; }
     }
   `;
   root.appendChild(style);
 
   const icons = {
+    attach:'<path d="m8 13 6-6a3 3 0 0 1 4 4l-8 8a5 5 0 0 1-7-7l9-9a2 2 0 0 1 3 3l-9 9"/>',
     settings:'<path d="M4 7h8m4 0h4M4 17h3m4 0h9"/><circle cx="14" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
     plus:'<path d="M12 5v14M5 12h14"/>',
     minimize:'<path d="M5 12h14"/>',
@@ -399,35 +436,38 @@ function openChat(initialConfig, options = {}) {
     </div>
     <div id="content">
       <form id="setup" autocomplete="off">
-        <h2 id="setup-title">设置模型</h2>
-        <p>填写模型服务商提供的连接信息。</p>
-        <label><span>接口类型</span>
-          <select id="api" aria-label="接口类型"></select>
-        </label>
-        <div class="model-field"><label for="base-url">接口地址（Base URL）</label><div class="endpoint-field">
-          <input id="base-url" type="url" spellcheck="false" placeholder="输入或选择接口地址" required />
-          <div class="endpoint-picker"><select id="endpoint" aria-label="选择接口地址" title="选择接口地址"></select>${icon('chevron')}</div>
-        </div></div>
-        <label><span id="key-label">密钥（API Key）</span><input id="api-key" type="password" spellcheck="false" placeholder="填写服务商提供的密钥" /></label>
-        <div class="model-field"><div class="field-heading"><label for="model">模型</label><button id="discover-models" type="button" class="text-button">获取模型</button></div>
-          <select id="setup-model-select" class="model-select" aria-label="选择模型" hidden></select>
-          <input id="model" type="text" spellcheck="false" placeholder="填写地址后自动获取，也可手动输入" required />
-          <div class="field-heading"><span id="discovery-status" role="status"></span><button id="manual-model" class="text-button" type="button" hidden>手动输入</button></div>
+        <div class="form-body" id="setup-fields">
+          <h2 id="setup-title">设置模型</h2>
+          <fieldset class="form-section"><legend>连接提供商</legend>
+            <label><span>接口类型</span><select id="api" aria-label="接口类型"></select></label>
+            <div class="model-field"><label for="base-url">接口地址</label><div class="endpoint-field">
+              <input id="base-url" type="url" spellcheck="false" placeholder="输入或选择 Base URL" required />
+              <div class="endpoint-picker"><select id="endpoint" aria-label="选择接口地址" title="选择接口地址"></select>${icon('chevron')}</div>
+            </div></div>
+            <label><span id="key-label">密钥（API Key）</span><input id="api-key" type="password" spellcheck="false" autocomplete="off" placeholder="填写服务商提供的密钥" /></label>
+          </fieldset>
+          <fieldset class="form-section"><legend>选择模型</legend>
+            <div class="model-field"><div class="field-heading"><label for="model">模型</label><button id="discover-models" type="button" class="text-button">获取模型</button></div>
+              <select id="setup-model-select" class="model-select" aria-label="选择模型" hidden></select>
+              <input id="model" type="text" spellcheck="false" placeholder="模型 ID" required />
+              <div class="field-heading"><span id="discovery-status" role="status"></span><button id="manual-model" class="text-button" type="button" hidden>手动输入</button></div>
+            </div>
+            <label class="setting-row"><span>默认思考强度</span><select id="thinking" aria-label="思考强度"></select></label>
+            <details class="advanced-fields"><summary>模型能力</summary><label class="reasoning-override"><input id="reasoning-enabled" type="checkbox" />支持思考</label><label class="reasoning-override"><input id="vision-enabled" type="checkbox" />支持图片</label></details>
+          </fieldset>
         </div>
-        <label><span>思考强度</span><select id="thinking" aria-label="思考强度"></select></label>
-        <label class="reasoning-override"><input id="reasoning-enabled" type="checkbox" />此模型支持思考</label>
-        <button id="start" class="primary" type="submit">保存并开始</button>
-        <button id="back-chat" class="subtle" type="button" hidden>返回对话</button>
-        <p id="setup-error" class="error" role="alert" hidden></p>
-        <div class="hint">设置和对话保存在本机浏览器中。</div>
+        <div class="form-footer"><p id="setup-error" class="error" role="alert" hidden></p><div class="form-buttons"><button id="back-chat" class="subtle" type="button" hidden>返回对话</button><button id="start" class="primary" type="submit">保存并开始</button></div></div>
       </form>
       <section id="chat" aria-label="对话">
         <div id="chat-tools">${icon('page')}<span id="page-title"></span><span class="context-dot" aria-hidden="true"></span><span>当前网页</span></div>
         <div id="chat-messages" role="log" aria-label="对话记录" aria-live="polite"></div>
         <div id="busy-text" role="status" hidden><span class="pixel-loader" aria-hidden="true">${'<i></i>'.repeat(9)}</span><span id="progress-label"></span></div>
         <div id="composer">
+          <div id="attachments" aria-label="待发送附件"></div><p id="attachment-error" role="status"></p>
+          <input id="attachment-input" type="file" multiple hidden />
           <textarea id="message-input" rows="1" placeholder="输入消息" aria-label="输入消息"></textarea>
           <div class="composer-tools">
+            <button id="attach" class="icon-button" type="button" title="添加文件或图片" aria-label="添加文件或图片">${icon('attach')}</button>
             <button class="model-button" id="model-settings" title="切换模型" aria-label="切换模型" aria-haspopup="menu" aria-expanded="false">${icon('code')}<span id="chat-model">未设置模型</span>${icon('chevron')}</button><select id="chat-thinking" aria-label="思考强度" title="思考强度"></select>
             <button id="send" class="primary" title="发送消息" aria-label="发送消息" aria-haspopup="menu" aria-expanded="false" disabled>${icon('arrow')}</button>
             <button id="abort" title="停止任务" aria-label="停止任务" hidden>${icon('stop')}</button>
@@ -437,17 +477,31 @@ function openChat(initialConfig, options = {}) {
         </div>
       </section>
       <form id="preferences" aria-label="Pi 设置">
-        <h2>Pi 设置</h2>
-        <label><span>主题</span><select id="theme"><option value="auto">跟随</option><option value="light">浅色</option><option value="dark">深色</option></select></label>
-        <label><span>指令</span><textarea id="setting-prompt" maxlength="12000"></textarea></label>
-        <label class="setting-check"><input id="setting-compact" type="checkbox" checked>自动压缩上下文</label>
-        <label><span>模型失败后重试</span><select id="setting-retries"><option value="0">不重试</option><option value="1">1 次</option><option value="2">2 次</option><option value="3">3 次</option></select></label>
-        <label><span>工具调用</span><select id="setting-tools"><option value="sequential">依次执行</option><option value="parallel">并行执行</option></select></label>
-        <label><span>直接发送</span><select id="setting-steer"><option value="one-at-a-time">逐条处理</option><option value="all">一起处理</option></select></label>
-        <label><span>排队发送</span><select id="setting-follow-up"><option value="one-at-a-time">逐条处理</option><option value="all">一起处理</option></select></label>
-        <label><span>模型失败后的排队消息</span><select id="setting-failed"><option value="keep">保留</option><option value="continue">继续处理</option><option value="withdraw">取消</option></select></label>
-        <div class="setting-actions"><button class="primary" type="submit">保存</button><button class="subtle" id="preferences-back" type="button">返回</button></div>
-        <p id="preferences-error" class="error" role="alert" hidden></p>
+        <div class="settings-heading"><h2>Pi 设置</h2><button class="text-button" id="preferences-back" type="button">返回</button></div>
+        <div class="settings-tabs" role="tablist" aria-label="设置分类">
+          <button id="settings-general-tab" type="button" role="tab" aria-selected="true" aria-controls="settings-general">常规</button>
+          <button id="settings-instructions-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-instructions" tabindex="-1">指令</button>
+          <button id="settings-execution-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-execution" tabindex="-1">执行</button>
+        </div>
+        <div class="form-body settings-body">
+          <section id="settings-general" role="tabpanel" aria-labelledby="settings-general-tab">
+            <label class="setting-row"><span>主题</span><select id="theme"><option value="auto">跟随</option><option value="light">浅色</option><option value="dark">深色</option></select></label>
+            <label class="setting-row"><span>自动压缩上下文</span><input id="setting-compact" type="checkbox" checked></label>
+            <label class="setting-row"><span>失败重试</span><select id="setting-retries"><option value="0">不重试</option><option value="1">1 次</option><option value="2">2 次</option><option value="3">3 次</option></select></label>
+          </section>
+          <section id="settings-instructions" role="tabpanel" aria-labelledby="settings-instructions-tab" hidden>
+            <div class="field-heading"><label for="setting-prompt">指令</label><button id="restore-prompt" class="text-button" type="button">恢复内置</button></div>
+            <textarea id="setting-prompt" maxlength="12000" aria-label="指令" spellcheck="false"></textarea>
+          </section>
+          <section id="settings-execution" role="tabpanel" aria-labelledby="settings-execution-tab" hidden>
+            <fieldset class="form-section"><legend>工具</legend><label class="setting-row"><span>调用方式</span><select id="setting-tools"><option value="sequential">依次执行</option><option value="parallel">并行执行</option></select></label></fieldset>
+            <fieldset class="form-section"><legend>消息队列</legend><div class="field-grid">
+              <label><span>直接发送</span><select id="setting-steer"><option value="one-at-a-time">逐条处理</option><option value="all">一起处理</option></select></label>
+              <label><span>排队发送</span><select id="setting-follow-up"><option value="one-at-a-time">逐条处理</option><option value="all">一起处理</option></select></label>
+            </div><label class="setting-row"><span>任务失败后</span><select id="setting-failed"><option value="keep">保留消息</option><option value="continue">继续处理</option><option value="withdraw">取消消息</option></select></label></fieldset>
+          </section>
+        </div>
+        <div class="form-footer"><p id="preferences-error" class="error" role="alert" hidden></p><button class="primary" type="submit">保存设置</button></div>
       </form>
     </div>
     <section id="model-dialog" aria-labelledby="model-dialog-title" hidden>
@@ -459,17 +513,27 @@ function openChat(initialConfig, options = {}) {
         <div class="model-actions"><button id="model-dialog-manual" class="subtle" type="button">添加模型</button><button id="add-provider" class="subtle" type="button">添加提供商</button></div>
       </div>
       <form id="manual-model-form" hidden>
-        <label><span>提供商</span><select id="manual-model-provider" aria-label="提供商"></select></label>
-        <label><span>模型名称</span><input id="manual-model-id" type="text" spellcheck="false" required placeholder="填写模型 ID" /></label>
-        <label class="reasoning-override"><input id="manual-model-reasoning" type="checkbox" />此模型支持思考</label>
-        <button class="primary" type="submit">添加模型</button>
+        <div class="form-body">
+          <div class="field-heading"><label for="manual-model-provider">提供商</label><button id="manual-add-provider" type="button" class="text-button">添加提供商</button></div><select id="manual-model-provider" aria-label="提供商"></select>
+          <div class="field-heading"><label for="manual-model-id">模型</label><button id="manual-model-discover" class="text-button" type="button">获取模型</button></div>
+          <input id="manual-model-id" type="text" spellcheck="false" autocomplete="off" required placeholder="搜索或填写模型 ID" />
+          <span id="manual-model-status" role="status"></span>
+          <div id="manual-model-results" aria-label="可用模型"></div>
+          <label class="setting-row"><span>默认思考强度</span><select id="manual-model-thinking" aria-label="默认思考强度"></select></label>
+          <details class="advanced-fields"><summary>模型能力</summary><label class="reasoning-override"><input id="manual-model-reasoning" type="checkbox" />支持思考</label><label class="reasoning-override"><input id="manual-model-vision" type="checkbox" />支持图片</label></details>
+        </div>
+        <div class="form-footer"><button class="primary" type="submit">添加并使用</button></div>
       </form>
       <form id="provider-form" hidden>
-        <label><span>接口类型</span><select id="provider-api" aria-label="提供商接口类型"></select></label>
-        <label><span>接口地址（Base URL）</span><input id="provider-url" type="url" required placeholder="https://api.example.com/v1" /></label>
-        <label><span>密钥（API Key）</span><input id="provider-key" type="password" autocomplete="off" /></label>
-        <button class="primary" type="submit">保存提供商</button>
-        <p id="provider-error" class="error" role="alert" hidden></p>
+        <div class="form-body">
+          <fieldset class="form-section"><legend>连接信息</legend>
+            <label><span>名称</span><input id="provider-name" type="text" placeholder="例如：工作账号" maxlength="80" /></label>
+            <label><span>接口类型</span><select id="provider-api" aria-label="提供商接口类型"></select></label>
+            <label><span>接口地址</span><input id="provider-url" type="url" required placeholder="https://api.example.com/v1" /></label>
+            <label><span>密钥（API Key）</span><input id="provider-key" type="password" autocomplete="off" /></label>
+          </fieldset>
+        </div>
+        <div class="form-footer"><p id="provider-error" class="error" role="alert" hidden></p><button class="primary" type="submit">保存并选择模型</button></div>
       </form>
     </section>
     <dialog id="tool-dialog" aria-labelledby="tool-dialog-title">
@@ -526,6 +590,7 @@ function openChat(initialConfig, options = {}) {
     const provider=draftProvider();
     const model=agent.describeModel({...provider,model:id,modelInfo:state.selectedModel?.id===id && sameProvider(state.selectedModel,provider) ? state.selectedModel : undefined,thinking:byId('thinking').value || 'off'});
     byId('reasoning-enabled').checked=model.reasoning;
+    byId('vision-enabled').checked=model.input.includes('image');
     renderThinking(byId('thinking'),model,byId('thinking').value);
   }
   function syncModelControls(config) {
@@ -540,6 +605,7 @@ function openChat(initialConfig, options = {}) {
     byId('model').required=!config.model;
     byId('manual-model').hidden=!config.model;
     byId('reasoning-enabled').checked=agent.describeModel(config).reasoning;
+    byId('vision-enabled').checked=agent.describeModel(config).input.includes('image');
     renderThinking(byId('thinking'),agent.describeModel(config),config.thinking);
   }
   function updateEndpoints() {
@@ -610,7 +676,8 @@ function openChat(initialConfig, options = {}) {
       if(mode==='setup') {
         const current=byId('model').value.trim();
         byId('setup-model-select').replaceChildren(...result.models.map(model=>new Option(model.id,model.id)));
-        selectDraftModel(result.models.find(model=>model.id===current) || result.models[0]);
+        if(result.models.length)selectDraftModel(result.models.find(model=>model.id===current) || result.models[0]);
+        else showManualModel();
       }
       renderModelList();
       if(!byId('model-menu').hidden)renderModelMenu();
@@ -658,6 +725,7 @@ function openChat(initialConfig, options = {}) {
     else await openManualModelForm();
   }
   function closeModelDialog() {
+    manualDiscoveryVersion++;
     byId('model-dialog').hidden=true;
     byId('content').hidden=false;
     (state.modelDialogMode==='chat' ? byId('message-input') : byId('setup-model-select')).focus();
@@ -694,7 +762,7 @@ function openChat(initialConfig, options = {}) {
       button.addEventListener('click',()=>{
         closeModelMenu();
         const {profileId:_currentProfile,...provider}=active;
-        void configureModel({...provider,model:model.id,modelInfo:model,reasoning:model.reasoning,thinking:'off',contextWindow:model.contextWindow,maxTokens:Math.min(model.maxTokens,16384)});
+        void configureModel({...provider,model:model.id,modelInfo:model,input:model.input,reasoning:model.reasoning,thinking:'off',contextWindow:model.contextWindow,maxTokens:Math.min(model.maxTokens,16384)});
       });
       list.appendChild(button);
     }
@@ -751,7 +819,7 @@ function openChat(initialConfig, options = {}) {
         if(state.modelDialogMode==='setup')selectDraftModel(model);
         else {
           const {profileId:_currentProfile,...provider}=state.activeConfig;
-          await configureModel({...provider,model:model.id,modelInfo:model,reasoning:model.reasoning,thinking:'off',contextWindow:model.contextWindow,maxTokens:Math.min(model.maxTokens,16384)});
+          await configureModel({...provider,model:model.id,modelInfo:model,input:model.input,reasoning:model.reasoning,thinking:'off',contextWindow:model.contextWindow,maxTokens:Math.min(model.maxTokens,16384)});
         }
       });
       list.appendChild(button);
@@ -795,6 +863,77 @@ function openChat(initialConfig, options = {}) {
     event.preventDefault();const items=[...byId('model-list').querySelectorAll('button')];const index=items.indexOf(root.activeElement);
     items[(index+(event.key==='ArrowDown'?1:items.length-1))%items.length]?.focus();
   });
+  let manualModels = [];
+  let manualDiscoveryVersion = 0;
+  let selectedManualModel = null;
+  function manualProvider() {
+    return byId('manual-model-provider').value === 'draft' ? draftProvider() : state.providers.find(item => item.id === byId('manual-model-provider').value);
+  }
+  function updateManualThinking() {
+    const model = agent.describeModel({...manualProvider(),model:byId('manual-model-id').value.trim(),modelInfo:selectedManualModel || {},reasoning:byId('manual-model-reasoning').checked});
+    renderThinking(byId('manual-model-thinking'),model,byId('manual-model-thinking').value || 'off');
+  }
+  function renderManualModels() {
+    const query = byId('manual-model-id').value.trim().toLowerCase();
+    const list = byId('manual-model-results');
+    list.replaceChildren();
+    const matches = manualModels.filter(item => (item.id+' '+item.name).toLowerCase().includes(query));
+    if (manualModels.length) byId('manual-model-status').textContent = matches.length ? `显示 ${matches.length} / ${manualModels.length} 个模型` : '没有匹配项，可直接添加此模型 ID';
+    for (const model of matches) {
+      const button = document.createElement('button');
+      button.type = 'button'; button.className = 'model-option'; button.textContent = model.id;
+      button.setAttribute('aria-current',String(model.id === selectedManualModel?.id));
+      button.addEventListener('click', () => {
+        selectedManualModel = model;
+        byId('manual-model-id').value = model.id;
+        byId('manual-model-reasoning').checked = model.reasoning;
+        byId('manual-model-vision').checked = model.input.includes('image');
+        updateManualThinking(); renderManualModels();
+      });
+      list.appendChild(button);
+    }
+  }
+  async function discoverManualModels(reset = false) {
+    const version = ++manualDiscoveryVersion;
+    manualModels = [];
+    if (reset) {
+      selectedManualModel = null;
+      byId('manual-model-id').value = '';
+      byId('manual-model-reasoning').checked = false;
+      byId('manual-model-vision').checked = false;
+      byId('manual-model-thinking').value = 'off';
+    }
+    renderManualModels(); updateManualThinking();
+    const provider = manualProvider();
+    byId('manual-model-form').querySelector('[type=submit]').disabled = !provider;
+    if (!provider) { byId('manual-model-status').textContent = '请先添加提供商'; return; }
+    byId('manual-model-discover').disabled = true;
+    byId('manual-model-status').textContent = '正在获取模型…';
+    try {
+      const result = await agent.discoverModels(provider);
+      if (version !== manualDiscoveryVersion) return;
+      manualModels = result.models;
+      byId('manual-model-status').textContent = result.source === 'catalog' ? `目录参考：${result.warning}` : `已获取 ${manualModels.length} 个模型`;
+      selectedManualModel = manualModels.find(model => model.id === byId('manual-model-id').value.trim()) || selectedManualModel;
+      if (selectedManualModel) { byId('manual-model-reasoning').checked = selectedManualModel.reasoning; byId('manual-model-vision').checked = selectedManualModel.input.includes('image'); updateManualThinking(); }
+      renderManualModels();
+      if (result.source === 'catalog') byId('manual-model-status').textContent = `目录参考：${result.warning}`;
+    } catch (error) {
+      if (version === manualDiscoveryVersion) byId('manual-model-status').textContent = error.message || '获取失败，可手动填写模型 ID';
+    } finally {
+      if (version === manualDiscoveryVersion) byId('manual-model-discover').disabled = false;
+    }
+  }
+  byId('manual-model-provider').addEventListener('change', () => void discoverManualModels(true));
+  byId('manual-model-discover').addEventListener('click', () => void discoverManualModels());
+  byId('manual-model-id').addEventListener('input', () => {
+    selectedManualModel = manualModels.find(model => model.id === byId('manual-model-id').value.trim()) || null;
+    byId('manual-model-reasoning').checked = selectedManualModel?.reasoning || false;
+    byId('manual-model-vision').checked = selectedManualModel?.input.includes('image') || false;
+    updateManualThinking(); renderManualModels();
+  });
+  byId('manual-model-reasoning').addEventListener('change',updateManualThinking);
+  byId('manual-add-provider').addEventListener('click', () => byId('add-provider').click());
   async function openManualModelForm() {
     state.providers=await agent.listProviders();
     const providers=state.modelDialogMode==='setup' ? [{id:'draft',...draftProvider()},...state.providers] : state.providers;
@@ -807,9 +946,8 @@ function openChat(initialConfig, options = {}) {
     byId('provider-form').hidden=true;
     byId('manual-model-form').hidden=false;
     byId('model-dialog-title').textContent='添加模型';
-    byId('manual-model-id').value='';
-    byId('manual-model-reasoning').checked=false;
     byId('manual-model-id').focus();
+    void discoverManualModels(true);
   }
   byId('model-dialog-manual').addEventListener('click',()=>void openManualModelForm());
   byId('manual-model-form').addEventListener('submit',async event=>{
@@ -817,18 +955,21 @@ function openChat(initialConfig, options = {}) {
     const model=byId('manual-model-id').value.trim();
     if(!model)return;
     const reasoning=byId('manual-model-reasoning').checked;
-    const provider=byId('manual-model-provider').value==='draft' ? draftProvider() : state.providers.find(item=>item.id===byId('manual-model-provider').value);
+    const input=byId('manual-model-vision').checked ? ['text','image'] : ['text'];
+    const provider=manualProvider();
+    if(!provider)return;
     if(state.modelDialogMode==='setup') {
       byId('api').value=provider.api;
       byId('base-url').value=provider.baseUrl;
       byId('api-key').value=provider.apiKey || '';
-      selectDraftModel(agent.describeModel({...provider,model,reasoning}));
+      selectDraftModel(agent.describeModel({...provider,model,modelInfo:selectedManualModel || {},reasoning,input}));
+      byId('thinking').value=byId('manual-model-thinking').value;
       closeModelDialog();
       return;
     }
     const {api,baseUrl,apiKey,headers,proxyUrl,proxyToken,providerName}=provider;
     closeModelDialog();
-    const config=Object.fromEntries(Object.entries({api,baseUrl,apiKey,headers,proxyUrl,proxyToken,providerName,model,reasoning,thinking:reasoning?'medium':'off'}).filter(([,value])=>value!==undefined));
+    const config=Object.fromEntries(Object.entries({api,baseUrl,apiKey,headers,proxyUrl,proxyToken,providerName,model,modelInfo:selectedManualModel || undefined,reasoning,input,thinking:byId('manual-model-thinking').value}).filter(([,value])=>value!==undefined));
     await configureModel(config);
   });
   byId('add-provider').addEventListener('click',()=>{
@@ -838,6 +979,8 @@ function openChat(initialConfig, options = {}) {
     byId('model-dialog-title').textContent='添加提供商';
     byId('provider-api').replaceChildren(...agent.apis().map(api=>new Option(api.name,api.id)));
     byId('provider-api').value=state.activeConfig?.api || 'openai-completions';
+    manualDiscoveryVersion++;
+    byId('provider-name').value='';
     byId('provider-url').value='';
     byId('provider-key').value='';
     byId('provider-error').hidden=true;
@@ -848,7 +991,7 @@ function openChat(initialConfig, options = {}) {
     const error=byId('provider-error');
     error.hidden=true;
     try {
-      const saved=await agent.saveProvider({api:byId('provider-api').value,baseUrl:byId('provider-url').value.trim(),apiKey:byId('provider-key').value.trim()});
+      const saved=await agent.saveProvider({providerName:byId('provider-name').value.trim(),api:byId('provider-api').value,baseUrl:byId('provider-url').value.trim(),apiKey:byId('provider-key').value.trim()});
       state.selectedProviderId=saved.id;
       await openManualModelForm();
     } catch(failure) {
@@ -863,10 +1006,88 @@ function openChat(initialConfig, options = {}) {
   byId('chat-thinking').addEventListener('change',()=>{
     if(!state.busy && state.activeConfig)void configureModel({...state.activeConfig,thinking:byId('chat-thinking').value});
   });
+  let attachments = [];
+  let readingAttachments = 0;
+  const composerDrafts = new Map();
+  function renderAttachments() {
+    byId('attachments').replaceChildren();
+    for (const file of attachments) {
+      const row = document.createElement('div'); row.className = 'attachment'; row.title = file.name;
+      if (file.part.type === 'image') {
+        row.classList.add('image');
+        const img = document.createElement('img'); img.src = `data:${file.part.mimeType};base64,${file.part.data}`; img.alt = file.name; row.append(img);
+      } else {
+        row.innerHTML = icon('page');
+        const text = document.createElement('span'),name = document.createElement('b'),size = document.createElement('small');
+        name.textContent = file.name; size.textContent = file.size < 1024 ? `${file.size} B` : file.size < 1048576 ? `${Math.ceil(file.size/1024)} KB` : `${(file.size/1048576).toFixed(1)} MB`;
+        text.append(name,size); row.append(text);
+      }
+      const remove = document.createElement('button'); remove.type = 'button'; remove.innerHTML = icon('close'); remove.setAttribute('aria-label',`移除 ${file.name}`);
+      remove.addEventListener('click', () => { attachments.splice(attachments.indexOf(file),1); renderAttachments(); });
+      row.append(remove); byId('attachments').append(row);
+    }
+    updateComposer();
+  }
+  async function addAttachments(files) {
+    const target = attachments;
+    const config = state.activeConfig;
+    readingAttachments++; updateComposer();
+    byId('attachment-error').textContent = '';
+    try {
+      for (const file of files) {
+        if (target.length >= 8 || file.size > 5*1024*1024 || target.reduce((size,item) => size+item.size,0)+file.size > 10*1024*1024) throw new Error('最多 8 个附件，单个不超过 5 MB，总计不超过 10 MB。');
+        let part;
+        if (['image/png','image/jpeg','image/webp','image/gif'].includes(file.type)) {
+          if (!agent.describeModel(config || {}).input.includes('image')) throw new Error('当前模型不支持图片，请先切换支持图片的模型。');
+          const data = await new Promise((resolve,reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result.split(',')[1]); reader.onerror = () => reject(new Error('无法读取图片。')); reader.readAsDataURL(file); });
+          part = {type:'image',mimeType:file.type,data};
+        } else {
+          if (!file.type.startsWith('text/') && !/\.(txt|md|csv|json|jsonl|log|js|mjs|cjs|ts|tsx|jsx|html|css|xml|yaml|yml|py|sh|sql|toml|ini|rs|go|java|c|h|cpp)$/i.test(file.name)) throw new Error(`${file.name}：暂不支持此格式，请使用文本、代码文件或图片。`);
+          let text;
+          try { text = new TextDecoder('utf-8',{fatal:true}).decode(await file.arrayBuffer()); }
+          catch { throw new Error(`${file.name}：请使用 UTF-8 编码的文本。`); }
+          if (text.includes('\0')) throw new Error(`${file.name} 不是文本文件。`);
+          part = {type:'text',text:`文件：${file.name}\n${text}`};
+        }
+        target.push({name:file.name,size:file.size,part});
+      }
+    } catch (error) { if (target === attachments) byId('attachment-error').textContent = error.message; }
+    finally { readingAttachments--; renderAttachments(); }
+  }
+  byId('attach').addEventListener('click', () => byId('attachment-input').click());
+  byId('attachment-input').addEventListener('change', event => { void addAttachments([...event.target.files]); event.target.value = ''; });
+  byId('message-input').addEventListener('paste', event => {
+    if (!event.clipboardData.files.length) return;
+    event.preventDefault(); void addAttachments([...event.clipboardData.files]);
+  });
+  byId('composer').addEventListener('dragover', event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); });
+  byId('composer').addEventListener('drop', event => { if (!event.dataTransfer.files.length) return; event.preventDefault(); event.stopPropagation(); void addAttachments([...event.dataTransfer.files]); });
+  function restoreComposerDraft() {
+    const draft = composerDrafts.get(agent.id);
+    byId('message-input').value = draft?.text || '';
+    attachments = draft?.attachments || [];
+    byId('attachment-error').textContent = '';
+    renderAttachments();
+  }
+  function renderUserContent(bubble, content) {
+    bubble.replaceChildren();
+    if (typeof content === 'string') { bubble.textContent = content; return; }
+    for (const [index,part] of content.entries()) {
+      if (part.type === 'image') {
+        const img = document.createElement('img'); img.className = 'message-image'; img.alt = '图片附件'; img.src = `data:${part.mimeType};base64,${part.data}`; bubble.append(img);
+      } else if (part.type === 'text') {
+        if (index && part.text.startsWith('文件：')) {
+          const details = document.createElement('details'); details.className = 'message-file';
+          const summary = document.createElement('summary'); summary.textContent = part.text.split('\n')[0];
+          const body = document.createElement('pre'); body.textContent = part.text.slice(part.text.indexOf('\n')+1); details.append(summary,body); bubble.append(details);
+        } else { const text = document.createElement('div'); text.textContent = part.text; bubble.append(text); }
+      }
+    }
+  }
   function updateComposer() {
     const input = byId('message-input');
-    byId('send').hidden = !input.value.trim();
-    byId('send').disabled = !state.connected;
+    byId('send').hidden = !input.value.trim() && !attachments.length;
+    byId('send').disabled = !state.connected || readingAttachments;
     byId('send').title = state.busy ? '排队发送，长按可选直接发送' : '发送消息';
     byId('send').setAttribute('aria-label', byId('send').title);
     input.style.height = 'auto';
@@ -1241,22 +1462,13 @@ function openChat(initialConfig, options = {}) {
     byId('content').hidden=false;
     byId('preferences').style.display='none';
     byId('setup-title').textContent='设置模型';
-    byId('setup').style.display = 'block';
+    byId('setup').style.display = 'flex';
     byId('chat').style.display = 'none';
     byId('settings').disabled = !agent;
     byId('back-chat').hidden = !state.connected;
     byId('new-chat').disabled = true;
   }
   const compactScreen = matchMedia('(max-width:760px)');
-  function updateSetupHint() {
-    if (options.mount) byId('setup').querySelector('.hint').textContent = compactScreen.matches
-      ? '设置保存在当前网站的浏览器中。'
-      : '保存后可直接开始对话。';
-  }
-  updateSetupHint();
-  compactScreen.addEventListener('change', () => {
-    updateSetupHint();
-  });
   function showChat() {
     closeModelMenu();
     byId('model-dialog').hidden=true;
@@ -1309,12 +1521,13 @@ function openChat(initialConfig, options = {}) {
       const current = existing.get(String(item.id));
       if (current) {
         current.querySelector('.queue-status span').textContent = item.mode === 'followUp' ? '排队中' : '直接发送';
-        if (!current.querySelector('.queue-edit')) current.querySelector('.bubble').textContent = item.text;
+        if (!current.querySelector('.queue-edit')) renderUserContent(current.querySelector('.bubble'),item.content);
         const promote = current.querySelector('[data-queue-action="promote"]');
         if (promote) promote.hidden = item.mode !== 'followUp';
         continue;
       }
       const row = message('human', item.text, false, true);
+      renderUserContent(row.querySelector('.bubble'),item.content);
       row.dataset.queueId = item.id;
       const status = document.createElement('div');
       status.className = 'queue-status';
@@ -1392,7 +1605,8 @@ function openChat(initialConfig, options = {}) {
         if (next?.kind === 'pi.assistant' && next.model?.some(item => item.role === 'assistant' && item.stopReason !== 'aborted')) continue;
       }
       const content = typeof model?.content === 'string' ? model.content : model?.content?.filter(item => item.type === 'text').map(item => item.text).join('\n');
-      if (content) message(entry.kind === 'pi.user' ? 'human' : 'ai', content, false);
+      if (entry.kind === 'pi.user' && model?.content) renderUserContent(message('human','',false).querySelector('.bubble'),model.content);
+      else if (content) message('ai', content, false);
     }
     showWelcome();
     await refreshQueuedMessages();
@@ -1503,20 +1717,23 @@ function openChat(initialConfig, options = {}) {
   async function send(mode = 'followUp') {
     const input = byId('message-input');
     const text = input.value.trim();
-    if (!text || !state.connected) return;
+    if ((!text && !attachments.length) || !state.connected || readingAttachments) return;
+    if (attachments.some(file => file.part.type === 'image') && !agent.describeModel(state.activeConfig).input.includes('image')) { byId('attachment-error').textContent = '当前模型不支持图片，请切换模型或移除图片。'; return; }
+    const content = attachments.length ? [{type:'text',text:text || '请查看附件。'},...attachments.map(file => file.part)] : text;
     const pi = agent;
     const chatId = pi?.id;
     if (!pi?.prompt) { message('system','Pi Tab 不可用，请重新点击书签。'); return; }
     input.value = '';
-    updateComposer();
-    if (!state.busy) message('human', text);
+    attachments = []; renderAttachments();
+    byId('attachment-error').textContent = '';
+    if (!state.busy) renderUserContent(message('human','').querySelector('.bubble'),content);
     console.log('human:', text);
     const wasBusy = state.busy;
     state.pendingByChat.set(chatId, (state.pendingByChat.get(chatId) || 0) + 1);
     state.pending = state.pendingByChat.get(chatId);
     if (!wasBusy) setBusy(true);
     try {
-      const result = await (wasBusy ? mode === 'followUp' ? pi.followUp(text) : pi.steer(text) : pi.prompt(text));
+      const result = await (wasBusy ? mode === 'followUp' ? pi.followUp(content) : pi.steer(content) : pi.prompt(content));
       const answer = result && String(result).trim() ? String(result) : '模型未返回文字回复。';
       if (agent.id === chatId) showFinalAnswer(answer);
       console.log('ai:', answer);
@@ -1651,6 +1868,7 @@ function openChat(initialConfig, options = {}) {
       thinking:byId('thinking').value,
       modelInfo:state.selectedModel?.id === byId('model').value.trim() ? state.selectedModel : undefined,
       reasoning:byId('reasoning-enabled').checked,
+      input:byId('vision-enabled').checked ? ['text','image'] : ['text'],
     };
     if (!config.apiKey && sameProvider(config, state.activeConfig)) config.apiKey = state.activeConfig.apiKey;
     if (config.baseUrl && config.model) void configureModel(config);
@@ -1710,7 +1928,9 @@ function openChat(initialConfig, options = {}) {
     closeChatMenu();
     byId('new-chat').disabled = true;
     try {
+      composerDrafts.set(agent.id,{text:byId('message-input').value,attachments});
       await agent.newChat();
+      restoreComposerDraft();
       rememberWindow();
       state.pending = state.pendingByChat.get(agent.id) || 0;
       state.activeConfig = await agent.savedConfig();
@@ -1738,7 +1958,9 @@ function openChat(initialConfig, options = {}) {
     byId('chat-switch').setAttribute('aria-expanded', 'false');
   }
   async function switchConversation(id) {
+    composerDrafts.set(agent.id,{text:byId('message-input').value,attachments});
     await agent.selectChat(id);
+    restoreComposerDraft();
     rememberWindow();
     state.pending = state.pendingByChat.get(agent.id) || 0;
     state.activeConfig = await agent.savedConfig();
@@ -1896,9 +2118,35 @@ function openChat(initialConfig, options = {}) {
       byId('preferences-error').hidden = true;
       byId('setup').style.display = 'none';
       byId('chat').style.display = 'none';
-      byId('preferences').style.display = 'block';
-      byId('setting-prompt').focus();
+      byId('preferences').style.display = 'flex';
+      byId('settings-general-tab').click();
+      byId('settings-general-tab').focus();
     });
+  });
+  const settingsTabs = [...root.querySelectorAll('.settings-tabs [role=tab]')];
+  for (const tab of settingsTabs) {
+    tab.addEventListener('click', () => {
+      for (const item of settingsTabs) {
+        const selected = item === tab;
+        item.setAttribute('aria-selected', String(selected));
+        item.tabIndex = selected ? 0 : -1;
+        byId(item.getAttribute('aria-controls')).hidden = !selected;
+      }
+      root.querySelector('.settings-body').scrollTop = 0;
+    });
+    tab.addEventListener('keydown', event => {
+      if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+      event.preventDefault();
+      const index = settingsTabs.indexOf(tab);
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? settingsTabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + settingsTabs.length) % settingsTabs.length;
+      settingsTabs[next].click(); settingsTabs[next].focus();
+    });
+  }
+  byId('restore-prompt').addEventListener('click', () => {
+    byId('setting-prompt').value = runtimePi.defaultPrompt;
+    byId('setting-prompt').focus();
+    byId('setting-prompt').setSelectionRange(0,0);
+    byId('setting-prompt').scrollTop = 0;
   });
   byId('preferences-back').addEventListener('click', () => state.connected ? showChat() : showSetup());
   byId('preferences').addEventListener('submit', async event => {
@@ -2189,7 +2437,7 @@ if (!PI_RUNTIME) {
       mount:document.getElementById('chat-preview'),
       onConfigCancel:generateBookmark,
       onConfigSaved(config) {
-        savedConfig = { api:config.api, baseUrl:config.baseUrl, apiKey:config.apiKey, model:config.model, thinking:config.thinking, reasoning:config.reasoning, modelInfo:config.modelInfo };
+        savedConfig = { api:config.api, baseUrl:config.baseUrl, apiKey:config.apiKey, model:config.model, thinking:config.thinking, reasoning:config.reasoning, input:config.input, modelInfo:config.modelInfo };
         generateBookmark();
       },
     });

@@ -12,6 +12,13 @@ test('thinking choices exactly follow the installed Pi catalog',()=>{
  for(const model of models)assert.deepEqual(service.describe({api:model.api,baseUrl:model.baseUrl,model:model.id,modelInfo:model}).thinkingLevels,getSupportedThinkingLevels(model));
  assert.deepEqual(service.describe({api:'openai-completions',model:'unknown-model'}).thinkingLevels,['off']);
 });
+test('discovered image capability can be saved and restored for custom models',async()=>{
+ const result=await service.discover({api:'openai-completions',baseUrl:'https://custom.invalid/v1'},{fetch:async()=>json({data:[{id:'vision',input:['text','image']}]})});
+ const model=result.models[0];
+ assert.deepEqual(model.input,['text','image']);
+ assert.deepEqual(service.describe({api:model.api,baseUrl:model.baseUrl,model:model.id,input:model.input}).input,['text','image']);
+ assert.deepEqual(service.describe({api:model.api,baseUrl:model.baseUrl,model:'plain'}).input,['text']);
+});
 test('model metadata belongs to the selected API and endpoint',()=>{
  const another=models.find(model=>model.reasoning);
  assert.ok(another);

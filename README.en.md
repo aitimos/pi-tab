@@ -26,7 +26,7 @@ At desktop widths, press `Enter` to send or `Shift+Enter` for a new line; use th
 
 The top **新对话** button starts a blank conversation in the current window. **新开窗口** opens another blank conversation with the same model configuration. You can switch conversations while tasks run; a ring on the right marks running conversations. To remove a conversation, click its trash icon, then **确认删除**. Stop running tasks first. Deleting the current conversation switches to another; deleting the last one creates a blank conversation.
 
-Windows support dragging, resizing, snapping to the left or right edge, and minimizing. Release position and drag velocity determine the docked side, which is preserved when the browser resizes. In **Pi 设置**, choose **跟随** (follow), **浅色** (light), or **深色** (dark). Follow is the default: it uses the page’s CSS color scheme or background, falling back to the browser or system preference. The same panel contains built-in instructions, automatic context compaction, retries, tool execution, and queue options. Model controls are below the composer.
+Windows support dragging, resizing, snapping to the left or right edge, and minimizing. Release position and drag velocity determine the docked side, which is preserved when the browser resizes. In **Pi 设置**, choose **跟随** (follow), **浅色** (light), or **深色** (dark). Follow is the default: it uses the page’s CSS color scheme or background, falling back to the browser or system preference. Settings are grouped into General, Instructions, and Execution, with a fixed save button. They include a restore-built-in-instructions action, automatic context compaction, retries, tool execution, and queue options. Model controls are below the composer.
 
 ## Install the Chrome extension
 
@@ -44,11 +44,17 @@ Use a model that supports tool calling. Enter the API address and model name sup
 
 API types, endpoint suggestions, model metadata, and thinking levels come from the installed Pi SDK. Models are fetched from your service automatically. Retry with **获取模型** (Fetch models), or enter a model ID manually. Models labeled **目录参考** come from Pi's catalog and are not confirmed available for your account.
 
-The lightweight model dropdown below the composer lists saved models and discovered models from the current provider. Choose **添加模型** (Add model) or **添加提供商** (Add provider) to configure them inside the window. Providers store the API type, URL, and key; models link to a provider and store the model ID and thinking settings. Changing models preserves the conversation. Model and thinking changes are disabled while that conversation runs, but you can switch conversations. Only supported thinking levels are listed; unknown models can have reasoning enabled manually. New conversations inherit the source conversation's model and thinking settings; there is no separate global default-model setting.
+The lightweight model dropdown below the composer lists saved models and discovered models from the current provider. Choose **添加模型** (Add model) or **添加提供商** (Add provider) to configure them inside the window. Providers store a name, API type, URL, and key. Adding a model reuses a provider and offers model discovery, search, or a manually entered ID, with its own thinking settings. Changing models preserves the conversation. Model and thinking changes are disabled while that conversation runs, but you can switch conversations. Only supported thinking levels are listed; unknown models can have reasoning enabled manually. New conversations inherit the source conversation's model and thinking settings; there is no separate global default-model setting.
 
 `google-vertex` uses a Vertex Express API key; `bedrock-converse-stream` uses a Bedrock API key; `openai-codex-responses` needs a valid Codex OAuth access token. Obtain credentials from the respective service; this page does not perform OAuth login or refresh.
 
 The bookmark contains all the code and does not download external scripts at runtime. Model requests still connect to the API you configure.
+
+## Files and images
+
+Use the attachment button, drop files into the composer, or paste images. Supported formats are UTF-8 text, source code, Markdown, JSON, CSV, and PNG/JPEG/WebP/GIF images. Images require a vision-capable model; custom models can enable image input under Model capabilities when the service supports it. PDF, Word, Excel, audio/video, and archives are not parsed.
+
+Up to 8 attachments are allowed, with 5 MB per file and 10 MB total. Attachments are sent to the configured model service and saved with sent messages. Editing a queued message preserves its attachments. Switching conversations within a window retains separate drafts and pending attachments; unsent drafts do not survive a page reload.
 
 ## Conversation storage and recovery
 
