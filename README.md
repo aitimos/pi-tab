@@ -86,3 +86,7 @@ npm run build
 Pull Request 和 main 分支推送会自动构建并运行测试。发布时同步更新 `package.json`、`package-lock.json`、`extension/manifest.json` 的版本及 `CHANGELOG.md`，提交后推送对应的 `vX.Y.Z` 标签。GitHub Actions 验证版本一致、测试通过后，自动发布 Release，上传 `pi-tab-extension.zip` 和独立安装页。安装页的下载按钮始终指向最新 Release。
 
 加载未打包扩展的用户需要替换原目录文件，在 `chrome://extensions` 重新加载，再刷新网页；GitHub Release 不会自动更新浏览器中已安装的扩展。
+
+## 许可证
+
+本项目采用 [MIT License](LICENSE)。

@@ -133,6 +133,38 @@ try {
     const history=await evaluate(`chrome.runtime.sendMessage({target:'engine',site:'127.0.0.1',method:'agent',chatId:${created.id},name:'history'})`);
     assert.equal(history.ok,true);assert.equal(history.value.entries.length,0);
   });
+  await browser('tab','t1');
+  await click('settings');
+  await browser('wait','--fn',`${root}.getElementById('preferences').style.display==='block'`);
+  await check('theme belongs to settings and applies immediately',async()=>{
+    assert.equal(await evaluate(`${root}.getElementById('theme').closest('form').id`),'preferences');
+    const theme=await evaluate(`${root}.getElementById('shell').dataset.theme`);
+    const next=theme==='light'?'dark':'light';
+    await evaluate(`(()=>{const select=${root}.getElementById('theme');select.value='${next}';select.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+    assert.equal(await evaluate(`${root}.getElementById('shell').dataset.theme`),next);
+    assert.equal(await evaluate(`localStorage.getItem('pi-tab-theme')`),next);
+  });
+  await evaluate(`${root}.getElementById('preferences-back').scrollIntoView({block:'nearest'})`);
+  await click('preferences-back');
+  assert.equal(await evaluate(`${root}.getElementById('preferences').style.display`),'none');
+  await click('chat-switch');
+  await check('conversation menu contains only conversations',async()=>{
+    assert.equal(await evaluate(`${root}.getElementById('chat-list').children.length`),1);
+    assert.equal(await evaluate(`${root}.getElementById('chat-entries').children.length`),afterChats.value.length);
+  });
+  const backgroundChat=afterChats.value.find(chat=>!beforeChats.value.some(old=>old.id===chat.id));
+  // Inject runtime boundary events to verify background-session UI updates.
+  for(const type of ['run_start','run_end']) {
+    await browser('tab','t2');
+    await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});await chrome.tabs.sendMessage(tab.id,{type:'engine-event',event:{type:'${type}',conversationId:${JSON.stringify(backgroundChat.id)}}});})()`);
+    await browser('tab','t1');
+    await check(`background conversation indicator follows ${type}`,async()=>{
+      const indicators=await evaluate(`[...${root}.querySelectorAll('#chat-entries button')].map(row=>({id:row.dataset.chatId,running:!row.querySelector('.chat-running').hidden}))`);
+      assert.equal(indicators.find(row=>row.id===String(backgroundChat.id)).running,type==='run_start');
+      assert.ok(indicators.filter(row=>row.id!==String(backgroundChat.id)).every(row=>!row.running));
+    });
+    if(type==='run_start')await browser('screenshot',join(directory,'conversation-running.png'));
+  }
   console.log(`Screenshot: ${join(directory,'window.png')}`);
 } finally {
   await browser('close').catch(()=>{});

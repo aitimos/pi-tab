@@ -157,7 +157,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
   async function listChats() {
     await pi.ready; ensureOpen();
     const state = await harness.snapshot(TabState, ctx);
-    return (state?.chats ?? []).map(chat => ({ ...chat, active: chat.id === conversation.id }));
+    return (state?.chats ?? []).map(chat => ({ ...chat, active: chat.id === conversation.id, busy: pi.busyFor(chat.id) }));
   }
 
   async function selectChat(id) {

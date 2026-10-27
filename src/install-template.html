@@ -237,9 +237,12 @@ function openChat(initialConfig, options = {}) {
     #chat-entries { display:flex; flex-direction:column; gap:4px; }
     #chat-list button { display:block; width:100%; padding:9px 10px; background:transparent; border:0; border-radius:6px; color:var(--text); text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; }
     #chat-list button:hover:not(:disabled),#chat-list button[aria-current=true] { background:var(--raised); }
-    #chat-list .menu-divider { height:.5px; margin:6px 4px; background:var(--line); }
-    #chat-list .menu-action { display:flex; align-items:center; gap:10px; }
-    #chat-list .menu-action svg { width:16px; height:16px; color:var(--muted); }
+    #chat-entries button { display:flex; align-items:center; gap:12px; min-height:40px; }
+    .chat-title { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .chat-running { display:flex; flex:none; color:var(--muted); }
+    .chat-running svg { width:16px; height:16px; animation:chat-running 1s linear infinite; }
+    @keyframes chat-running { to { transform:rotate(360deg); } }
+    @media(prefers-reduced-motion:reduce) { .chat-running svg { animation:none; } }
     #resize-handle { position:absolute; right:0; bottom:0; width:20px; height:20px; border:0; background:transparent; cursor:nwse-resize; touch-action:none; }
     #resize-handle::after { content:''; position:absolute; right:5px; bottom:5px; width:8px; height:8px; border-right:.5px solid var(--muted); border-bottom:.5px solid var(--muted); }
     #shell.embedded #resize-handle,#shell.minimized #resize-handle { display:none; }
@@ -380,8 +383,6 @@ function openChat(initialConfig, options = {}) {
     </header>
     <div id="chat-list" aria-label="对话菜单">
       <div id="chat-entries"></div>
-      <div class="menu-divider"></div>
-      <button class="menu-action" id="theme" type="button">◐<span>切换主题</span></button>
     </div>
     <div id="content">
       <form id="setup" autocomplete="off">
@@ -424,6 +425,7 @@ function openChat(initialConfig, options = {}) {
       </section>
       <form id="preferences" aria-label="Pi 设置">
         <h2>Pi 设置</h2>
+        <label><span>主题</span><select id="theme"><option value="light">浅色</option><option value="dark">深色</option></select></label>
         <label><span>指令</span><textarea id="setting-prompt" maxlength="12000"></textarea></label>
         <label class="setting-check"><input id="setting-compact" type="checkbox" checked>自动压缩上下文</label>
         <label><span>模型失败后重试</span><select id="setting-retries"><option value="0">不重试</option><option value="1">1 次</option><option value="2">2 次</option><option value="3">3 次</option></select></label>
@@ -1425,7 +1427,14 @@ function openChat(initialConfig, options = {}) {
     if (state.unsubscribe) state.unsubscribe();
     const pi = agent;
     if (!pi || typeof pi.onEvent !== 'function') return;
-    state.unsubscribe = pi.onEvent(event => {
+    state.unsubscribe = runtimePi.onEvent(event => {
+      if (event.type === 'run_start' || event.type === 'run_end' || event.type === 'snapshot') {
+        const running = event.type === 'run_start' || (event.type === 'snapshot' && Boolean(event.snapshot?.run));
+        for (const row of byId('chat-entries').children) {
+          if (row.dataset.chatId === String(event.conversationId)) row.querySelector('.chat-running').hidden = !running;
+        }
+      }
+      if (event.conversationId !== pi.id) return;
       if (event.type === 'agent_created') {
         if (![...manager.instances.values()].some(instance => instance.id === event.agentId)) openChat(undefined, { forceNew:true, chatId:event.agentId });
         return;
@@ -1711,7 +1720,18 @@ function openChat(initialConfig, options = {}) {
     for (const chat of agent ? await agent.listChats() : []) {
       const button = document.createElement('button');
       button.type = 'button';
-      button.textContent = chat.title === '新对话' ? `对话 ${++untitled}` : chat.title;
+      button.dataset.chatId = String(chat.id);
+      const title = document.createElement('span');
+      title.className = 'chat-title';
+      title.textContent = chat.title === '新对话' ? `对话 ${++untitled}` : chat.title;
+      const running = document.createElement('span');
+      running.className = 'chat-running';
+      running.setAttribute('role', 'img');
+      running.setAttribute('aria-label', '正在运行');
+      running.title = '正在运行';
+      running.hidden = !chat.busy;
+      running.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6" opacity=".2"/><path d="M8 2a6 6 0 0 1 6 6" stroke-linecap="round"/></svg>';
+      button.append(title, running);
       button.title = chat.title;
       button.setAttribute('aria-current', String(chat.active));
       button.addEventListener('click', async () => {
@@ -1747,11 +1767,15 @@ function openChat(initialConfig, options = {}) {
   const themeKey = 'pi-tab-theme';
   const savedTheme = localStorage.getItem(themeKey);
   shell.dataset.theme = savedTheme === 'light' || savedTheme === 'dark' ? savedTheme : matchMedia('(prefers-color-scheme:dark)').matches ? 'dark' : 'light';
-  byId('theme').addEventListener('click', () => {
-    const theme = shell.dataset.theme === 'dark' ? 'light' : 'dark';
+  byId('theme').value = shell.dataset.theme;
+  byId('theme').addEventListener('change', () => {
+    const theme = byId('theme').value;
     for (const overlay of document.querySelectorAll('[data-pi-overlay]')) {
       const otherShell = overlay.shadowRoot?.getElementById('shell');
-      if (otherShell) otherShell.dataset.theme = theme;
+      if (otherShell) {
+        otherShell.dataset.theme = theme;
+        overlay.shadowRoot.getElementById('theme').value = theme;
+      }
     }
     localStorage.setItem(themeKey, theme);
     if (options.mount) document.documentElement.dataset.theme = theme;
@@ -1768,6 +1792,7 @@ function openChat(initialConfig, options = {}) {
     if (state.busy || state.configuring) return;
     closeChatMenu();
     void runtimePi.getPreferences().then(saved => {
+      byId('theme').value = shell.dataset.theme;
       byId('setting-prompt').value = saved.systemPrompt || runtimePi.defaultPrompt;
       byId('setting-compact').checked = saved.autoCompact ?? true;
       byId('setting-retries').value = String(saved.maxRetries ?? 0);

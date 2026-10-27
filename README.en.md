@@ -86,3 +86,7 @@ If your model API does not allow CORS, run `npm start` to start the local relay.
 Pull requests and pushes to main build and test the extension. To release, update the versions in `package.json`, `package-lock.json`, and `extension/manifest.json`, add a `CHANGELOG.md` entry, commit, then push the matching `vX.Y.Z` tag. GitHub Actions checks the versions, builds and tests, then publishes the extension ZIP and standalone installer together. The installer download button points to the latest Release.
 
 Unpacked extensions require replacing the files in the original directory, reloading in `chrome://extensions`, and refreshing the webpage. GitHub Releases do not automatically update installed browser extensions.
+
+## License
+
+Licensed under the [MIT License](LICENSE).
