@@ -89,4 +89,4 @@ Pull Request 和 main 分支推送会自动构建并运行测试。发布时同�
 
 ## 许可证
 
-本项目采用 [MIT License](LICENSE)。
+本项目采用 [Apache License 2.0](LICENSE)。

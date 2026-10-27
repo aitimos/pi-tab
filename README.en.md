@@ -89,4 +89,4 @@ Unpacked extensions require replacing the files in the original directory, reloa
 
 ## License
 
-Licensed under the [MIT License](LICENSE).
+Licensed under the [Apache License 2.0](LICENSE).

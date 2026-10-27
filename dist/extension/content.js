@@ -556,7 +556,7 @@ function openChat(initialConfig, options = {}) {
       <div id="mark" aria-hidden="true">${piIcon()}</div>
       <div id="brand"><strong>Pi Tab</strong><small id="status" role="status">正在启动…</small></div>
       <nav class="actions" aria-label="项目链接">
-        <a class="icon-button github-link" href="https://github.com/xred-team/pi-in-browser" target="_blank" rel="noopener noreferrer" title="在 GitHub 给 Pi Tab 点 Star" aria-label="在 GitHub 给 Pi Tab 点 Star">${icon('github')}</a>
+        <a class="icon-button github-link" href="https://github.com/aitimos/pi-tab" target="_blank" rel="noopener noreferrer" title="在 GitHub 给 Pi Tab 点 Star" aria-label="在 GitHub 给 Pi Tab 点 Star">${icon('github')}</a>
       </nav>
       <nav class="actions window-actions" aria-label="对话和窗口操作">
         <button class="icon-button" id="new-chat" type="button" title="新对话" aria-label="新对话" disabled>${icon('plus')}</button>
@@ -1036,7 +1036,7 @@ function openChat(initialConfig, options = {}) {
     if (list.children.length) return;
     const welcome = document.createElement('div');
     welcome.id = 'welcome';
-    welcome.innerHTML = `<div class="welcome-mark" aria-hidden="true">${piIcon()}</div><h2>需要我做什么？</h2><a class="github-link github-star" href="https://github.com/xred-team/pi-in-browser" target="_blank" rel="noopener noreferrer" aria-label="在 GitHub 给 Pi Tab 点 Star">${icon('github')}在 GitHub 点 Star ↗</a>`;
+    welcome.innerHTML = `<div class="welcome-mark" aria-hidden="true">${piIcon()}</div><h2>需要我做什么？</h2><a class="github-link github-star" href="https://github.com/aitimos/pi-tab" target="_blank" rel="noopener noreferrer" aria-label="在 GitHub 给 Pi Tab 点 Star">${icon('github')}在 GitHub 点 Star ↗</a>`;
     list.appendChild(welcome);
   }
   function refreshPageContext() {

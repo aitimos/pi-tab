@@ -83,6 +83,7 @@ await writeFile('dist/pi-bookmarklet-install.html', builtHtml);
 await rm('dist/extension', { recursive: true, force: true });
 await mkdir('dist/extension', { recursive: true });
 await writeFile('dist/extension/LICENSE', await readFile('LICENSE'));
+await writeFile('dist/extension/NOTICE', await readFile('NOTICE'));
 await writeFile('dist/extension/manifest.json', await readFile('extension/manifest.json'));
 await writeFile('dist/extension/worker.js', await readFile('src/extension-worker.js'));
 const extensionBootstrap = await readFile('src/extension-content.js', 'utf8');
@@ -123,7 +124,7 @@ await writeFile('dist/extension/icon.png', Buffer.concat([
   Buffer.from('89504e470d0a1a0a', 'hex'), pngChunk('IHDR', header), pngChunk('IDAT', deflateSync(rows)), pngChunk('IEND', Buffer.alloc(0)),
 ]));
 
-const extensionFiles = ['LICENSE', 'manifest.json', 'worker.js', 'content.js', 'engine.html', 'engine.js', 'icon.png'];
+const extensionFiles = ['LICENSE', 'NOTICE', 'manifest.json', 'worker.js', 'content.js', 'engine.html', 'engine.js', 'icon.png'];
 const localParts = [], centralParts = [];
 let offset = 0;
 for (const filename of extensionFiles) {

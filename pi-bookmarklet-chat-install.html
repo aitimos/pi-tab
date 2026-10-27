@@ -43,7 +43,7 @@ body>header,body>main,body>footer{position:relative;z-index:1}
 </head>
 <body>
 <svg id="drag-to-bar" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path id="drag-path"/><path id="drag-head"/><text id="drag-label">拖到书签栏</text></svg>
-<header class="site-header wrap"><div class="brand"><span class="brand-mark" aria-hidden="true"><svg class="pi-icon" viewBox="0 0 4 4" shape-rendering="crispEdges" aria-hidden="true"><path fill="#e48a7a" d="M0 0h3v1H0zM2 1h1v1H2z"/><path fill="#4f8eb3" d="M0 1h1v3H0zM1 2h1v1H1z"/><path fill="#eab65d" d="M3 2h1v2H3z"/></svg></span>Pi Tab</div><nav class="header-nav" aria-label="相关链接"><button id="site-theme" class="theme-toggle" type="button" title="切换浅色和深色" aria-label="切换浅色和深色">◐</button><a class="header-link" href="#help">使用帮助</a><a class="header-link" href="https://github.com/xred-team/pi-in-browser" target="_blank" rel="noopener noreferrer">GitHub ↗</a></nav></header>
+<header class="site-header wrap"><div class="brand"><span class="brand-mark" aria-hidden="true"><svg class="pi-icon" viewBox="0 0 4 4" shape-rendering="crispEdges" aria-hidden="true"><path fill="#e48a7a" d="M0 0h3v1H0zM2 1h1v1H2z"/><path fill="#4f8eb3" d="M0 1h1v3H0zM1 2h1v1H1z"/><path fill="#eab65d" d="M3 2h1v2H3z"/></svg></span>Pi Tab</div><nav class="header-nav" aria-label="相关链接"><button id="site-theme" class="theme-toggle" type="button" title="切换浅色和深色" aria-label="切换浅色和深色">◐</button><a class="header-link" href="#help">使用帮助</a><a class="header-link" href="https://github.com/aitimos/pi-tab" target="_blank" rel="noopener noreferrer">GitHub ↗</a></nav></header>
 <main class="wrap">
 <div class="hero"><h1>Pi Agent</h1><p class="desktop-intro">把 Pi Tab 拖到书签栏，让 AI 帮你总结内容、整理表格和操作页面。</p><p class="mobile-intro">填写模型信息，直接开始对话。</p></div>
 <div class="layout">
@@ -404,7 +404,7 @@ function openChat(initialConfig, options = {}) {
       <div id="mark" aria-hidden="true">${piIcon()}</div>
       <div id="brand"><strong>Pi Tab</strong><small id="status" role="status">正在启动…</small></div>
       <nav class="actions" aria-label="项目链接">
-        <a class="icon-button github-link" href="https://github.com/xred-team/pi-in-browser" target="_blank" rel="noopener noreferrer" title="在 GitHub 给 Pi Tab 点 Star" aria-label="在 GitHub 给 Pi Tab 点 Star">${icon('github')}</a>
+        <a class="icon-button github-link" href="https://github.com/aitimos/pi-tab" target="_blank" rel="noopener noreferrer" title="在 GitHub 给 Pi Tab 点 Star" aria-label="在 GitHub 给 Pi Tab 点 Star">${icon('github')}</a>
       </nav>
       <nav class="actions window-actions" aria-label="对话和窗口操作">
         <button class="icon-button" id="new-chat" type="button" title="新对话" aria-label="新对话" disabled>${icon('plus')}</button>
@@ -884,7 +884,7 @@ function openChat(initialConfig, options = {}) {
     if (list.children.length) return;
     const welcome = document.createElement('div');
     welcome.id = 'welcome';
-    welcome.innerHTML = `<div class="welcome-mark" aria-hidden="true">${piIcon()}</div><h2>需要我做什么？</h2><a class="github-link github-star" href="https://github.com/xred-team/pi-in-browser" target="_blank" rel="noopener noreferrer" aria-label="在 GitHub 给 Pi Tab 点 Star">${icon('github')}在 GitHub 点 Star ↗</a>`;
+    welcome.innerHTML = `<div class="welcome-mark" aria-hidden="true">${piIcon()}</div><h2>需要我做什么？</h2><a class="github-link github-star" href="https://github.com/aitimos/pi-tab" target="_blank" rel="noopener noreferrer" aria-label="在 GitHub 给 Pi Tab 点 Star">${icon('github')}在 GitHub 点 Star ↗</a>`;
     list.appendChild(welcome);
   }
   function refreshPageContext() {
