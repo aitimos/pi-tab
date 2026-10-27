@@ -118,10 +118,12 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
     }
     if(message.type==='tabs-open'){
       const url=new URL(message.url);
-      siteOf(url.href);
-      const tab=await chrome.tabs.create({url:url.href,active:false});
+      const site=siteOf(url.href);
+      const tab=await chrome.tabs.create({url:'about:blank',active:false});
+      const chatId=await engineCall(site,tab.id,'createChat',site===message.sourceSite?[message.fromChatId]:[]);
       await chrome.storage.session.set({[activeKey(tab.id)]:true});
-      return {tabId:tab.id,url:tab.url,loading:true};
+      await chrome.tabs.update(tab.id,{url:url.href});
+      return {tabId:tab.id,chatId,url:url.href,loading:true};
     }
     if(message.type==='tabs-send'||message.type==='tabs-read'){
       const tab=await chrome.tabs.get(message.tabId);

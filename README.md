@@ -36,7 +36,9 @@ Pi Tab 基于 Pi Durable，在浏览器中运行 Pi Agent。通过书签注入�
 2. 打开 `chrome://extensions`，开启开发者模式，点击“加载已解压的扩展程序”，选择解压后的 `pi-tab-extension` 文件夹。
 3. 打开普通网页，点击工具栏中的 Pi Tab 图标启用当前标签页。填写模型信息后即可使用。已启用的标签页刷新后会自动恢复。
 
-扩展提供 `tab_list`、`tab_open`、`tab_send`、`tab_read` 工具，agent 可以打开新标签页，给其中的 agent 发任务并读取结果。会话按完整域名（hostname）保存，例如 `www.bilibili.com` 下的不同路径、查询参数和标签页共享列表；`search.bilibili.com` 则是另一组会话。模型和提供商配置在各网站之间共享。扩展访问普通 HTTP 和 HTTPS 网页，不支持浏览器内部页面、扩展商店等禁止注入的页面，也不支持本地 `file://` 页面。
+书签模式的 `agent_spawn` 沿用当前页面，只创建新会话；即使已安装扩展，点击书签打开的会话也不会获得扩展工具。跨标签页协作请点击 Chrome 工具栏里的 Pi Tab 图标。
+
+扩展提供 `tab_list`、`tab_open`、`tab_send`、`tab_read` 工具。`tab_open` 打开新标签页并创建独立会话，返回 `tabId` 和 `chatId`，包括同域标签页；agent 可用这两个 ID 发送任务并读取结果。会话按完整域名（hostname）保存，例如 `www.bilibili.com` 下的不同路径、查询参数和标签页共享列表；`search.bilibili.com` 则是另一组会话。模型和提供商配置在各网站之间共享。扩展访问普通 HTTP 和 HTTPS 网页，不支持浏览器内部页面、扩展商店等禁止注入的页面，也不支持本地 `file://` 页面。
 
 ## 模型怎么填
 
@@ -102,7 +104,7 @@ npm test
 
 插件源码入口为 `src/plugin.js`，安装页源码为 `src/install-template.html`。构建生成 `dist/` 下的 Console 插件、书签安装页、Chrome 扩展文件夹和 ZIP，并更新根目录聊天安装页的内嵌运行时和 Pi 模型目录。`npm test` 覆盖模型发现、接口请求、思考能力、书签打包和扩展消息路由。
 
-扩展窗口回归测试使用独立的 Chrome for Testing 和 `agent-browser`。构建后，设置 `PI_TAB_TEST_CHROME` 为 Chrome for Testing 可执行文件的完整路径，再运行 `npm run test:extension`，验证配置、模型搜索、设置分组、附件请求与历史恢复、排队消息、窗口操作、会话创建与删除、运行状态、主题和重复注入。该脚本不代替真实模型服务的端到端验收。
+扩展窗口回归测试使用独立的 Chrome for Testing 和 `agent-browser`。构建后，设置 `PI_TAB_TEST_CHROME` 为 Chrome for Testing 可执行文件的完整路径，再运行 `npm run test:extension`，验证配置、模型搜索、设置分组、附件请求与历史恢复、排队消息、窗口操作、会话创建与删除、运行状态、主题和重复注入。`npm run test:tabs` 通过本地模型协议服务驱动真实工具调用，验证同域及跨域的打开、列举、发消息、页面执行和结果读取；模型请求中也会检查工具列表。这些脚本不代替真实模型服务的端到端验收。
 
 如果模型接口没有开放 CORS，可以运行 `npm start` 启动本机转发服务，再在当前网页的 Console 中将终端打印的 `proxyUrl` 和 `proxyToken` 传给 `pi.configure()`。页面仍需允许连接本机地址。
 

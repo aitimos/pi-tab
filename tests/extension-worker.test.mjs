@@ -25,6 +25,7 @@ test('extension shares one site engine across paths and tabs, routes tasks and p
       onRemoved:{addListener(){}},onUpdated:{addListener(){}},
       query:async()=>[...tabs.values()],get:async id=>tabs.get(id),
       create:async({url})=>{const tab={id:13,url,title:'New'};tabs.set(tab.id,tab);return tab;},
+      update:async(id,change)=>{Object.assign(tabs.get(id),change);return tabs.get(id);},
       sendMessage:async(id,message)=>{
         pageCalls.push({id,message});
         if(missingReceiver)throw new Error('Could not establish connection. Receiving end does not exist.');
@@ -38,6 +39,7 @@ test('extension shares one site engine across paths and tabs, routes tasks and p
       onMessage:{addListener:listener=>{onMessage=listener;}},
       sendMessage:async message=>{
         engineCalls.push(message);
+        if(message.method==='createChat')return {ok:true,value:7};
         if(message.method==='listChats')return {ok:true,value:[{id:1,title:'Shared'}]};
         if(message.method==='readAgent')return {ok:true,value:[{kind:'pi.assistant',text:'完成'}]};
         if(message.method==='receiveFromTab')return {ok:true,value:{queued:true}};
@@ -68,7 +70,11 @@ test('extension shares one site engine across paths and tabs, routes tasks and p
   assert.equal(engineCalls.at(-1).site,engineCalls.at(-2).site);
   assert.equal(engineCalls.at(-1).tabId,11);
   assert.equal((await send({type:'tabs-list'})).value.tabs.length,3);
-  assert.equal((await send({type:'tabs-open',url:'https://new.example/'})).value.tabId,13);
+  const opened=(await send({type:'tabs-open',url:'https://new.example/'})).value;
+  assert.equal(opened.tabId,13);assert.equal(opened.chatId,7);
+  assert.equal(tabs.get(13).url,'https://new.example/');
+  assert.equal(engineCalls.at(-1).method,'createChat');
+  assert.equal(engineCalls.at(-1).tabId,13);
   assert.equal((await send({type:'tabs-open',url:'javascript:alert(1)'})).ok,false);
   assert.equal((await send({type:'tabs-send',tabId:11,chatId:1,text:'检查页面',fromChatId:5})).value.queued,true);
   assert.equal(engineCalls.at(-1).method,'receiveFromTab');

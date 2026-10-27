@@ -65,7 +65,7 @@ test('tab tools preserve background errors',async()=>{
   const {tools,setFailure}=await engineFixture();
   setFailure('Tab is unavailable');
   await assert.rejects(()=>tools.get('tab_list').execute({}),/Tab is unavailable/);
-  await assert.rejects(()=>tools.get('tab_open').execute({url:'https://example.com'}),/Tab is unavailable/);
+  await assert.rejects(()=>tools.get('tab_open').execute({url:'https://example.com'},{conversationId:1}),/Tab is unavailable/);
 });
 
 

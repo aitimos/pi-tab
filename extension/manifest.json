@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Pi Tab",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "description": "在网页中运行可恢复的 Pi agent，并在标签页之间协作。",
   "icons": { "128": "icon.png" },
   "permissions": ["tabs", "storage", "offscreen", "scripting"],

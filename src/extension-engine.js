@@ -39,8 +39,8 @@ async function engineFor(site) {
     }
     pi.registerTool({ name:'tab_list', description:'列出已启用 Pi Tab 的标签页及其 agent。', replay:'safe', parameters:pi.Type.Object({}),
       execute: async () => (await background({ type:'tabs-list' })).tabs });
-    pi.registerTool({ name:'tab_open', description:'打开新标签页并启动 Pi Tab。', parameters:pi.Type.Object({url:pi.Type.String()}),
-      execute: async ({url}) => background({type:'tabs-open',url}) });
+    pi.registerTool({ name:'tab_open', description:'打开新标签页并创建独立 agent，返回 tabId 和 chatId；用 tab_send 向它发送任务。', parameters:pi.Type.Object({url:pi.Type.String()}),
+      execute: async ({url},api) => background({type:'tabs-open',url,sourceSite:site,fromChatId:api.conversationId}) });
     pi.registerTool({ name:'tab_send', description:'向另一标签页的 agent 发送任务。先用 tab_list 查找。', parameters:pi.Type.Object({tabId:pi.Type.Integer(),chatId:pi.Type.Integer(),message:pi.Type.String()}),
       execute: async ({tabId,chatId,message},api) => {
         return background({type:'tabs-send',tabId,chatId,text:message,fromChatId:api.conversationId});
@@ -81,8 +81,9 @@ chrome.runtime.onMessage.addListener((message, _sender, respond) => {
     const {pi,targets,bindTarget} = await engineFor(message.site);
     const {method,chatId,args=[],tabId} = message;
     if (method === 'initialize') {
-      bindTarget(pi.conversation.id, tabId);
-      return {activeId:pi.conversation.id,config:pi.config,defaultPrompt:pi.defaultPrompt,
+      const activeId=[...targets].find(([,target])=>target===tabId)?.[0]??pi.conversation.id;
+      bindTarget(activeId, tabId);
+      return {activeId,config:pi.configFor(activeId),defaultPrompt:pi.defaultPrompt,
         chats:(await pi.listChats()).map(chat=>({...chat,busy:pi.busyFor(chat.id),config:pi.configFor(chat.id)}))};
     }
     if (method === 'bind') { bindTarget(chatId,tabId); return {config:pi.configFor(chatId),busy:pi.busyFor(chatId)}; }

@@ -36,7 +36,9 @@ Use the extension when you want active tasks to resume automatically after a rel
 2. Open `chrome://extensions`, enable Developer mode, click **Load unpacked**, and select the extracted `pi-tab-extension` folder.
 3. On a regular webpage, click the Pi Tab toolbar icon to enable that tab. Configure a model and start working. The tab will restore automatically after a reload.
 
-The extension provides `tab_list`, `tab_open`, `tab_send`, and `tab_read` tools. An agent can open another tab, send its agent a task, and read the result. Conversations are grouped by exact hostname: paths, query parameters, and tabs on `www.bilibili.com` share a list, while `search.bilibili.com` has a separate list. Saved models and providers are shared across websites. The extension supports ordinary HTTP and HTTPS pages, not browser internal pages, extension stores or other pages that prohibit injection, or local `file://` pages.
+Bookmark mode uses `agent_spawn` to create a conversation on the same page. Installing the extension does not add extension tools to a bookmark session; start from the Chrome toolbar icon for cross-tab work.
+
+The extension provides `tab_list`, `tab_open`, `tab_send`, and `tab_read`. `tab_open` opens a new tab with its own conversation, including on the same hostname, and returns `tabId` and `chatId` for sending tasks and reading results. Conversations are grouped by exact hostname: paths, query parameters, and tabs on `www.bilibili.com` share a list, while `search.bilibili.com` has a separate list. Saved models and providers are shared across websites. The extension supports ordinary HTTP and HTTPS pages, not browser internal pages, extension stores or other pages that prohibit injection, or local `file://` pages.
 
 ## Configure your model
 
@@ -102,7 +104,7 @@ npm test
 
 The plugin source entry point is `src/plugin.js`, and the installer source is `src/install-template.html`. This command generates the Console plugin, bookmark installer, and Chrome extension folder and ZIP under `dist/`, and updates the runtime in the floating chat bookmark installer in the repository root. `npm test` covers model discovery, API requests, thinking settings, bookmark packaging, and extension message routing.
 
-Extension window regression tests use `agent-browser` in a separate Chrome for Testing session. After building, set `PI_TAB_TEST_CHROME` to the full executable path and run `npm run test:extension` to verify startup, window operations, conversation creation and deletion, running indicators, themes, and repeated injection. This script does not replace end-to-end testing with a real model service.
+Extension window regression tests use `agent-browser` in a separate Chrome for Testing session. After building, set `PI_TAB_TEST_CHROME` to the full executable path and run `npm run test:extension` to verify startup, window operations, conversation creation and deletion, running indicators, themes, and repeated injection. Run `npm run test:tabs` to drive actual tool calls through a local model protocol server and verify opening, listing, messaging, page execution, and reading results across same-host and cross-host tabs. It also checks the tool list sent to the model. These scripts do not replace end-to-end testing with a real model service.
 
 If your model API does not allow CORS, run `npm start` to start the local relay. Then pass the `proxyUrl` and `proxyToken` printed in the terminal to `pi.configure()` in the current page’s Console. The page must still allow connections to the local address.
 
