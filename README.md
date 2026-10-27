@@ -80,3 +80,9 @@ npm run build
 扩展窗口回归测试使用独立的 Chrome for Testing 和 `agent-browser`。构建后，设置 `PI_TAB_TEST_CHROME` 为 Chrome for Testing 可执行文件的完整路径，再运行 `npm run test:extension`，验证调整尺寸、最小化、恢复、关闭后重新打开与重复注入。
 
 如果模型接口没有开放 CORS，可以运行 `npm start` 启动本机转发服务，再在当前网页的 Console 中将终端打印的 `proxyUrl` 和 `proxyToken` 传给 `pi.configure()`。页面仍需允许连接本机地址。
+
+### 自动发布扩展
+
+Pull Request 和 main 分支推送会自动构建并运行测试。发布时同步更新 `package.json`、`package-lock.json`、`extension/manifest.json` 的版本及 `CHANGELOG.md`，提交后推送对应的 `vX.Y.Z` 标签。GitHub Actions 验证版本一致、测试通过后，自动发布 Release，上传 `pi-tab-extension.zip` 和独立安装页。安装页的下载按钮始终指向最新 Release。
+
+加载未打包扩展的用户需要替换原目录文件，在 `chrome://extensions` 重新加载，再刷新网页；GitHub Release 不会自动更新浏览器中已安装的扩展。

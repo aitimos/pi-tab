@@ -80,3 +80,9 @@ The plugin source entry point is `src/plugin.js`, and the installer source is `s
 Extension window regression tests use `agent-browser` in a separate Chrome for Testing session. After building, set `PI_TAB_TEST_CHROME` to the full executable path and run `npm run test:extension` to verify resizing, minimizing, restoring, reopening closed windows, and repeated script injection.
 
 If your model API does not allow CORS, run `npm start` to start the local relay. Then pass the `proxyUrl` and `proxyToken` printed in the terminal to `pi.configure()` in the current page’s Console. The page must still allow connections to the local address.
+
+### Automated extension releases
+
+Pull requests and pushes to main build and test the extension. To release, update the versions in `package.json`, `package-lock.json`, and `extension/manifest.json`, add a `CHANGELOG.md` entry, commit, then push the matching `vX.Y.Z` tag. GitHub Actions checks the versions, builds and tests, then publishes the extension ZIP and standalone installer together. The installer download button points to the latest Release.
+
+Unpacked extensions require replacing the files in the original directory, reloading in `chrome://extensions`, and refreshing the webpage. GitHub Releases do not automatically update installed browser extensions.
