@@ -69,4 +69,6 @@ Pi Tab 基于 Pi Durable，把 Agent 带进你正在浏览的网页。点击书�
 
 欢迎通过 [Issues](https://github.com/aitimos/pi-tab/issues) 反馈问题，或提交 Pull Request。
 
+感谢 [LINUX DO](https://linux.do/) 社区提供交流与分享的空间。
+
 本项目采用 [Apache License 2.0](LICENSE)。

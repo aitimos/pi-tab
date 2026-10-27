@@ -69,4 +69,6 @@ See the [user guide](docs/usage.en.md) for detailed controls, attachment formats
 
 Report problems through [Issues](https://github.com/aitimos/pi-tab/issues) or send a pull request.
 
+Thanks to the [LINUX DO](https://linux.do/) community for providing a space to exchange ideas and share projects.
+
 Licensed under the [Apache License 2.0](LICENSE).
