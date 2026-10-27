@@ -250,11 +250,44 @@ try {
       host.dispatchEvent(new PointerEvent('pointerleave',{pointerType:'mouse'}));
       while(rail.hidden)await new Promise(requestAnimationFrame);
       const collapsed=getComputedStyle(shell).visibility==='hidden'&&!shell.style.transform;
-      rail.dispatchEvent(new PointerEvent('pointerenter',{pointerType:'mouse'}));
+      rail.click();
       return {collapsed,expanded:rail.hidden&&!shell.inert&&!shell.style.transform};
     })()`);
     assert.deepEqual(result,{collapsed:true,expanded:true});
     await browser('set','media','light');
+  });
+  await check('collapsed Pi handle moves vertically and pulls back into the page on either side',async()=>{
+    for(const side of ['left','right']){
+      const head=await evaluate(`(()=>{const r=${root}.getElementById('top').getBoundingClientRect();return {x:r.x+20,y:r.y+20,edge:${JSON.stringify(side)}==='left'?2:innerWidth-2}})()`);
+      await browser('mouse','move',String(Math.round(head.x)),String(Math.round(head.y)));
+      await browser('mouse','down','left');
+      await browser('mouse','move',String(head.edge),String(Math.round(head.y)));
+      await browser('mouse','up','left');
+      await browser('wait','--fn',`getComputedStyle(${root}.getElementById('shell')).visibility==='hidden'`);
+      const rail=await evaluate(`(()=>{const r=${root}.getElementById('edge-tab').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,top:r.top}})()`);
+      await browser('mouse','move',String(Math.round(rail.x)),String(Math.round(rail.y)));
+      await browser('mouse','down','left');
+      await browser('mouse','move',String(Math.round(rail.x)),String(Math.round(rail.y+55)));
+      await browser('mouse','up','left');
+      assert.ok(Math.abs(await evaluate(`${root}.getElementById('edge-tab').getBoundingClientRect().top`)-rail.top-55)<2);
+      assert.equal(await evaluate(`getComputedStyle(${root}.getElementById('shell')).visibility`),'hidden');
+      // Leave and return before pressing: hover must not win over the drag.
+      await browser('mouse','move','640','5');
+      const handle=await evaluate(`(()=>{const r=${root}.getElementById('edge-tab').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);
+      const direction=side==='left'?1:-1;
+      await browser('mouse','move',String(Math.round(handle.x)),String(Math.round(handle.y)));
+      await browser('mouse','down','left');
+      await browser('mouse','move',String(Math.round(handle.x+direction*150)),String(Math.round(handle.y)));
+      const first=await evaluate(`${root}.getElementById('shell').getBoundingClientRect().left`);
+      await browser('mouse','move',String(Math.round(handle.x+direction*190)),String(Math.round(handle.y)));
+      const second=await evaluate(`${root}.getElementById('shell').getBoundingClientRect().left`);
+      assert.ok(Math.abs(second-first-direction*40)<2);
+      await browser('screenshot',join(directory,`pull-out-${side}.png`));
+      await browser('mouse','up','left');
+      await browser('wait','--fn',`!${root}.getElementById('shell').style.transform&&!${root}.getElementById('shell').inert`);
+      assert.equal(await evaluate(`${root}.getElementById('edge-tab').hidden`),true);
+      assert.equal(await evaluate(`getComputedStyle(${root}.getElementById('shell')).visibility`),'visible');
+    }
   });
   await check('dragging away from an edge leaves the window where it was released',async()=>{
     for(const placement of ['center','left','right']) {
