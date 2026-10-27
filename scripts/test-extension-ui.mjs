@@ -180,11 +180,24 @@ try {
   });
   await check('drag release docks to either side and follows viewport resize',async()=>{
     for(const side of ['left','right']) {
-      const point=await evaluate(`(()=>{const r=${root}.getElementById('top').getBoundingClientRect();return {x:r.x+20,y:r.y+20,target:${JSON.stringify(side)}==='left'?52:innerWidth-r.width-12}})()`);
+      const point=await evaluate(`(()=>{const r=${root}.getElementById('top').getBoundingClientRect();return {x:r.x+20,y:r.y+20,target:${JSON.stringify(side)}==='left'?2:innerWidth-2}})()`);
       await browser('mouse','move',String(Math.round(point.x)),String(Math.round(point.y)));
       await browser('mouse','down','left');
       await browser('mouse','move',String(Math.round(point.target)),String(Math.round(point.y+30)));
+      const dragging=await evaluate(`(()=>{const r=document.querySelector('[data-pi-overlay]').getBoundingClientRect();return {x:r.left,right:r.right,w:innerWidth,rail:${root}.getElementById('edge-tab').hidden}})()`);
+      assert.ok(Math.abs(dragging.x-(point.target-20))<1,JSON.stringify(dragging));
+      assert.equal(dragging.rail,false);
+      assert.ok(side==='left'?dragging.x<0:dragging.right>dragging.w);
+      await browser('screenshot',join(directory,`drag-through-${side}.png`));
+      await browser('mouse','move','640',String(Math.round(point.y+30)));
+      assert.equal(await evaluate(`${root}.getElementById('edge-tab').hidden`),true);
+      await browser('mouse','move',String(Math.round(point.target)),String(Math.round(point.y+30)));
       await browser('mouse','up','left');
+      assert.equal(await evaluate(`${root}.getElementById('shell').inert`),true);
+      await browser('wait','--fn',`getComputedStyle(${root}.getElementById('shell')).visibility==='hidden'`);
+      const rail=await evaluate(`(()=>{const r=${root}.getElementById('edge-tab').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);
+      await browser('mouse','move',String(Math.round(rail.x)),String(Math.round(rail.y)));
+      await browser('wait','--fn',`${root}.getElementById('edge-tab').hidden`);
       const edge=`(()=>{const r=document.querySelector('[data-pi-overlay]').getBoundingClientRect();return Math.abs(${JSON.stringify(side)}==='left'?r.left-24:innerWidth-r.right-24)<1})()`;
       await browser('wait','--fn',edge);
       assert.equal(await evaluate(edge),true);
