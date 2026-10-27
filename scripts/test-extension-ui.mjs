@@ -200,7 +200,7 @@ try {
     await browser('mouse','move',String(Math.round(inside.x)),String(Math.round(inside.y)));
     await browser('mouse','move','5','5');
     await browser('wait','--fn',`!${root}.getElementById('edge-tab').hidden`);
-    assert.equal(await evaluate(`getComputedStyle(${root}.getElementById('shell')).visibility`),'hidden');
+    await browser('wait','--fn',`getComputedStyle(${root}.getElementById('shell')).visibility==='hidden'`);
     const rail=await evaluate(`(()=>{const r=${root}.getElementById('edge-tab').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,width:r.width}})()`);
     assert.equal(rail.width,12);
     await browser('screenshot',join(directory,'edge-collapsed.png'));
@@ -212,6 +212,36 @@ try {
     await browser('mouse','move','5','5');await browser('wait','500');
     assert.equal(await evaluate(`${root}.getElementById('edge-tab').hidden`),true);
     await evaluate(`${root}.getElementById('base-url').value='';${root}.activeElement?.blur()`);
+  });
+  await check('edge motion reverses from its current position without a jump',async()=>{
+    const motion=await evaluate(`(async()=>{
+      const host=document.querySelector('[data-pi-overlay]'),shell=${root}.getElementById('shell'),rail=${root}.getElementById('edge-tab');
+      host.dispatchEvent(new PointerEvent('pointerleave',{pointerType:'mouse'}));
+      while(rail.hidden)await new Promise(requestAnimationFrame);
+      await new Promise(resolve=>setTimeout(resolve,60));
+      const before=shell.getBoundingClientRect().x,opacity=Number(getComputedStyle(shell).opacity);
+      rail.dispatchEvent(new PointerEvent('pointerenter',{pointerType:'mouse'}));
+      const after=shell.getBoundingClientRect().x;
+      while(!rail.hidden)await new Promise(requestAnimationFrame);
+      return {before,after,opacity,rest:shell.getBoundingClientRect().x,host:host.getBoundingClientRect().x,inert:shell.inert};
+    })()`);
+    assert.ok(motion.opacity>0&&motion.opacity<1,JSON.stringify(motion));
+    assert.ok(Math.abs(motion.before-motion.after)<1,JSON.stringify(motion));
+    assert.ok(Math.abs(motion.rest-motion.host)<1,JSON.stringify(motion));
+    assert.equal(motion.inert,false);
+  });
+  await check('reduced motion skips the side slide',async()=>{
+    await browser('set','media','light','reduced-motion');
+    const result=await evaluate(`(async()=>{
+      const host=document.querySelector('[data-pi-overlay]'),shell=${root}.getElementById('shell'),rail=${root}.getElementById('edge-tab');
+      host.dispatchEvent(new PointerEvent('pointerleave',{pointerType:'mouse'}));
+      while(rail.hidden)await new Promise(requestAnimationFrame);
+      const collapsed=getComputedStyle(shell).visibility==='hidden'&&!shell.style.transform;
+      rail.dispatchEvent(new PointerEvent('pointerenter',{pointerType:'mouse'}));
+      return {collapsed,expanded:rail.hidden&&!shell.inert&&!shell.style.transform};
+    })()`);
+    assert.deepEqual(result,{collapsed:true,expanded:true});
+    await browser('set','media','light');
   });
   await check('dragging away from an edge leaves the window where it was released',async()=>{
     for(const placement of ['center','left','right']) {

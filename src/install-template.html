@@ -2118,7 +2118,7 @@ async function openChat(initialConfig, options = {}) {
   });
   function setMinimized(value) {
     if (options.mount || state.minimized === value) return;
-    expandEdge();
+    expandEdge(true);
     cancelSnap();
     const before = host.getBoundingClientRect();
     state.minimized = value;
@@ -2141,21 +2141,53 @@ async function openChat(initialConfig, options = {}) {
     }
     setMinimized(false);
   });
-  byId('close').addEventListener('click', () => { expandEdge(); cancelSnap(); host.style.display = 'none'; rememberWindow(); });
+  byId('close').addEventListener('click', () => { expandEdge(true); cancelSnap(); host.style.display = 'none'; rememberWindow(); });
   let dockSide = null;
   let snapFrame = null;
   let edgeTimer;
+  let edgeFrame = null, edgeProgress = 0, edgeVelocity = 0, edgeTarget = 0, edgeDistance = 0;
+  const edgeReducedMotion = matchMedia('(prefers-reduced-motion:reduce)');
   const edgeTab = document.createElement('button');
   edgeTab.id = 'edge-tab';edgeTab.type = 'button';edgeTab.hidden = true;
   i18n.attr(edgeTab,'aria-label',()=>t("打开 Pi Tab"));
   root.append(edgeTab);
-  function expandEdge() {
-    clearTimeout(edgeTimer);
-    edgeTab.hidden = true;
+  function moveEdge(target, immediate = false) {
+    edgeTarget = target;
+    shell.inert = !!target;
+    host.style.pointerEvents = target ? 'none' : '';
     shell.style.visibility = '';
-    shell.inert = false;
-    host.style.pointerEvents = '';
+    if (edgeFrame !== null) cancelAnimationFrame(edgeFrame);
+    const finish = () => {
+      edgeFrame = null; edgeProgress = target; edgeVelocity = 0;
+      shell.style.transform = ''; shell.style.opacity = ''; shell.style.willChange = '';
+      shell.style.visibility = target ? 'hidden' : '';
+      edgeTab.hidden = !target;
+    };
+    if (immediate || edgeReducedMotion.matches || Math.abs(edgeProgress-target)<.001 && Math.abs(edgeVelocity)<.01) {
+      finish(); return;
+    }
+    shell.style.willChange = 'transform,opacity';
+    let lastTime = performance.now();
+    const step = time => {
+      const dt = Math.min((time-lastTime)/1000, 1/30);
+      lastTime = time;
+      // Critically damped spring: retarget without resetting position or velocity.
+      const displacement = edgeProgress-edgeTarget;
+      const decay = Math.exp(-28*dt), momentum = edgeVelocity+28*displacement;
+      edgeProgress = edgeTarget+(displacement+momentum*dt)*decay;
+      edgeVelocity = (edgeVelocity-28*momentum*dt)*decay;
+      shell.style.transform = `translateX(${edgeDistance*edgeProgress}px)`;
+      shell.style.opacity = String(Math.max(0,1-edgeProgress));
+      if (Math.abs(edgeProgress-edgeTarget)<.001 && Math.abs(edgeVelocity)<.01) { finish(); return; }
+      edgeFrame = requestAnimationFrame(step);
+    };
+    edgeFrame = requestAnimationFrame(step);
   }
+  function expandEdge(immediate = false) {
+    clearTimeout(edgeTimer);
+    moveEdge(0, immediate);
+  }
+  edgeReducedMotion.addEventListener('change', () => { if(edgeReducedMotion.matches)moveEdge(edgeTarget,true); });
   if (!options.mount) {
     host.addEventListener('pointerleave',event=>{
       if(event.pointerType!=='mouse')return;
@@ -2166,14 +2198,15 @@ async function openChat(initialConfig, options = {}) {
           (editing?.matches('input,textarea')&&editing.value))return;
         const rect=host.getBoundingClientRect(),style=getComputedStyle(shell);
         edgeTab.style.cssText=`${dockSide}:0;top:${Math.max(12,Math.min(innerHeight-76,rect.top+rect.height/2-32))}px;border-radius:${dockSide==='left'?'0 6px 6px 0':'6px 0 0 6px'};--edge-bg:${style.getPropertyValue('--bg')};--edge-line:${style.getPropertyValue('--line')};--edge-text:${style.getPropertyValue('--muted')}`;
-        shell.style.visibility='hidden';shell.inert=true;
-        host.style.pointerEvents='none';edgeTab.hidden=false;
+        edgeDistance=dockSide==='left'?-rect.right:innerWidth-rect.left;
+        edgeTab.hidden=false;
+        moveEdge(1);
       },300);
     });
-    host.addEventListener('pointerenter',expandEdge);
-    edgeTab.addEventListener('pointerenter',expandEdge);
-    edgeTab.addEventListener('click',expandEdge);
-    edgeTab.addEventListener('focus',expandEdge);
+    host.addEventListener('pointerenter',()=>expandEdge());
+    edgeTab.addEventListener('pointerenter',()=>expandEdge());
+    edgeTab.addEventListener('click',()=>expandEdge());
+    edgeTab.addEventListener('focus',()=>expandEdge());
   }
 
   function cancelSnap() {
@@ -2196,7 +2229,7 @@ async function openChat(initialConfig, options = {}) {
   }
   function clampPosition() {
     if (options.mount) return;
-    expandEdge();
+    expandEdge(true);
     cancelSnap();
     const rect = host.getBoundingClientRect();
     const bounds = windowBounds();
@@ -2252,7 +2285,8 @@ async function openChat(initialConfig, options = {}) {
   byId('resize-handle').addEventListener('pointerdown', event => {
     if (options.mount || event.button !== 0) return;
     cancelSnap();
-    const rect = host.getBoundingClientRect();
+    const rect = shell.getBoundingClientRect();
+    expandEdge(true);
     host.style.left = `${rect.left}px`;
     host.style.right = 'auto';
     resizing = { pointerId:event.pointerId, x:event.clientX, y:event.clientY, width:rect.width, height:rect.height };
@@ -2278,7 +2312,9 @@ async function openChat(initialConfig, options = {}) {
   for (const handle of [byId('top'), byId('chat-ball')]) {
     handle.addEventListener('pointerdown', event => {
       if (options.mount || event.button !== 0 || !event.isPrimary || (handle.id === 'top' && event.target.closest('button,a'))) return;
-      const rect = host.getBoundingClientRect();
+      const rect = shell.getBoundingClientRect();
+      expandEdge(true);
+      host.style.left = `${rect.left}px`; host.style.top = `${rect.top}px`; host.style.right = 'auto';
       cancelSnap();
       suppressBallClick = false;
       drag = { pointerId:event.pointerId, startX:event.clientX, startY:event.clientY, deltaX:event.clientX - rect.left, deltaY:event.clientY - rect.top, moved:false, ball:handle.id === 'chat-ball' };
@@ -2316,7 +2352,7 @@ async function openChat(initialConfig, options = {}) {
       else if (state.connected) byId('message-input').focus();
       if (options.mount) host.scrollIntoView({ block:'nearest', behavior:'auto' });
     },
-    hide() { expandEdge(); cancelSnap(); host.style.display = 'none'; rememberWindow(); },
+    hide() { expandEdge(true); cancelSnap(); host.style.display = 'none'; rememberWindow(); },
     get id() { return agent?.id; },
     get visible() { return !options.mount && host.style.display !== 'none'; },
   };
