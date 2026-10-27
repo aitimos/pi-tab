@@ -161,7 +161,7 @@ try {
   });
   await check('drag release docks to either side and follows viewport resize',async()=>{
     for(const side of ['left','right']) {
-      const point=await evaluate(`(()=>{const r=${root}.getElementById('top').getBoundingClientRect();return {x:r.x+20,y:r.y+20,target:${JSON.stringify(side)}==='left'?80:innerWidth-300}})()`);
+      const point=await evaluate(`(()=>{const r=${root}.getElementById('top').getBoundingClientRect();return {x:r.x+20,y:r.y+20,target:${JSON.stringify(side)}==='left'?52:innerWidth-r.width-12}})()`);
       await browser('mouse','move',String(Math.round(point.x)),String(Math.round(point.y)));
       await browser('mouse','down','left');
       await browser('mouse','move',String(Math.round(point.target)),String(Math.round(point.y+30)));
@@ -172,6 +172,25 @@ try {
     }
     await browser('set','viewport','1100','800');
     assert.ok(await evaluate(`Math.abs(innerWidth-document.querySelector('[data-pi-overlay]').getBoundingClientRect().right-24)<1`));
+    await browser('set','viewport','1280','900');
+  });
+  await check('dragging away from an edge leaves the window where it was released',async()=>{
+    for(const placement of ['center','left','right']) {
+      const point=await evaluate(`(()=>{const r=${root}.getElementById('top').getBoundingClientRect();return {x:r.x+20,y:r.y+20,left:${JSON.stringify(placement)}==='center'?(innerWidth-r.width)/2:${JSON.stringify(placement)}==='left'?60:innerWidth-r.width-60}})()`);
+      await browser('mouse','move',String(Math.round(point.x)),String(Math.round(point.y)));
+      await browser('mouse','down','left');
+      await browser('mouse','move',String(Math.round(point.left+20)),String(Math.round(point.y)));
+      const released=await evaluate(`document.querySelector('[data-pi-overlay]').getBoundingClientRect().left`);
+      assert.ok(Math.abs(released-point.left)<=2);
+      await browser('mouse','up','left');
+      // Wait beyond the docking animation to catch any delayed pull to an edge.
+      await browser('wait','700');
+      const actual=await evaluate(`document.querySelector('[data-pi-overlay]').getBoundingClientRect().left`);
+      assert.ok(Math.abs(actual-released)<.5,`${placement}: released at ${released}, ended at ${actual}`);
+    }
+    const left=await evaluate(`document.querySelector('[data-pi-overlay]').getBoundingClientRect().left`);
+    await browser('set','viewport','1380','900');
+    assert.equal(await evaluate(`document.querySelector('[data-pi-overlay]').getBoundingClientRect().left`),left);
     await browser('set','viewport','1280','900');
   });
   const initial = await box();

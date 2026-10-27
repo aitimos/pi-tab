@@ -2229,13 +2229,14 @@ function openChat(initialConfig, options = {}) {
     const bounds = windowBounds();
     positionWindow(dockSide ? bounds[dockSide] : rect.left, rect.top);
   }
-  function snapToSide(velocity) {
+  function snapToSide() {
     cancelSnap();
     const rect = host.getBoundingClientRect();
     const bounds = windowBounds();
-    // Same projection and spring as the Dva assistant: velocity in pixels/second.
-    const projectedX = rect.left + velocity.x / 1000 * (.99 / (1 - .99));
-    dockSide = Math.abs(projectedX - bounds.left) <= Math.abs(projectedX - bounds.right) ? 'left' : 'right';
+    const side = Math.abs(rect.left - bounds.left) <= Math.abs(rect.left - bounds.right) ? 'left' : 'right';
+    dockSide = Math.abs(rect.left - bounds[side]) <= 20 ? side : null;
+    if (!dockSide) return;
+    const velocity = { x:0, y:0 };
     const target = { x:bounds[dockSide], y:Math.max(bounds.top, Math.min(bounds.bottom, rect.top)) };
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
       positionWindow(target.x, target.y);
@@ -2307,7 +2308,7 @@ function openChat(initialConfig, options = {}) {
       const rect = host.getBoundingClientRect();
       cancelSnap();
       suppressBallClick = false;
-      drag = { pointerId:event.pointerId, startX:event.clientX, startY:event.clientY, deltaX:event.clientX - rect.left, deltaY:event.clientY - rect.top, moved:false, ball:handle.id === 'chat-ball', samples:[{x:event.clientX,y:event.clientY,time:event.timeStamp}] };
+      drag = { pointerId:event.pointerId, startX:event.clientX, startY:event.clientY, deltaX:event.clientX - rect.left, deltaY:event.clientY - rect.top, moved:false, ball:handle.id === 'chat-ball' };
       handle.setPointerCapture(event.pointerId);
       if (!drag.ball) event.preventDefault();
     });
@@ -2316,19 +2317,13 @@ function openChat(initialConfig, options = {}) {
     if (!drag || drag.pointerId !== event.pointerId) return;
     if (!drag.moved && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 4) return;
     drag.moved = true;
-    drag.samples.push({x:event.clientX,y:event.clientY,time:event.timeStamp});
-    drag.samples = drag.samples.slice(-6);
+    dockSide = null;
     positionWindow(event.clientX - drag.deltaX, event.clientY - drag.deltaY);
   });
   const endDrag = event => {
     if (!drag || drag.pointerId !== event.pointerId) return;
     suppressBallClick = drag.ball && drag.moved;
-    if (drag.moved) {
-      const latest = {x:event.clientX,y:event.clientY,time:event.timeStamp};
-      const earliest = drag.samples.find(sample => latest.time - sample.time <= 100) || latest;
-      const elapsed = latest.time - earliest.time;
-      snapToSide(elapsed > 0 ? { x:(latest.x-earliest.x)/elapsed*1000, y:(latest.y-earliest.y)/elapsed*1000 } : {x:0,y:0});
-    }
+    if (drag.moved && event.type !== 'pointercancel') snapToSide();
     drag = null;
   };
   window.addEventListener('pointerup', endDrag);
