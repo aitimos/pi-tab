@@ -238,7 +238,8 @@ try {
       while(!rail.hidden)await new Promise(requestAnimationFrame);
       return {before,after,opacity,rest:shell.getBoundingClientRect().x,host:host.getBoundingClientRect().x,inert:shell.inert};
     })()`);
-    assert.ok(motion.opacity>0&&motion.opacity<1,JSON.stringify(motion));
+    assert.equal(motion.opacity,1,JSON.stringify(motion));
+    assert.ok(Math.abs(motion.before-motion.host)>1,JSON.stringify(motion));
     assert.ok(Math.abs(motion.before-motion.after)<1,JSON.stringify(motion));
     assert.ok(Math.abs(motion.rest-motion.host)<1,JSON.stringify(motion));
     assert.equal(motion.inert,false);

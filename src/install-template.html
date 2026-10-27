@@ -2151,7 +2151,7 @@ async function openChat(initialConfig, options = {}) {
   edgeTab.innerHTML=piIcon();
   i18n.attr(edgeTab,'aria-label',()=>t("打开 Pi Tab"));
   root.append(edgeTab);
-  function moveEdge(target, immediate = false, fade = true) {
+  function moveEdge(target, immediate = false) {
     edgeTarget = target;
     shell.inert = !!target;
     host.style.pointerEvents = target ? 'none' : '';
@@ -2159,14 +2159,14 @@ async function openChat(initialConfig, options = {}) {
     if (edgeFrame !== null) cancelAnimationFrame(edgeFrame);
     const finish = () => {
       edgeFrame = null; edgeProgress = target; edgeVelocity = 0;
-      shell.style.transform = ''; shell.style.opacity = ''; shell.style.willChange = '';
+      shell.style.transform = ''; shell.style.willChange = '';
       shell.style.visibility = target ? 'hidden' : '';
       edgeTab.hidden = !target;
     };
     if (immediate || edgeReducedMotion.matches || Math.abs(edgeProgress-target)<.001 && Math.abs(edgeVelocity)<.01) {
       finish(); return;
     }
-    shell.style.willChange = 'transform,opacity';
+    shell.style.willChange = 'transform';
     let lastTime = performance.now();
     const step = time => {
       const dt = Math.min((time-lastTime)/1000, 1/30);
@@ -2177,7 +2177,6 @@ async function openChat(initialConfig, options = {}) {
       edgeProgress = edgeTarget+(displacement+momentum*dt)*decay;
       edgeVelocity = (edgeVelocity-28*momentum*dt)*decay;
       shell.style.transform = `translateX(${edgeDistance*edgeProgress}px)`;
-      shell.style.opacity = fade ? String(Math.max(0,1-edgeProgress)) : '1';
       if ((edgeTarget===1 && edgeProgress>=1) || (edgeTarget===0 && edgeProgress<=0) || (Math.abs(edgeProgress-edgeTarget)<.001 && Math.abs(edgeVelocity)<.01)) { finish(); return; }
       edgeFrame = requestAnimationFrame(step);
     };
@@ -2317,7 +2316,7 @@ async function openChat(initialConfig, options = {}) {
       const left=drag.originSide==='left'?-drag.width+28+dx:innerWidth-28+dx;
       host.style.left=`${left}px`;host.style.right='auto';
       host.style.top=`${Math.max(0,Math.min(innerHeight-40,drag.top+dy))}px`;
-      shell.style.visibility='';shell.style.transform='';shell.style.opacity='';
+      shell.style.visibility='';shell.style.transform='';
       shell.inert=true;edgeTab.style.opacity='0';
       drag.side=inward<=12?drag.originSide:null;
       return;
@@ -2349,7 +2348,7 @@ async function openChat(initialConfig, options = {}) {
         host.style.top=`${Math.max(b.top,Math.min(b.bottom,rect.top))}px`;
         edgeDistance=rect.left-left;edgeProgress=1;edgeVelocity=edgeDistance?released.velocity/edgeDistance:0;
         shell.style.transform=`translateX(${edgeDistance}px)`;
-        edgeTab.hidden=true;dockSide=null;moveEdge(0,false,false);return;
+        edgeTab.hidden=true;dockSide=null;moveEdge(0);return;
       }
     }
     if(!released.moved)return;
