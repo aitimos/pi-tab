@@ -19,16 +19,36 @@ async function engineCall(site, tabId, method, args, chatId, name) {
   return response.value;
 }
 
-async function activate(tabId) {
+async function activate(tabId, openWindow = false) {
   await chrome.storage.session.set({[activeKey(tabId)]:true});
-  try { await chrome.tabs.sendMessage(tabId,{type:'activate'}); } catch { /* The page may still be loading. */ }
+  let response;
+  try { response = await chrome.tabs.sendMessage(tabId,{type:'activate',openWindow}); }
+  catch (error) {
+    if(!/Receiving end does not exist|Could not establish connection/i.test(error.message))throw error;
+    if(!openWindow)return; // Navigation will retry once the page is ready.
+    await chrome.scripting.executeScript({target:{tabId},files:['content.js']});
+    response = await chrome.tabs.sendMessage(tabId,{type:'activate',openWindow});
+  }
+  if(!response?.ok)throw new Error(response?.error||'Pi Tab 启动失败。');
 }
 
-chrome.action.onClicked.addListener(tab => { if(tab.id)void activate(tab.id); });
+chrome.action.onClicked.addListener(async tab => {
+  if(!tab.id)return;
+  try {
+    siteOf(tab.url);
+    await activate(tab.id,true);
+    await chrome.action.setBadgeText({tabId:tab.id,text:''});
+    await chrome.action.setTitle({tabId:tab.id,title:'打开 Pi Tab'});
+  } catch (error) {
+    console.error('[Pi Tab]',error);
+    await chrome.action.setBadgeText({tabId:tab.id,text:'!'});
+    await chrome.action.setTitle({tabId:tab.id,title:`Pi Tab：${error.message}`});
+  }
+});
 chrome.tabs.onRemoved.addListener(tabId => { void chrome.storage.session.remove(activeKey(tabId)); });
 chrome.tabs.onUpdated.addListener((tabId,change) => {
   if(change.status!=='complete')return;
-  void chrome.storage.session.get(activeKey(tabId)).then(saved=>{if(saved[activeKey(tabId)])return activate(tabId);});
+  void chrome.storage.session.get(activeKey(tabId)).then(saved=>{if(saved[activeKey(tabId)])return activate(tabId);}).catch(error=>console.error('[Pi Tab]',error));
 });
 
 chrome.runtime.onMessage.addListener((message,sender,respond) => {

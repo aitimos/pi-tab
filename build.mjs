@@ -85,7 +85,7 @@ await mkdir('dist/extension', { recursive: true });
 await writeFile('dist/extension/manifest.json', await readFile('extension/manifest.json'));
 await writeFile('dist/extension/worker.js', await readFile('src/extension-worker.js'));
 const extensionBootstrap = await readFile('src/extension-content.js', 'utf8');
-await writeFile('dist/extension/content.js', `globalThis.__piTabDeferredInstall = true;\n${source}\n${chatSource}\n${extensionBootstrap}`);
+await writeFile('dist/extension/content.js', `if (!globalThis.__piTabExtensionLoaded) {\nglobalThis.__piTabExtensionLoaded = true;\n(() => {\nglobalThis.__piTabDeferredInstall = true;\n${source}\n${chatSource}\n${extensionBootstrap}\n})();\n}`);
 const engineBootstrap = await readFile('src/extension-engine.js', 'utf8');
 await writeFile('dist/extension/engine.js', `globalThis.__piTabDeferredInstall = true;\n${source}\n${engineBootstrap}`);
 await writeFile('dist/extension/engine.html', '<!doctype html><html><head><meta charset="utf-8"></head><body><script src="engine.js"></script></body></html>');

@@ -12,15 +12,23 @@ test('extension shares one site engine across paths and tabs, routes tasks and p
   ]);
   const engineCalls=[];
   const pageCalls=[];
+  const badges=[];
+  const titles=[];
+  const injected=[];
+  let missingReceiver=false;
+  let startupError;
   let onMessage,onClick,engineOpened=false;
   const chrome={
-    action:{onClicked:{addListener:listener=>{onClick=listener;}}},
+    action:{onClicked:{addListener:listener=>{onClick=listener;}},setBadgeText:async value=>badges.push(value),setTitle:async value=>titles.push(value)},
+    scripting:{executeScript:async request=>{injected.push(request);missingReceiver=false;}},
     tabs:{
       onRemoved:{addListener(){}},onUpdated:{addListener(){}},
       query:async()=>[...tabs.values()],get:async id=>tabs.get(id),
       create:async({url})=>{const tab={id:13,url,title:'New'};tabs.set(tab.id,tab);return tab;},
       sendMessage:async(id,message)=>{
         pageCalls.push({id,message});
+        if(missingReceiver)throw new Error('Could not establish connection. Receiving end does not exist.');
+        if(startupError&&message.type==='activate')return {ok:false,error:startupError};
         if(message.type==='execute-tool')return {ok:true,value:{output:[{type:'text',text:'page result'}]}};
         return {ok:true,value:{active:true}};
       },
@@ -42,11 +50,12 @@ test('extension shares one site engine across paths and tabs, routes tasks and p
       remove:async key=>session.delete(key),
     }},
   };
-  vm.runInNewContext(await readFile('src/extension-worker.js','utf8'),{chrome,URL,Promise,setTimeout});
+  vm.runInNewContext(await readFile('src/extension-worker.js','utf8'),{chrome,URL,Promise,setTimeout,console:{error(){}}});
   const send=(message,from=10)=>new Promise(resolve=>onMessage(message,{tab:tabs.get(from)},resolve));
 
   assert.equal((await send({type:'identity'})).value.active,false);
   await onClick(tabs.get(10));
+  assert.equal(pageCalls.at(-1).message.openWindow,true);
   await onClick(tabs.get(11));
   await onClick(tabs.get(12));
   const first=(await send({type:'identity'})).value;
@@ -67,4 +76,20 @@ test('extension shares one site engine across paths and tabs, routes tasks and p
   assert.equal((await send({type:'tabs-read',tabId:11,chatId:1,limit:3})).value[0].text,'完成');
   assert.equal((await send({type:'page-tool',site:'www.example.com',tabId:11,name:'page_snapshot',args:{}})).value.output[0].text,'page result');
   assert.equal(pageCalls.at(-1).id,11);
+  missingReceiver=true;
+  await onClick(tabs.get(10));
+  assert.equal(injected.length,1);
+  assert.equal(injected[0].target.tabId,10);
+  assert.equal(injected[0].files[0],'content.js');
+  assert.equal(badges.at(-1).text,'');
+  startupError='模型目录加载失败';
+  await onClick(tabs.get(10));
+  assert.equal(badges.at(-1).text,'!');
+  assert.match(titles.at(-1).title,/模型目录加载失败/);
+  startupError=null;
+  await onClick(tabs.get(10));
+  assert.equal(badges.at(-1).text,'');
+  await onClick({id:99,url:'chrome://extensions/'});
+  assert.match(titles.at(-1).title,/只能在普通网页使用/);
+  assert.equal(session.has('active:99'),false);
 });

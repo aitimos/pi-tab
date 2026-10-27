@@ -77,4 +77,6 @@ npm run build
 
 The plugin source entry point is `src/plugin.js`, and the installer source is `src/install-template.html`. This command generates the Console plugin, bookmark installer, and Chrome extension folder and ZIP under `dist/`, and updates the runtime in the floating chat bookmark installer in the repository root. Run `npm test` to check model discovery and Pi model settings.
 
+Extension window regression tests use `agent-browser` in a separate Chrome for Testing session. After building, set `PI_TAB_TEST_CHROME` to the full executable path and run `npm run test:extension` to verify resizing, minimizing, restoring, reopening closed windows, and repeated script injection.
+
 If your model API does not allow CORS, run `npm start` to start the local relay. Then pass the `proxyUrl` and `proxyToken` printed in the terminal to `pi.configure()` in the current page’s Console. The page must still allow connections to the local address.

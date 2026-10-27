@@ -90,7 +90,7 @@ function openChat(initialConfig, options = {}) {
     :host { all:initial; color-scheme:dark; }
     *, *::before, *::after { box-sizing:border-box; }
     [hidden] { display:none!important; }
-    #shell { position:relative; --bg:#191919; --surface:#222222; --raised:#2a2a2a; --line:#484848; --text:#eeeeee; --muted:#b4b4b4; --accent:#9eb1ff; width:min(420px,calc(100vw - 24px)); height:min(660px,calc(100dvh - 24px)); display:flex; flex-direction:column; overflow:hidden; border-radius:24px; background:var(--bg); color:var(--text); border:.5px solid var(--line); font:13px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif; text-align:left; color-scheme:dark; }
+    #shell { position:relative; --bg:#191919; --surface:#222222; --raised:#2a2a2a; --line:#484848; --text:#eeeeee; --muted:#b4b4b4; --accent:#9eb1ff; width:min(var(--window-width,420px),calc(100vw - 24px)); height:min(var(--window-height,660px),calc(100dvh - 24px)); display:flex; flex-direction:column; overflow:hidden; border-radius:24px; background:var(--bg); color:var(--text); border:.5px solid var(--line); font:13px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif; text-align:left; color-scheme:dark; }
     #shell[data-theme=light] { --bg:#fcfcfc; --surface:#f9f9f9; --raised:#f0f0f0; --line:#cecece; --text:#202020; --muted:#646464; --accent:#3a5bc7; color-scheme:light; }
     #shell { background:color-mix(in srgb,var(--bg) 58%,transparent); backdrop-filter:blur(14px) saturate(1.15); -webkit-backdrop-filter:blur(14px) saturate(1.15); box-shadow:0 16px 48px rgba(0,0,0,.4),0 2px 8px rgba(0,0,0,.15); }
     #shell[data-theme=light] { box-shadow:0 16px 48px rgba(0,0,0,.15),0 2px 8px rgba(0,0,0,.05); }
@@ -1754,8 +1754,8 @@ function openChat(initialConfig, options = {}) {
   if (!options.mount) {
     const savedSize = JSON.parse(localStorage.getItem('pi-tab-size') || 'null');
     if (savedSize?.width && savedSize?.height) {
-      shell.style.width = `${Math.min(savedSize.width, innerWidth - 24)}px`;
-      shell.style.height = `${Math.min(savedSize.height, innerHeight - 24)}px`;
+      shell.style.setProperty('--window-width', `${savedSize.width}px`);
+      shell.style.setProperty('--window-height', `${savedSize.height}px`);
     }
   }
   byId('settings').addEventListener('click', () => {
@@ -1861,8 +1861,8 @@ function openChat(initialConfig, options = {}) {
     if (!resizing || resizing.pointerId !== event.pointerId) return;
     const left = host.getBoundingClientRect().left;
     const top = host.getBoundingClientRect().top;
-    shell.style.width = `${Math.max(Math.min(320, innerWidth - left), Math.min(innerWidth - left, resizing.width + event.clientX - resizing.x))}px`;
-    shell.style.height = `${Math.max(Math.min(360, innerHeight - top), Math.min(innerHeight - top, resizing.height + event.clientY - resizing.y))}px`;
+    shell.style.setProperty('--window-width', `${Math.max(Math.min(320, innerWidth - left), Math.min(innerWidth - left, resizing.width + event.clientX - resizing.x))}px`);
+    shell.style.setProperty('--window-height', `${Math.max(Math.min(360, innerHeight - top), Math.min(innerHeight - top, resizing.height + event.clientY - resizing.y))}px`);
   });
   const endResize = event => {
     if (!resizing || resizing.pointerId !== event.pointerId) return;
@@ -1919,6 +1919,7 @@ function openChat(initialConfig, options = {}) {
   const instance = {
     open(config) {
       host.style.display = 'block';
+      if (agent) rememberWindow(null, agent.id);
       refreshPageContext();
       clampPosition();
       if (state.minimized) setMinimized(false);

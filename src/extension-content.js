@@ -104,7 +104,18 @@ chrome.runtime.onMessage.addListener((message,_sender,respond)=>{
   }
   if(message.type!=='activate'&&message.type!=='execute-tool')return false;
   (async()=>{
-    if(message.type==='activate'){await startExtension();return {active:true};}
+    if(message.type==='activate'){
+      await startExtension();
+      // Activation may arrive while the initial inactive identity check finishes.
+      if(!extensionStarted)await startExtension();
+      if(message.openWindow){
+        const windows=window.__piQuickChatOverlay?.instances;
+        if(windows?.size){
+          for(const instance of windows.values())instance.open();
+        }else openChat(undefined,{forceNew:true,chatId:activeId});
+      }
+      return {active:true};
+    }
     if(!extensionStarted||!pageTools)throw new Error('Pi Tab 尚未在此网页启动。');
     return pageTools.runTool(message.name,message.args);
   })().then(value=>respond({ok:true,value}),error=>respond({ok:false,error:error.message||String(error)}));

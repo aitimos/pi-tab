@@ -77,4 +77,6 @@ npm run build
 
 插件源码入口为 `src/plugin.js`，安装页源码为 `src/install-template.html`。构建生成 `dist/` 下的 Console 插件、书签安装页、Chrome 扩展文件夹和 ZIP，并更新根目录聊天安装页的内嵌运行时和 Pi 模型目录。`npm test` 检查模型发现、接口请求和思考能力。
 
+扩展窗口回归测试使用独立的 Chrome for Testing 和 `agent-browser`。构建后，设置 `PI_TAB_TEST_CHROME` 为 Chrome for Testing 可执行文件的完整路径，再运行 `npm run test:extension`，验证调整尺寸、最小化、恢复、关闭后重新打开与重复注入。
+
 如果模型接口没有开放 CORS，可以运行 `npm start` 启动本机转发服务，再在当前网页的 Console 中将终端打印的 `proxyUrl` 和 `proxyToken` 传给 `pi.configure()`。页面仍需允许连接本机地址。
