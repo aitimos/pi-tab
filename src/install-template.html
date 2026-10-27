@@ -92,10 +92,10 @@ function openChat(initialConfig, options = {}) {
     [hidden] { display:none!important; }
     #shell { position:relative; --bg:#191919; --surface:#222222; --raised:#2a2a2a; --line:#484848; --text:#eeeeee; --muted:#b4b4b4; --accent:#9eb1ff; width:min(var(--window-width,420px),calc(100vw - 24px)); height:min(var(--window-height,660px),calc(100dvh - 24px)); display:flex; flex-direction:column; overflow:hidden; border-radius:24px; background:var(--bg); color:var(--text); border:.5px solid var(--line); font:13px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC',sans-serif; text-align:left; color-scheme:dark; }
     #shell[data-theme=light] { --bg:#fcfcfc; --surface:#f9f9f9; --raised:#f0f0f0; --line:#cecece; --text:#202020; --muted:#646464; --accent:#3a5bc7; color-scheme:light; }
-    #shell { background:color-mix(in srgb,var(--bg) 58%,transparent); backdrop-filter:blur(14px) saturate(1.15); -webkit-backdrop-filter:blur(14px) saturate(1.15); box-shadow:0 16px 48px rgba(0,0,0,.4),0 2px 8px rgba(0,0,0,.15); }
+    #shell { background:color-mix(in srgb,var(--bg) 96%,transparent); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); box-shadow:0 16px 48px rgba(0,0,0,.4),0 2px 8px rgba(0,0,0,.15); }
     #shell[data-theme=light] { box-shadow:0 16px 48px rgba(0,0,0,.15),0 2px 8px rgba(0,0,0,.05); }
-    #shell :is(#top,#chat-list,#model-dialog,#tool-dialog) { background:color-mix(in srgb,var(--bg) 38%,transparent); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); }
-    #shell :is(#composer,.human .bubble) { background:color-mix(in srgb,var(--surface) 60%,transparent); }
+    #shell :is(#top,#chat-list,#model-dialog,#tool-dialog) { background:var(--bg); }
+    #shell :is(#composer,.human .bubble) { background:var(--surface); }
     #shell[data-theme=light] :is(label,.ai .speaker,.subtle,.source-link) { color:var(--text); }
     #shell[data-theme=light] :is(input,textarea)::placeholder { color:var(--muted); }
     #shell[data-theme=light] .primary:not(#send) { background:#3e63dd; color:#fdfdfe; }
@@ -104,12 +104,14 @@ function openChat(initialConfig, options = {}) {
     #shell.embedded { width:100%; height:720px; }
     #shell.embedded #top { cursor:default; touch-action:auto; }
     #shell.embedded #minimize,#shell.embedded #close { display:none; }
-    #shell.minimized { width:52px; height:52px; border-radius:50%; overflow:visible; box-shadow:0 8px 28px #00000000,0 2px 8px #00000000; }
+    #shell.minimized { width:52px; height:52px; border-radius:50%; overflow:visible; background:var(--bg); box-shadow:0 4px 12px rgba(0,0,0,.3),0 1px 3px rgba(0,0,0,.15); }
+    #shell[data-theme=light].minimized { box-shadow:0 4px 12px rgba(0,0,0,.1),0 1px 3px rgba(0,0,0,.05); }
     #shell.minimized > :not(#chat-ball) { display:none; }
     #chat-ball { display:none; }
-    #shell.minimized #chat-ball { position:relative; display:grid; place-items:center; width:100%; height:100%; padding:0; border:0; border-radius:50%; background:linear-gradient(145deg,#3a3a3a,#2a2a2a); color:var(--text); font:30px/1 Georgia,serif; touch-action:none; user-select:none; cursor:grab; }
-    #shell.minimized #chat-ball:hover { background:linear-gradient(145deg,#484848,#313131); }
-    #chat-ball .pi-icon { width:30px; height:30px; }
+    #shell.minimized #chat-ball { position:relative; display:grid; place-items:center; width:100%; height:100%; padding:0; border:0; border-radius:50%; background:transparent; color:var(--text); touch-action:none; user-select:none; cursor:grab; }
+    #shell.minimized #chat-ball:hover { background:var(--raised); }
+    #chat-ball > span { display:flex; }
+    #chat-ball .pi-icon { width:22px; height:22px; }
     #shell.minimized #chat-ball:active { cursor:grabbing; }
     #shell[data-busy=true] #chat-ball::after { content:''; position:absolute; right:2px; bottom:2px; width:10px; height:10px; border:2px solid var(--bg); border-radius:50%; background:#b4b4b4; }
     #top { cursor:move; touch-action:none; user-select:none; display:flex; align-items:center; gap:8px; flex:none; height:48px; padding:6px 10px 6px 14px; border-bottom:.5px solid var(--line); }
