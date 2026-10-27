@@ -2028,7 +2028,13 @@ function openChat(initialConfig, options = {}) {
     byId('theme').value = mode;
     if (options.mount) {
       if (document.documentElement.dataset.theme !== theme) document.documentElement.dataset.theme = theme;
-      document.getElementById('site-theme').value = mode;
+      for (const item of document.querySelectorAll('#site-theme-menu button')) {
+        item.setAttribute('aria-checked', String(item.dataset.theme === mode));
+        if (item.dataset.theme === mode) {
+          document.getElementById('site-theme').title = `主题：${item.textContent}`;
+          document.getElementById('site-theme').setAttribute('aria-label', `主题：${item.textContent}`);
+        }
+      }
     }
   }
   byId('theme').addEventListener('change', () => {
