@@ -179,7 +179,7 @@ try{
       const authorization=new URL(await evaluate(`${root}.querySelector('#oauth-events a').href`));
       const callback=new URL(authorization.searchParams.get('redirect_uri'));
       callback.searchParams.set('code','fixture-callback-code');callback.searchParams.set('state',authorization.searchParams.get('state'));
-      await evaluate(`${root}.getElementById('oauth-input').value=${JSON.stringify(callback.href)}`);
+      await evaluate(`(()=>{const input=${root}.getElementById('oauth-input');input.value=${JSON.stringify(callback.href)};input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
       await browser('screenshot',join(directory,`${mode}-${language}-${providerId}-callback.png`));
       const count=callbackExchanges.length;
       await click('#oauth-submit');
