@@ -431,7 +431,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
         streamSimple: (m, transcript, opts) => streamApi.streamSimple(m, transcript, streamOptions(opts)),
       },
     }));
-    promptText = preferences.systemPrompt || next.systemPrompt || DEFAULT_PROMPT; refreshTools();
+    promptText = preferences.systemPrompt || DEFAULT_PROMPT; refreshTools();
     const target = chatId === conversation.id ? conversation : await harness.conversation(chatId, ctx);
     if (!target) throw new Error('对话不存在。');
     await target.configure({ model: { provider: providerId, modelId: next.model }, thinkingLevel: next.thinking }, ctx);
@@ -562,7 +562,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
       if (input.afterFailedRun !== undefined && !['keep', 'continue', 'withdraw'].includes(input.afterFailedRun)) throw new Error('失败后处理方式无效。');
       const next = siteSettings.update(data => { data.preferences = { ...data.preferences, ...input }; }).preferences;
       preferences = next;
-      promptText = preferences.systemPrompt || configuration?.systemPrompt || DEFAULT_PROMPT;
+      promptText = preferences.systemPrompt || DEFAULT_PROMPT;
       refreshTools();
       return structuredClone(preferences);
     },

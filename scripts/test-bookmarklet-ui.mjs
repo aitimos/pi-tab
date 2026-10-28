@@ -301,6 +301,11 @@ try{
   assert.equal(await evaluate(`pi.agent(${selected}).savedConfig().then(config=>config.apiKey)`),'test-only');
   assert.equal((await evaluate('pi.getPreferences()')).systemPrompt,undefined);
   console.log('PASS site override does not change another site or installer defaults');
+  await browser('open',url+'reopened');await launch();
+  assert.equal((await evaluate('pi.getPreferences()')).systemPrompt,'Site instructions en');
+  assert.equal(await evaluate(`pi.agent(${selected}).config.model`),'site-model');
+  assert.equal(await evaluate(`pi.agent(${selected}).savedConfig().then(c=>c.apiKey)`),'shared-site-key');
+  console.log('PASS settings survive closing all site tabs and reopening the bookmark');
   console.log(`Screenshots: ${directory}`);
 }catch(error){
   await browser('screenshot',join(directory,'failure.png')).catch(()=>{});
