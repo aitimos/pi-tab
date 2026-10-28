@@ -117,6 +117,7 @@ try{
     await browser('reload');if(mode==='bookmarklet')await browser('click','#launch');
     await wait(`${root}?.getElementById('setup')?.style.display==='flex'`);
     assert.equal((await call('listModels')).length,0,'deleted defaults do not return on reload');assert.equal((await call('listProviders')).length,0);
+    if(mode==='bookmarklet'){await browser('click','#launch');await wait(`${root}.getElementById('setup').style.display==='flex'`);assert.equal((await call('listModels')).length,0,'repeated activation cannot restore a deleted profile');}
     if(mode==='extension'){
       await browser('tab','t2');
       const remote=await evaluate(`chrome.runtime.sendMessage({target:'engine',site:'localhost',tabId:${tabId},method:'initialize',args:[]})`);assert.ok(remote.ok,remote.error);

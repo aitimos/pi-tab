@@ -1816,7 +1816,6 @@ async function openChat(initialConfig, options = {}) {
       rememberWindow();
       state.activeConfig = await agent.savedConfig();
       state.profiles = await agent.listModels();
-      if(initialConfig?.profileId && !state.profiles.some(p=>p.id===initialConfig.profileId))initialConfig=undefined;
       state.bookmarkConfig = initialConfig ? JSON.stringify(initialConfig) : null;
       initializeModelControls();
       subscribeEvents();
@@ -1839,6 +1838,7 @@ async function openChat(initialConfig, options = {}) {
   }
 
   async function applyBookmarkConfig(config) {
+    if(config.profileId && !(await agent.listModels()).some(p=>p.id===config.profileId))return;
     if (state.configuring || state.busy || agent?.busy) {
       message('system', t("当前任务尚未结束，请稍后再修改模型设置。"));
       return;
