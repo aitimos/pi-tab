@@ -18,7 +18,7 @@ const html=await readFile('pi-bookmarklet-chat-install.html','utf8');
 const runtime=JSON.parse(html.match(/<script id="pi-runtime"[^>]*>(.*?)<\/script>/s)[1]);
 const chat=html.match(/<script>\s*(async function openChat[\s\S]*?)\nconst PI_RUNTIME/)[1];
 const oauth=await readFile('dist/oauth.js','utf8');
-let bookmark,prelude,approved=false,refreshes=0,modelRequests=[];
+let bookmark,prelude,approved=false,refreshes=0,modelRequests=[],callbackExchanges=[];
 const server=createServer((req,res)=>{
   res.setHeader('Access-Control-Allow-Origin','*');res.setHeader('Access-Control-Allow-Headers',req.headers['access-control-request-headers']||'*');res.setHeader('Access-Control-Allow-Methods','GET, POST, OPTIONS');
   if(req.method==='OPTIONS'){res.writeHead(204);res.end();return;}
@@ -29,6 +29,13 @@ const server=createServer((req,res)=>{
   const json=(data,status=200)=>{res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(data));};
   let body='';req.on('data',chunk=>body+=chunk);req.on('end',()=>{
     if(target.endsWith('/device_authorization'))return json({device_code:'fixture-device',user_code:'TEST-123',verification_uri:'https://auth.kimi.com/activate',verification_uri_complete:'https://auth.kimi.com/activate?code=TEST-123',interval:1,expires_in:60});
+    if(['https://platform.claude.com/v1/oauth/token','https://auth.openai.com/oauth/token'].includes(target)){
+      const fields=target.includes('claude.com')?JSON.parse(body):Object.fromEntries(new URLSearchParams(body));
+      assert.equal(fields.grant_type,'authorization_code');assert.equal(fields.code,'fixture-callback-code');assert.ok(fields.code_verifier);
+      callbackExchanges.push({target,redirectUri:fields.redirect_uri});
+      const access=target.includes('openai.com')?'e30.'+Buffer.from(JSON.stringify({'https://api.openai.com/auth':{chatgpt_account_id:'fixture-account'}})).toString('base64url')+'.signature':'fixture-anthropic';
+      return json({access_token:access,refresh_token:'fixture-callback-refresh',expires_in:3600});
+    }
     if(target.endsWith('/oauth/token')){
       const fields=new URLSearchParams(body);
       assert.equal(fields.get('client_id'),'17e5f671-d194-4dfb-9706-5516cb48c098');
@@ -48,7 +55,7 @@ const server=createServer((req,res)=>{
 });
 await new Promise(r=>server.listen(0,'127.0.0.1',r));
 const base=`http://127.0.0.1:${server.address().port}`;
-prelude=`(()=>{const original=fetch.bind(globalThis);globalThis.fetch=async(input,init)=>{const request=new Request(input,init);if(['auth.kimi.com','api.kimi.com'].includes(new URL(request.url).hostname))return original(${JSON.stringify(base+'/mock?target=')}+encodeURIComponent(request.url),{method:request.method,headers:request.headers,body:['GET','HEAD'].includes(request.method)?undefined:await request.text(),signal:request.signal});return original(input,init);};})();`;
+prelude=`(()=>{const original=fetch.bind(globalThis);globalThis.fetch=async(input,init)=>{const request=new Request(input,init);if(['auth.kimi.com','api.kimi.com','platform.claude.com','auth.openai.com'].includes(new URL(request.url).hostname))return original(${JSON.stringify(base+'/mock?target=')}+encodeURIComponent(request.url),{method:request.method,headers:request.headers,body:['GET','HEAD'].includes(request.method)?undefined:await request.text(),signal:request.signal});return original(input,init);};})();`;
 bookmark=createBookmarklet(runtime.replace(/https:\/\/aitimos.github.io\/pi-tab\/oauth\/[\da-f]+\.js/g,base+'/oauth.js'),{openChat:chat});
 
 try{
@@ -159,7 +166,28 @@ try{
     await wait(`${root}.getElementById('oauth-form')?.dataset.provider==='kimi-coding'`);
     await click('#oauth-submit');await wait(`${root}.getElementById('manual-model-results').querySelector('button') && !${root}.getElementById('manual-model-form').hidden`);
     assert.ok((await api('list')).find(p=>p.id==='kimi-coding').connected);
-    console.log(`PASS ${mode} ${language}: native login, cancel, models, send, refresh, persistence, sign out`);
+    for(const [providerId,apiType] of [['anthropic','anthropic-messages'],['openai-codex','openai-codex-responses']]){
+      await click('#model-dialog-close');await click('#model-settings');await click('#model-menu-add');await click('#manual-add-provider');
+      await select('provider-api',apiType);await select('provider-auth',providerId);await click('#provider-form [type=submit]');
+      await wait(`${root}.getElementById('oauth-form')?.dataset.provider===${JSON.stringify(providerId)}`);
+      await click('#oauth-submit');
+      if(providerId==='openai-codex'){
+        await wait(`!${root}.getElementById('oauth-prompt').hidden && !${root}.getElementById('oauth-choice').hidden`);
+        await select('oauth-choice','browser');await click('#oauth-submit');
+      }
+      await wait(`!${root}.getElementById('oauth-prompt').hidden && !${root}.getElementById('oauth-input').hidden && ${root}.querySelector('#oauth-events a')`);
+      const authorization=new URL(await evaluate(`${root}.querySelector('#oauth-events a').href`));
+      const callback=new URL(authorization.searchParams.get('redirect_uri'));
+      callback.searchParams.set('code','fixture-callback-code');callback.searchParams.set('state',authorization.searchParams.get('state'));
+      await evaluate(`${root}.getElementById('oauth-input').value=${JSON.stringify(callback.href)}`);
+      await browser('screenshot',join(directory,`${mode}-${language}-${providerId}-callback.png`));
+      const count=callbackExchanges.length;
+      await click('#oauth-submit');
+      await wait(`${root}.getElementById('manual-model-results').querySelector('button') && !${root}.getElementById('manual-model-form').hidden`);
+      assert.equal(callbackExchanges.length,count+1);assert.equal(callbackExchanges.at(-1).redirectUri,authorization.searchParams.get('redirect_uri'));
+      assert.ok((await api('list')).find(p=>p.id===providerId).connected);
+    }
+    console.log(`PASS ${mode} ${language}: native device and callback URL login, cancel, models, send, refresh, persistence, sign out`);
   }finally{await browser('close');}
  }
 }finally{server.closeAllConnections();server.close();}

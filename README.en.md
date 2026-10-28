@@ -81,6 +81,6 @@ Licensed under the [Apache License 2.0](LICENSE).
 
 ## Account sign-in
 
-Uses Pi’s native OAuth login, token refresh, and provider implementations without a local service. Supports Anthropic’s copy-code flow and device authorization for OpenAI Codex (Pi’s legacy provider), GitHub Copilot, Kimi Coding, Meta, and xAI. Available models depend on account entitlements.
+Uses Pi’s native OAuth login, token refresh, and provider implementations without a local service. Anthropic accepts an authorization code or full callback URL. OpenAI Codex (Pi’s legacy provider) offers pasted callback URLs or device codes; GitHub Copilot, Kimi Coding, Meta, and xAI use device authorization. Pi parses and validates pasted callbacks without a local callback server. Available models depend on account entitlements. Anthropic’s token endpoint currently rejects cross-origin requests from the installation site; use the extension to sign in. Pasting a callback URL does not remove that restriction.
 
 The bookmark loads OAuth and Bedrock code from the installation site on demand and requires the page to allow those scripts and network requests. Bookmark credentials stay on the current origin and are never exported in bookmarks; sign in again on another site. Extension credentials stay in the extension and work across websites. Signing out deletes that provider’s credentials.

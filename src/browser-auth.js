@@ -1,5 +1,5 @@
-// Pi's other OAuth flows require a Node callback server. These providers expose
-// Pi-native device-code or copy-code flows that can run in a browser.
+// These providers expose Pi-native device-code, copy-code or manual callback
+// flows supported by this browser adapter.
 export const browserOAuthProviders = ['anthropic','openai-codex','github-copilot','kimi-coding','meta','xai'];
 export function authenticationForApi(providers, api) {
   const matching=providers.filter(p=>p.getModels().some(model=>model.api===api));

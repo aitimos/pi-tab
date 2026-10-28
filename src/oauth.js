@@ -52,7 +52,6 @@ export function installOAuth(models, catalog) {
         prompt:prompt=>{
           // These are Pi's existing non-loopback flows, not replacement OAuth protocols.
           if(prompt.type==='select'&&provider.id==='anthropic')return Promise.resolve('copy_code');
-          if(prompt.type==='select'&&provider.id==='openai-codex')return Promise.resolve('device_code');
           return new Promise((resolve,reject)=>{
             const {signal,...display}=prompt,promptId=crypto.randomUUID();
             const cancel=()=>{cleanup();session.prompt=null;reject(new Error('登录已取消。'));};

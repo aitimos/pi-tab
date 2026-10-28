@@ -24,6 +24,7 @@ function setup(fetch) {
 const json=(value,status=200)=>new Response(JSON.stringify(value),{status,headers:{'content-type':'application/json'}});
 const device={device_code:'test-device',user_code:'TEST-123',verification_uri:'https://auth.kimi.com/activate',verification_uri_complete:'https://auth.kimi.com/activate?code=TEST-123',interval:.001,expires_in:60};
 const token=(access='test-access',expires=3600)=>({access_token:access,refresh_token:'test-refresh',expires_in:expires});
+async function promptReady(action,id){for(let i=0;i<100;i++){const status=await action('status',{id});if(status.prompt)return status;if(status.state==='error')throw Error(status.error);await new Promise(r=>setTimeout(r,5));}throw Error('Missing OAuth prompt');}
 async function settled(action,id){for(let i=0;i<100;i++){const status=await action('status',{id});if(status.state!=='pending')return status;await new Promise(r=>setTimeout(r,10));}throw Error('OAuth did not settle');}
 
 test('Pi native device login persists, refreshes once and streams with provider authentication',async()=>{
@@ -84,6 +85,8 @@ test('Anthropic uses Pi copy-code flow and Codex uses Pi device flow without loo
   }
   await action('cancel',anthropic);
   const codex=await action('start',{providerId:'openai-codex'});
+  const choice=await promptReady(action,codex.id);
+  await action('answer',{id:codex.id,promptId:choice.prompt.id,value:'device_code'});
   const status=await settled(action,codex.id);assert.equal(status.state,'error');
   assert.ok(urls.some(url=>url.includes('/deviceauth/')));assert.ok(!status.error.includes('loopback'));
 });
@@ -105,4 +108,37 @@ test('native login and available models respect the selected API',async()=>{
  await credentials.modify('github-copilot',async()=>({type:'oauth',access:'test',refresh:'test',expires:Date.now()+3600000}));
  const available=await action('models',{providerId:'github-copilot',api:'anthropic-messages'});
  assert.ok(available.length);assert.ok(available.every(m=>m.api==='anthropic-messages'));
+});
+
+for(const providerId of ['anthropic','openai-codex'])test(`${providerId}: native callback URL parsing, PKCE and state validation`,async()=>{
+  let authorization,exchanges=0;
+  const access=providerId==='openai-codex'?'e30.'+Buffer.from(JSON.stringify({'https://api.openai.com/auth':{chatgpt_account_id:'fixture-account'}})).toString('base64url')+'.signature':'fixture-access';
+  const {action,credentials}=setup(async(url,init)=>{
+    exchanges++;
+    assert.equal(String(url),providerId==='anthropic'?'https://platform.claude.com/v1/oauth/token':'https://auth.openai.com/oauth/token');
+    const body=providerId==='anthropic'?JSON.parse(init.body):Object.fromEntries(new URLSearchParams(init.body));
+    assert.equal(body.code,'fixture-code');
+    assert.equal(body.redirect_uri,authorization.searchParams.get('redirect_uri'));
+    const challenge=Buffer.from(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(body.code_verifier))).toString('base64url');
+    assert.equal(challenge,authorization.searchParams.get('code_challenge'));
+    return json(token(access));
+  });
+  for(const failure of [true,false]){
+    const {id}=await action('start',{providerId});
+    let status=await promptReady(action,id);
+    if(providerId==='openai-codex'){
+      assert.equal(status.prompt.type,'select');
+      await action('answer',{id,promptId:status.prompt.id,value:'browser'});
+      status=await promptReady(action,id);
+    }
+    assert.equal(status.prompt.type,'manual_code');
+    authorization=new URL(status.events.find(e=>e.type==='auth_url').url);
+    const callback=new URL(authorization.searchParams.get('redirect_uri'));
+    callback.searchParams.set('code','fixture-code');
+    callback.searchParams.set('state',failure?'wrong-state':authorization.searchParams.get('state'));
+    await action('answer',{id,promptId:status.prompt.id,value:callback.href});
+    const result=await settled(action,id);
+    if(failure){assert.equal(result.state,'error');assert.match(result.error,/state mismatch/i);assert.equal(exchanges,0);assert.equal(await credentials.read(providerId),undefined);}
+    else{assert.equal(result.state,'done',result.error);assert.equal(exchanges,1);assert.equal((await credentials.read(providerId)).access,access);}
+  }
 });

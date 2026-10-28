@@ -10,8 +10,14 @@ export function createOAuthUI({root,i18n,auth,onSelect}) {
         </div>
         <div class="form-footer"><div class="form-buttons"><button id="oauth-cancel" class="subtle" type="button" hidden>取消</button><button id="oauth-logout" class="subtle" type="button" hidden>退出登录</button><button id="oauth-submit" class="primary" type="submit">登录</button></div></div>
       `);
+  i18n.addMessages({'登录方式':'Sign-in method','网页登录，粘贴回调 URL':'Browser sign-in, paste callback URL','设备码登录':'Device code sign-in','回调 URL 或授权码':'Callback URL or authorization code','粘贴完整回调 URL 或授权码':'Paste the full callback URL or authorization code','授权后的 localhost 页面可能无法打开，复制地址栏中的完整 URL 并粘贴到这里。':'The localhost page may not load after authorization. Copy its full URL from the address bar and paste it here.'});
+  i18n.addMessages({'等待授权':'Waiting for authorization','登录请求未完成。请检查网络；书签模式可能受跨域限制，可改用扩展。':'Sign-in request failed. Check your network; cross-origin restrictions may block bookmark mode. Try the extension.','授权信息与本次登录不匹配，请重新登录。':'This authorization does not match the current sign-in. Please start again.'});
   let oauthId,oauthPrompt,oauthTimer,account=null,attempt=0,selectedApi,selectedProvider;
-  function oauthError(error){i18n.text(byId('oauth-error'),()=>t(error.message||String(error)));byId('oauth-error').hidden=false;}
+  function oauthError(error){
+    const message=error.message||String(error);
+    const display=/failed to fetch|networkerror|load failed/i.test(message)?'登录请求未完成。请检查网络；书签模式可能受跨域限制，可改用扩展。':/state mismatch/i.test(message)?'授权信息与本次登录不匹配，请重新登录。':message;
+    i18n.text(byId('oauth-error'),()=>t(display));byId('oauth-error').hidden=false;
+  }
   async function cancelOAuth(){attempt++;clearTimeout(oauthTimer);const id=oauthId;oauthId=null;oauthPrompt=null;if(id)await auth('cancel',{id}).catch(oauthError);}
   function oauthAccount(){
     byId('oauth-logout').hidden=!account?.connected;
@@ -51,15 +57,16 @@ export function createOAuthUI({root,i18n,auth,onSelect}) {
       }
       if(result.prompt?.id!==oauthPrompt?.id || !result.prompt){
         oauthPrompt=result.prompt;byId('oauth-prompt').hidden=!oauthPrompt;byId('oauth-submit').disabled=!oauthPrompt;
+        if(!oauthPrompt)i18n.text(byId('oauth-submit'),()=>t('等待授权'));
         if(oauthPrompt){
-          i18n.text(byId('oauth-question'),oauthPrompt.message);const select=oauthPrompt.type==='select';byId('oauth-choice').hidden=!select;byId('oauth-input').hidden=select;
-          if(select)byId('oauth-choice').replaceChildren(...oauthPrompt.options.map(item=>new Option(item.label,item.id)));
-          else{byId('oauth-input').type=oauthPrompt.type==='secret'?'password':'text';byId('oauth-input').value='';byId('oauth-input').placeholder=oauthPrompt.placeholder||'';}
+          const prompt=oauthPrompt;i18n.text(byId('oauth-question'),()=>prompt.type==='manual_code'?t('回调 URL 或授权码'):prompt.type==='select'&&selectedProvider==='openai-codex'?t('登录方式'):prompt.message);const select=oauthPrompt.type==='select';byId('oauth-choice').hidden=!select;byId('oauth-input').hidden=select;
+          if(select)byId('oauth-choice').replaceChildren(...oauthPrompt.options.map(item=>i18n.option(()=>selectedProvider==='openai-codex'?t(item.id==='browser'?'网页登录，粘贴回调 URL':'设备码登录'):item.label,item.id)));
+          else{byId('oauth-input').type=oauthPrompt.type==='secret'?'password':'text';byId('oauth-input').value='';byId('oauth-input').placeholder=oauthPrompt.type==='manual_code'?t('粘贴完整回调 URL 或授权码'):oauthPrompt.placeholder||'';byId('oauth-input').spellcheck=false; if(oauthPrompt.type==='manual_code'&&selectedProvider==='openai-codex')i18n.text(byId('oauth-status'),()=>t('授权后的 localhost 页面可能无法打开，复制地址栏中的完整 URL 并粘贴到这里。'));}
           i18n.text(byId('oauth-submit'),()=>t('继续'));
         }
       }
       oauthTimer=setTimeout(()=>void pollOAuth(),800);
-    }catch(error){if(oauthId===id){await cancelOAuth();byId('oauth-submit').disabled=false;byId('oauth-cancel').hidden=true;oauthAccount();oauthError(error);}}
+    }catch(error){if(oauthId===id){await cancelOAuth();byId('oauth-submit').disabled=false;byId('oauth-cancel').hidden=true;byId('oauth-prompt').hidden=true;oauthAccount();oauthError(error);}}
   }
   byId('oauth-cancel').addEventListener('click',async()=>{await cancelOAuth();byId('oauth-submit').disabled=false;byId('oauth-prompt').hidden=true;byId('oauth-cancel').hidden=true;byId('oauth-events').replaceChildren();oauthAccount();});
   byId('oauth-logout').addEventListener('click',async()=>{try{await auth('logout',{providerId:account.id});await openOAuth(selectedApi,selectedProvider);}catch(error){oauthError(error);}});

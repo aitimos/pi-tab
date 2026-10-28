@@ -50,10 +50,18 @@ const oauthPlugin={
           return {contents:`import {nativeCatalog} from '#native-catalog';export const ${exported}=nativeCatalog[${JSON.stringify(name)}];`,resolveDir:root};
         });
         builder.onLoad({filter:/auth\/oauth\/load\.js$/},()=>({contents:names.map(name=>`export const load${{'anthropic':'Anthropic','openai-codex':'OpenAICodex','github-copilot':'GitHubCopilot','kimi-coding':'KimiCoding','meta':'Meta','xai':'Xai'}[name]}OAuth=async()=> (await import('./${name}.js')).${{'anthropic':'anthropic','openai-codex':'openaiCodex','github-copilot':'githubCopilot','kimi-coding':'kimiCoding','meta':'meta','xai':'xai'}[name]}OAuth;`).join('\n'),resolveDir:root+'auth/oauth'}));
-        // Device/copy-code login never opens a Node callback server. Keep Pi's
-        // callback helper intact; unavailable Node transport throws if selected.
-        builder.onResolve({filter:/^node:(http|crypto)$/},args=>({path:args.path,namespace:'browser-node'}));
-        builder.onLoad({filter:/.*/,namespace:'browser-node'},()=>({contents:`export function createServer(){throw new Error('This login method requires a loopback server');} export function randomBytes(n){return crypto.getRandomValues(new Uint8Array(n));}`}));
+        // Pi's Codex browser login uses Node only to generate the OAuth state.
+        // Adapt that primitive; keep its PKCE, parsing, exchange and refresh code.
+        builder.onLoad({filter:/auth\/oauth\/openai-codex\.js$/},async args=>{
+          const source=await readFile(args.path,'utf8');
+          const start=source.indexOf('let _randomBytes = null;'),end=source.indexOf('import { getProviderEnvValue }');
+          const stateStart=source.indexOf('function createState() {'),stateEnd=source.indexOf('function parseAuthorizationInput');
+          if(start<0||end<start||stateStart<end||stateEnd<stateStart)throw Error('Pi Codex browser adapter needs review');
+          return {contents:source.slice(0,start)+source.slice(end,stateStart)+`function createState(){return Array.from(crypto.getRandomValues(new Uint8Array(16)),byte=>byte.toString(16).padStart(2,'0')).join('');}\n`+source.slice(stateEnd),resolveDir:root+'auth/oauth'};
+        });
+        // No local callback server: Pi falls back to its manual URL prompt.
+        builder.onResolve({filter:/^node:http$/},args=>({path:args.path,namespace:'browser-node'}));
+        builder.onLoad({filter:/.*/,namespace:'browser-node'},()=>({contents:`export function createServer(){throw new Error('This login method requires a loopback server');}`}));
       },
     };
 await build({entryPoints:['src/oauth.js'],bundle:true,platform:'browser',format:'iife',globalName:'PiTabOAuth',target:'chrome110',minify:true,outfile:'dist/oauth.js',plugins:[oauthPlugin,browserTransports]});

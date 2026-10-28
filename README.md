@@ -72,7 +72,7 @@ Pi Tab 基于 Pi Durable，把 Agent 带进你正在浏览的网页。点击书�
 
 ## 账户登录
 
-直接复用 Pi 的 OAuth 登录、令牌刷新和提供商调用，无需本地服务。支持 Anthropic 复制授权码，以及 OpenAI Codex（Pi 的 legacy 提供商）、GitHub Copilot、Kimi Coding、Meta、xAI 的设备授权流程。可用模型由账号权限决定。
+直接复用 Pi 的 OAuth 登录、令牌刷新和提供商调用，无需本地服务。支持 Anthropic 粘贴授权码或完整回调 URL；OpenAI Codex（Pi 的 legacy 提供商）可选择粘贴回调 URL 或设备码登录。GitHub Copilot、Kimi Coding、Meta、xAI 使用设备授权流程。回调 URL 由 Pi 原生逻辑解析并校验，无需本地回调服务。可用模型由账号权限决定。 Anthropic 令牌接口目前不允许安装页来源的跨域请求，请使用扩展登录；粘贴回调 URL 本身不能解除跨域限制。
 
 书签首次登录或使用 Bedrock 时从安装站加载所需资源，需要网页允许相应脚本和网络请求。书签登录状态保存在当前网站，不随书签导出，换网站需重新登录；扩展的登录状态在扩展内保存，可跨网站使用。退出登录会删除对应提供商凭据。
 
