@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 import { build, transform } from 'esbuild';
 import { minify } from 'terser';
 import { mkdir, readFile, rm, writeFile, cp } from 'node:fs/promises';
@@ -19,6 +20,32 @@ const apis = [...new Set(catalog.map(model => model.api))].map(id => ({
 }));
 
 await mkdir('dist', { recursive: true });
+const oauthPlugin={
+      name:'browser-oauth',
+      setup(builder) {
+        const root=new URL('./node_modules/@earendil-works/pi-ai/dist/',import.meta.url).pathname;
+        const names=['anthropic','openai-codex','github-copilot','kimi-coding','meta','xai'];
+        builder.onResolve({filter:/^#native-catalog$/},()=>({path:'catalog',namespace:'native-models'}));
+        builder.onLoad({filter:/^catalog$/,namespace:'native-models'},()=>({contents:`export const nativeCatalog=Object.fromEntries(${JSON.stringify(names)}.map(id=>[id,{}]));`}));
+        builder.onLoad({filter:/\.models\.js$/},async args=>{
+          const name=args.path.split('/').at(-1).replace('.models.js','');
+          if(!names.includes(name))return;
+          const source=await readFile(args.path,'utf8');
+          const exported=source.match(/export const (\w+)/)[1];
+          return {contents:`import {nativeCatalog} from '#native-catalog';export const ${exported}=nativeCatalog[${JSON.stringify(name)}];`,resolveDir:root};
+        });
+        builder.onLoad({filter:/auth\/oauth\/load\.js$/},()=>({contents:names.map(name=>`export const load${{'anthropic':'Anthropic','openai-codex':'OpenAICodex','github-copilot':'GitHubCopilot','kimi-coding':'KimiCoding','meta':'Meta','xai':'Xai'}[name]}OAuth=async()=> (await import('./${name}.js')).${{'anthropic':'anthropic','openai-codex':'openaiCodex','github-copilot':'githubCopilot','kimi-coding':'kimiCoding','meta':'meta','xai':'xai'}[name]}OAuth;`).join('\n'),resolveDir:root+'auth/oauth'}));
+        // Device/copy-code login never opens a Node callback server. Keep Pi's
+        // callback helper intact; unavailable Node transport throws if selected.
+        builder.onResolve({filter:/^node:(http|crypto)$/},args=>({path:args.path,namespace:'browser-node'}));
+        builder.onLoad({filter:/.*/,namespace:'browser-node'},()=>({contents:`export function createServer(){throw new Error('This login method requires a loopback server');} export function randomBytes(n){return crypto.getRandomValues(new Uint8Array(n));}`}));
+      },
+    };
+await build({entryPoints:['src/oauth.js'],bundle:true,platform:'browser',format:'iife',globalName:'PiTabOAuth',target:'chrome110',minify:true,outfile:'dist/oauth.js',plugins:[oauthPlugin]});
+const oauthSource=await readFile('dist/oauth.js','utf8');
+const oauthHash=createHash('sha256').update(oauthSource).digest('hex').slice(0,16);
+await mkdir('oauth',{recursive:true});
+await writeFile(`oauth/${oauthHash}.js`,oauthSource);
 await build({
   entryPoints: ['src/plugin.js'],
   bundle: true,
@@ -31,6 +58,7 @@ await build({
   outfile: 'dist/pi-console.js',
   logLevel: 'info',
   plugins: [
+    {name:'oauth-url',setup(builder){builder.onResolve({filter:/^#oauth-url$/},()=>({path:'url',namespace:'oauth-url'}));builder.onLoad({filter:/.*/,namespace:'oauth-url'},()=>({contents:`export default 'https://aitimos.github.io/pi-tab/oauth/${oauthHash}.js';`}));}},
     {
       // Bedrock's browser path uses the AWS SDK's fetch transport. Its static
       // Node-only proxy imports must not pull net/tls into the standalone bundle.
@@ -60,7 +88,7 @@ await build({
   ],
 });
 // Keep the complete runtime below Chromium's bookmark URL limit.
-const optimized = await minify(await readFile('dist/pi-console.js','utf8'), {compress:{passes:2},mangle:true,format:{comments:'some',ascii_only:true}});
+const optimized = await minify(await readFile('dist/pi-console.js','utf8'), {compress:{passes:3,pure_getters:true},mangle:true,format:{comments:'some',ascii_only:true}});
 const markdownLicense = await readFile('node_modules/marked/LICENSE','utf8');
 await writeFile('dist/pi-console.js',optimized.code + '\n/*! Marked license\n' + markdownLicense.replace(/\*\//g,'* /') + '\n*/');
 await makeBookmarklet();
@@ -79,7 +107,7 @@ const originalChat = html.match(/<script>\s*(async function openChat[\s\S]*?)\nc
 const chatCss = originalChat.match(/const chatStyles = `([\s\S]*?)`;/)[1];
 const packedCss = gzipSync((await transform(chatCss,{loader:'css',minify:true})).code,{level:9}).toString('base64');
 const packedChat = originalChat.replace(/const chatStyles = `[\s\S]*?`;/, () => `const chatStyles = await new Response(new Blob([Uint8Array.from(atob('${packedCss}'), c => c.charCodeAt(0))]).stream().pipeThrough(new DecompressionStream('gzip'))).text();`);
-const chatSource = (await transform(packedChat, {minifyWhitespace:true,minifyIdentifiers:true,minifySyntax:true,legalComments:'none'})).code.trim();
+const chatSource = (await minify(packedChat,{compress:{passes:2},mangle:true,format:{comments:false,ascii_only:true}})).code;
 // Check the actual chat bookmark too, with room for saved model credentials.
 const chatBookmark = createBookmarklet(source, { openChat:chatSource, config:{apiKey:'k'.repeat(16384)} });
 console.log(`聊天书签长度：${chatBookmark.length} 个字符（含 16 KB 配置预留）`);
@@ -99,11 +127,14 @@ await writeFile('dist/extension/NOTICE', await readFile('NOTICE'));
 await writeFile('dist/extension/manifest.json', await readFile('extension/manifest.json'));
 await cp('extension/_locales','dist/extension/_locales',{recursive:true});
 await build({entryPoints:['src/extension-worker.js'],bundle:true,format:'esm',platform:'browser',target:'chrome110',minify:true,outfile:'dist/extension/worker.js'});
+const oauthUIBuild=await build({entryPoints:['src/oauth-ui.js'],bundle:true,format:'iife',globalName:'PiTabOAuthUI',platform:'browser',minify:true,write:false});
+const oauthUISource=oauthUIBuild.outputFiles[0].text;
 const extensionBootstrap = await readFile('src/extension-content.js', 'utf8');
-await writeFile('dist/extension/content.js', `if (!globalThis.__piTabExtensionLoaded) {\nglobalThis.__piTabExtensionLoaded = true;\n(() => {\nglobalThis.__piTabDeferredInstall = true;\n${source}\n${chatSource}\n${extensionBootstrap}\n})();\n}`);
+await writeFile('dist/extension/content.js', `if (!globalThis.__piTabExtensionLoaded) {\nglobalThis.__piTabExtensionLoaded = true;\n(() => {\nglobalThis.__piTabDeferredInstall = true;\n${source}\n${oauthUISource}\n${chatSource}\n${extensionBootstrap}\n})();\n}`);
 const engineBootstrap = await readFile('src/extension-engine.js', 'utf8');
+await writeFile('dist/extension/oauth.js',oauthSource);
 await writeFile('dist/extension/engine.js', `globalThis.__piTabDeferredInstall = true;\n${source}\n${engineBootstrap}`);
-await writeFile('dist/extension/engine.html', '<!doctype html><html><head><meta charset="utf-8"></head><body><script src="engine.js"></script></body></html>');
+await writeFile('dist/extension/engine.html', '<!doctype html><html><head><meta charset="utf-8"></head><body><script src="oauth.js"></script><script src="engine.js"></script></body></html>');
 
 const iconColors = [
   ['#e48a7a', '#e48a7a', '#e48a7a', null],
@@ -137,7 +168,7 @@ await writeFile('dist/extension/icon.png', Buffer.concat([
   Buffer.from('89504e470d0a1a0a', 'hex'), pngChunk('IHDR', header), pngChunk('IDAT', deflateSync(rows)), pngChunk('IEND', Buffer.alloc(0)),
 ]));
 
-const extensionFiles = ['LICENSE', 'NOTICE', 'manifest.json', 'worker.js', 'content.js', 'engine.html', 'engine.js', 'icon.png', '_locales/en/messages.json', '_locales/zh_CN/messages.json'];
+const extensionFiles = ['LICENSE', 'NOTICE', 'manifest.json', 'worker.js', 'content.js', 'engine.html', 'engine.js', 'oauth.js', 'icon.png', '_locales/en/messages.json', '_locales/zh_CN/messages.json'];
 const localParts = [], centralParts = [];
 let offset = 0;
 for (const filename of extensionFiles) {

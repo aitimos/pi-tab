@@ -67,6 +67,7 @@ body>header,body>main,body>footer{position:relative;z-index:1}
 <details><summary>如何管理会话和主题？</summary><p>顶部可新建对话、新开窗口和切换会话，新窗口使用空白会话并继承模型配置。标题在首轮回复后自动概括并保存，圆环表示会话正在运行。删除时点击会话右侧图标并确认，运行中的任务需先停止。「Pi 设置」中的主题可选跟随、浅色、深色，默认跟随网页或浏览器；设置分为常规、指令、执行三类。</p></details>
 <details><summary>如何跨标签页协作？</summary><p>从 Chrome 工具栏的 Pi Tab 扩展图标启动。Agent 可用 tab_open 打开标签页并创建独立会话，通过 tab_send 发任务、tab_read 读结果。书签中的 agent_spawn 只创建使用当前页面的新会话，不会打开标签页；安装扩展也不会改变已有书签会话的能力。</p></details>
 <details><summary>可以发送文件和图片吗？</summary><p>点击输入框旁的附件图标，或拖入文件、粘贴图片。支持 UTF-8 文本和代码文件，PNG、JPEG、WebP、GIF 图片需模型支持视觉输入。最多 8 个附件，单个 5 MB，总计 10 MB；暂不解析 PDF、Office 文档、音视频和压缩包。附件随消息发送到配置的模型服务并保存到会话。</p></details>
+<details><summary>支持账号登录吗？</summary><p>点击“账户登录”，按提供商提示授权，无需本地服务。书签登录状态仅在当前网站保存，不会随书签导出；扩展登录状态可跨网站复用。书签登录需要网页允许相应脚本和网络请求。</p></details>
 <details><summary>无法打开或连接模型？</summary><p>扩展用于普通 HTTP 和 HTTPS 网页，不支持本地文件、浏览器设置页或扩展商店。书签可能被网页安全策略拦截，模型接口还需允许网页跨域访问（CORS）。扩展从后台请求模型；连接失败时请核对接口地址、凭据和模型权限。</p></details>
 </div></section>
 </main>
@@ -189,8 +190,8 @@ async function openChat(initialConfig, options = {}) {
     #model-dialog { flex:1; min-height:0; display:flex; flex-direction:column; padding:20px; color:var(--text); }
     #model-dialog .dialog-heading { justify-content:space-between; margin-bottom:20px; }
     #model-dialog .dialog-heading h2 { margin:0; font-size:17px; line-height:1.5; }
-    #manual-model-form,#provider-form { flex:1; min-height:0; display:flex; flex-direction:column; margin:0 -20px -20px; }
-    #manual-model-form .form-body,#provider-form .form-body { padding-top:0; }
+    #manual-model-form,#provider-form,#oauth-form { flex:1; min-height:0; display:flex; flex-direction:column; margin:0 -20px -20px; }
+    #manual-model-form .form-body,#provider-form .form-body,#oauth-form .form-body { padding-top:0; }
     #manual-model-form label,#provider-form label { margin-bottom:14px; }
     #manual-model-results { display:grid; gap:4px; max-height:180px; overflow:auto; margin:8px 0 14px; }
     #manual-model-results:empty { display:none; }
@@ -455,7 +456,7 @@ async function openChat(initialConfig, options = {}) {
     <div id="content">
       <form id="setup" autocomplete="off">
         <div class="form-body" id="setup-fields">
-          <h2 id="setup-title">设置模型</h2>
+          <div class="field-heading"><h2 id="setup-title">设置模型</h2><button id="oauth-open" class="text-button" type="button">账户登录</button></div>
           <fieldset class="form-section" aria-label="提供商连接">
             <label><span>接口类型</span><select id="api" aria-label="接口类型"></select></label>
             <div class="model-field"><label for="base-url">接口地址</label><div class="endpoint-field">
@@ -489,7 +490,7 @@ async function openChat(initialConfig, options = {}) {
             <button id="send" class="primary" title="发送消息" aria-label="发送消息" aria-haspopup="menu" aria-expanded="false" disabled>${icon('arrow')}</button>
             <button id="abort" title="停止任务" aria-label="停止任务" hidden>${icon('stop')}</button>
           </div>
-          <div id="model-menu" role="menu" aria-label="选择模型" hidden><div id="model-menu-list"></div><div id="model-menu-actions"><button id="model-menu-add" type="button" role="menuitem">添加模型</button></div></div>
+          <div id="model-menu" role="menu" aria-label="选择模型" hidden><div id="model-menu-list"></div><div id="model-menu-actions"><button id="model-menu-add" type="button" role="menuitem">添加模型</button><button id="oauth-menu" type="button" role="menuitem">账户登录</button></div></div>
           <div id="send-menu" role="menu" aria-label="发送方式" hidden><button id="send-follow-up" type="button" role="menuitem">排队发送</button><button id="send-steer" type="button" role="menuitem">直接发送</button></div>
         </div>
       </section>
@@ -536,6 +537,7 @@ async function openChat(initialConfig, options = {}) {
         </div>
         <div class="form-footer"><button class="primary" type="submit">添加并使用</button></div>
       </form>
+      <form id="oauth-form" hidden></form>
       <form id="provider-form" hidden>
         <div class="form-body">
           <div class="field-grid">
@@ -596,7 +598,7 @@ async function openChat(initialConfig, options = {}) {
 
   function sameProvider(a,b) { return Boolean(a && b && a.api === b.api && a.baseUrl?.replace(/\/+$/, '') === b.baseUrl?.replace(/\/+$/, '')); }
   function draftProvider() {
-    const config = {api:byId('api').value,baseUrl:byId('base-url').value.trim(),apiKey:byId('api-key').value.trim()};
+    const config = {nativeProvider:null,api:byId('api').value,baseUrl:byId('base-url').value.trim(),apiKey:byId('api-key').value.trim()};
     if (!config.apiKey && sameProvider(config,state.activeConfig)) config.apiKey=state.activeConfig.apiKey;
     return config;
   }
@@ -730,6 +732,7 @@ async function openChat(initialConfig, options = {}) {
     await openManualModelForm();
   }
   function closeModelDialog() {
+    void cancelOAuth();
     manualDiscoveryVersion++;
     byId('model-dialog').hidden=true;
     byId('content').hidden=false;
@@ -802,6 +805,7 @@ async function openChat(initialConfig, options = {}) {
     selectDraftModel(state.candidates.find(model=>model.id===id) || agent.describeModel({...draftProvider(),model:id}));
   });
   byId('model-dialog-close').addEventListener('click',()=>{
+    if(!byId('oauth-form').hidden){void cancelOAuth();byId('oauth-form').hidden=true;closeModelDialog();return;}
     if (!byId('provider-form').hidden) {
       byId('provider-form').hidden=true;
       byId('manual-model-form').hidden=false;
@@ -890,6 +894,7 @@ async function openChat(initialConfig, options = {}) {
     const selected=state.selectedProviderId || providers.find(provider=>provider.api===current?.api && provider.baseUrl===current?.baseUrl)?.id;
     if(selected)byId('manual-model-provider').value=selected;
     state.selectedProviderId=null;
+    byId('oauth-form').hidden=true;
     byId('provider-form').hidden=true;
     byId('manual-model-form').hidden=false;
     i18n.text(byId('model-dialog-title'), () => t("添加模型"));
@@ -904,9 +909,9 @@ async function openChat(initialConfig, options = {}) {
     const input=byId('manual-model-vision').checked ? ['text','image'] : ['text'];
     const provider=manualProvider();
     if(!provider)return;
-    const {api,baseUrl,apiKey,headers,proxyUrl,proxyToken,providerName}=provider;
+    const {api,baseUrl,apiKey,headers,proxyUrl,proxyToken,providerName,nativeProvider=null}=provider;
     closeModelDialog();
-    const config=Object.fromEntries(Object.entries({api,baseUrl,apiKey,headers,proxyUrl,proxyToken,providerName,model,modelInfo:selectedManualModel || undefined,reasoning,input,thinking:byId('manual-model-thinking').value}).filter(([,value])=>value!==undefined));
+    const config=Object.fromEntries(Object.entries({api,baseUrl,apiKey,headers,proxyUrl,proxyToken,providerName,nativeProvider,model,modelInfo:selectedManualModel || undefined,reasoning,input,thinking:byId('manual-model-thinking').value}).filter(([,value])=>value!==undefined));
     await configureModel(config);
   });
   byId('manual-add-provider').addEventListener('click',()=>{
@@ -934,6 +939,23 @@ async function openChat(initialConfig, options = {}) {
       error.hidden=false;
     }
   });
+  let oauthUI;
+  async function cancelOAuth(){await oauthUI?.cancel();}
+  async function openOAuth(){
+    closeModelMenu();
+    try{
+      oauthUI ??= (await runtimePi.oauthUI())({root,i18n,auth:(action,input)=>runtimePi.auth(action,input),onSelect:async(providerId,name)=>{
+        const available=await runtimePi.auth('models',{providerId});
+        if(!available.length)throw new Error(t('此账号没有可用模型。'));
+        const first=available[0];
+        const saved=await agent.saveProvider({api:first.api,baseUrl:first.baseUrl,providerName:name,nativeProvider:providerId});
+        state.selectedProviderId=saved.id;await openManualModelForm();
+      }});
+      await oauthUI.open();
+    }catch(error){byId('content').hidden=true;byId('model-dialog').hidden=false;byId('manual-model-form').hidden=true;byId('provider-form').hidden=true;byId('oauth-form').hidden=false;i18n.text(byId('oauth-form'),t(error.message));}
+  }
+  byId('oauth-open').addEventListener('click',()=>void openOAuth());
+  byId('oauth-menu').addEventListener('click',()=>void openOAuth());
   byId('reasoning-enabled').addEventListener('change',()=>{
     const model=agent.describeModel({...draftProvider(),model:byId('model').value,modelInfo:state.selectedModel || {},reasoning:byId('reasoning-enabled').checked});
     renderThinking(byId('thinking'),model,byId('thinking').value);
@@ -2159,7 +2181,7 @@ async function openChat(initialConfig, options = {}) {
     }
     setMinimized(false);
   });
-  byId('close').addEventListener('click', () => { expandEdge(true); host.style.display = 'none'; rememberWindow(); });
+  byId('close').addEventListener('click', () => { void cancelOAuth(); expandEdge(true); host.style.display = 'none'; rememberWindow(); });
   let dockSide = null;
   let edgeTimer, edgeHoverTimer, suppressEdgeClick = false;
   let edgeFrame = null, edgeVelocity = 0, edgeTarget = 0;
@@ -2395,7 +2417,7 @@ async function openChat(initialConfig, options = {}) {
       else if (state.connected) byId('message-input').focus();
       if (options.mount) host.scrollIntoView({ block:'nearest', behavior:'auto' });
     },
-    hide() { expandEdge(true); host.style.display = 'none'; rememberWindow(); },
+    hide() { void cancelOAuth(); expandEdge(true); host.style.display = 'none'; rememberWindow(); },
     get id() { return agent?.id; },
     get visible() { return !options.mount && host.style.display !== 'none'; },
   };

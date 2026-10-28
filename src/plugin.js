@@ -1,4 +1,5 @@
 export {renderMarkdown} from './markdown.js';
+import oauthUrl from '#oauth-url';
 import { SiteSettings } from './site-settings.js';
 import { getI18n } from './i18n.js';
 export { getI18n } from './i18n.js';
@@ -115,7 +116,18 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
   let preferences = {};
   const nativeFetch = window.fetch.bind(window);
   const nativeConsole = Object.fromEntries(['log', 'info', 'warn', 'error', 'debug'].map(k => [k, console[k].bind(console)]));
-  const registry = createRegistry(), models = createModels();
+  let oauth;
+  async function getOAuth() {
+    if(!oauth)oauth=(async()=>{
+      if(!globalThis.PiTabOAuth)await new Promise((resolve,reject)=>{
+        const script=document.createElement('script');script.src=oauthUrl;script.onload=()=>{script.remove();resolve();};script.onerror=()=>{script.remove();reject(new Error('网页阻止加载 OAuth，请使用扩展登录。'));};document.head.append(script);
+      });
+      return globalThis.PiTabOAuth.installOAuth(models,(await loadModelCatalog()).models);
+    })().catch(error=>{oauth=null;throw error;});
+    return oauth;
+  }
+  const credentials=Object.fromEntries(['read','list','modify','delete'].map(method=>[method,async(...args)=>args[0]?.startsWith('page-')?undefined:(await getOAuth()).credentials[method](...args)]));
+  const registry = createRegistry(), models = createModels({credentials});
   const toolMap = new Map(), listeners = new Set(), events = [], consoleEntries = [], requests = [];
   let harness, conversation, configuration, disposed = false;
   let releaseStorageLock, storageLock;
@@ -173,7 +185,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
       if (!chat || chat.titleGenerated || !config) return;
       const target = await harness.conversation(id, ctx);
       const {entries} = await target.context(ctx);
-      const title = await generateConversationTitle(models, models.getModel(`page-${config.profileId}`, config.model), entries, controller.signal);
+      const title = await generateConversationTitle(models, models.getModel(config.nativeProvider || `page-${config.profileId}`, config.model), entries, controller.signal);
       if (!title || disposed) return;
       const saved = await harness.commit(async tx => {
         const item = (await tx.doc(TabState)).chats.find(chat => chat.id === id);
@@ -218,7 +230,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     if (inherited) {
       await harness.commit(async tx => { (await tx.doc(TabState)).chatConfigs[created.id] = inherited.profileId; }, ctx);
       configurations.set(created.id, inherited);
-      await created.configure({ model: { provider: `page-${inherited.profileId}`, modelId: inherited.model }, thinkingLevel: inherited.thinking }, ctx);
+      await created.configure({ model: { provider: inherited.nativeProvider || `page-${inherited.profileId}`, modelId: inherited.model }, thinkingLevel: inherited.thinking }, ctx);
     }
     await watchConversation(created.id);
     if (activate) { conversation = created; configuration = inherited ?? null; }
@@ -385,9 +397,17 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     ensureOpen();
     if (activeRuns.has(chatId) || durableBusy.get(chatId)) throw new Error('agent 正在运行。请先停止当前任务再修改模型。');
     const previous = configurations.get(chatId);
-    const next = { ...previous, ...options };
+    const next = { ...(options.profileId && options.profileId !== previous?.profileId ? {} : previous), ...options };
+    if(Object.hasOwn(options,'apiKey') && !Object.hasOwn(options,'nativeProvider'))delete next.nativeProvider;
     if ((options.model && options.model !== previous?.model) || (options.api && options.api !== previous?.api)) {
       for (const field of ['modelInfo','reasoning','contextWindow','maxTokens','compat','thinkingLevelMap','input']) if (!Object.hasOwn(options, field)) delete next[field];
+    }
+    if(next.nativeProvider)await getOAuth();
+    const nativeModel=next.nativeProvider ? models.getModel(next.nativeProvider,next.model) : null;
+    if(next.nativeProvider && !nativeModel)throw new Error('该提供商没有此模型。');
+    if(nativeModel){
+      next.api=nativeModel.api;next.baseUrl=nativeModel.baseUrl;
+      for(const key of ['apiKey','headers','proxyUrl','proxyToken'])delete next[key];
     }
     next.api ??= 'openai-completions';
     if (!APIS[next.api]) throw new Error(`api 必须是 ${Object.keys(APIS).join(' / ')}`);
@@ -396,7 +416,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error('baseUrl 必须是 HTTP(S) 接口根地址，不能包含登录信息、查询参数或 #。');
     next.baseUrl = next.baseUrl.replace(/\/+$/, '');
     if (next.jsEngine && !['auto', 'native', 'interpreter'].includes(next.jsEngine)) throw new Error('jsEngine 必须是 auto、native 或 interpreter。');
-    const resolved = modelConfig.describe(next);
+    const resolved = modelConfig.describe({...next,...(nativeModel?{modelInfo:nativeModel}: {})});
     next.contextWindow ??= resolved.contextWindow; next.maxTokens ??= Math.min(resolved.maxTokens,16384); next.thinking = resolved.thinking; next.reasoning = resolved.reasoning;
     next.modelInfo = resolved;
     next.input = resolved.input;
@@ -421,10 +441,10 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     };
     const profileId = options.profileId ?? (previous?.profileId && previous.model === next.model && previous.baseUrl === next.baseUrl && previous.api === next.api ? previous.profileId : crypto.randomUUID());
     next.profileId = profileId;
-    const providerId = `page-${profileId}`;
+    const providerId = next.nativeProvider || `page-${profileId}`;
     const model = { ...resolved, id:next.model, api:next.api, provider:providerId, baseUrl:next.baseUrl, contextWindow:next.contextWindow, maxTokens:next.maxTokens };
     const streamOptions = opts => ({ ...opts, maxTokens:opts?.maxTokens ?? next.maxTokens, transport:'sse', ...(usesOwnFetch ? {} : {fetch:requestFetch}) });
-    models.setProvider(createProvider({ id: providerId, name: next.providerName || next.baseUrl, baseUrl: next.baseUrl, models: [model],
+    if(!next.nativeProvider) models.setProvider(createProvider({ id: providerId, name: next.providerName || next.baseUrl, baseUrl: next.baseUrl, models: [model],
       auth: { apiKey: { name: 'Configured key', resolve: async () => ({ auth: { apiKey: next.apiKey || 'no-key', headers: next.headers } }) } },
       api: {
         stream: (m, transcript, opts) => streamApi.stream(m, transcript, streamOptions(opts)),
@@ -592,11 +612,13 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
       const configured = [...sharedProfiles.values(), ...(state?.profiles ?? [])].map(profile => ({
         id: profile.id, api: profile.api, baseUrl: profile.baseUrl, apiKey: profile.apiKey || '',
         providerName: profile.providerName || '', headers: profile.headers,
-        proxyUrl: profile.proxyUrl, proxyToken: profile.proxyToken,
+        proxyUrl: profile.proxyUrl, proxyToken: profile.proxyToken, nativeProvider:profile.nativeProvider,
       }));
       const providers = [...configured, ...sharedProviders.values(), ...(state?.providers ?? [])];
-      return [...new Map(providers.filter(item => item.api && item.baseUrl).map(item => [`${item.api}\n${item.baseUrl}\n${item.apiKey || ''}`, item])).values()];
+      return [...new Map(providers.filter(item => item.api && item.baseUrl).map(item => [`${item.nativeProvider || ''}\n${item.api}\n${item.baseUrl}\n${item.apiKey || ''}`, item])).values()];
     },
+    async oauthUI(){await getOAuth();return globalThis.PiTabOAuth.createOAuthUI;},
+    async auth(action,input) {await pi.ready;return (await getOAuth()).action(action,input);},
     async saveProvider(provider) {
       await pi.ready; ensureOpen();
       if (!APIS[provider.api]) throw new Error('请选择接口类型。');
@@ -604,6 +626,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
       if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error('请填写有效的接口地址。');
       const saved = {
         id: crypto.randomUUID(), api: provider.api, baseUrl: provider.baseUrl.replace(/\/+$/, ''),
+        ...(provider.nativeProvider?{nativeProvider:provider.nativeProvider}:{}),
         apiKey: provider.apiKey || '', providerName: provider.providerName?.trim() || url.hostname,
       };
       siteSettings.update(data => { data.providers.push(saved); });
@@ -705,6 +728,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     describeModel: config => modelConfig.describe(config),
     async discoverModels(config = {}, options = {}) {
       await pi.ready; ensureOpen();
+      if(config.nativeProvider){const available=await (await getOAuth()).action('models',{providerId:config.nativeProvider});return {models:available.map(model=>({...modelConfig.describe({...config,model:model.id,modelInfo:model}),source:'provider'})),source:'provider',warning:''};}
       return modelConfig.discover({...configuration,...config}, {...options,fetch:nativeFetch});
     },
     get config() { return publicConfig(configuration); },

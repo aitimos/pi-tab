@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - pi-bookmarklet-chat-install.html
+      - oauth/**
       - .github/workflows/pages.yml
   workflow_dispatch:
 
@@ -30,6 +31,7 @@ jobs:
         run: |
           mkdir -p _site
           cp pi-bookmarklet-chat-install.html _site/index.html
+          cp -r oauth _site/oauth
       - uses: actions/upload-pages-artifact@v4
         with:
           path: _site

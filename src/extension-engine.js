@@ -135,6 +135,7 @@ chrome.runtime.onMessage.addListener((message, _sender, respond) => {
       if (['prompt','steer','followUp'].includes(message.name)) return agent[message.name](args[0]);
       throw new Error('未知 agent 操作。');
     }
+    if (method === 'auth') return pi.auth(...args);
     if (method === 'getPreferences') return pi.getPreferences();
     if (method === 'setPreferences') return pi.setPreferences(args[0]);
     if (method === 'listModels') return pi.listModels();

@@ -10,7 +10,7 @@ Built on Pi Durable, Pi Tab brings an agent into the webpage you are browsing. O
 
 ## Highlights
 
-- **Open with a click**: the bookmark contains the complete runtime and needs no extension or server deployment. A Chrome extension is also available.
+- **Open with a click**: the bookmark contains the Agent runtime and needs no extension or server deployment. A Chrome extension is also available.
 - **Work directly on the page**: use page content and the DOM to analyze, click, fill forms, and debug JavaScript in your current browser context.
 - **Keep your conversations**: history stays on your device and can be reopened. Pi Durable supports unfinished task recovery; extension background runs survive webpage reloads.
 - **Choose your models**: add multiple providers and models, switch from the composer, and set thinking levels supported by each model.
@@ -34,7 +34,7 @@ Try: “Summarize this page,” “Turn this table into CSV,” or “Find out w
 
 ## Quick start
 
-You need a model that supports tool calling, its Base URL, API key, and model name.
+Use a tool-capable model with its Base URL, API key, and model name, or choose Account sign-in for a supported provider.
 
 ### Bookmark
 
@@ -76,3 +76,9 @@ Report problems through [Issues](https://github.com/aitimos/pi-tab/issues) or se
 Thanks to the [LINUX DO](https://linux.do/) community for providing a space to exchange ideas and share projects.
 
 Licensed under the [Apache License 2.0](LICENSE).
+
+## Account sign-in
+
+Uses Pi’s native OAuth login, token refresh, and provider implementations without a local service. Supports Anthropic’s copy-code flow and device authorization for OpenAI Codex (Pi’s legacy provider), GitHub Copilot, Kimi Coding, Meta, and xAI. Available models depend on account entitlements.
+
+The bookmark loads OAuth code from the installation site on demand and requires the page to allow those scripts and network requests. Bookmark credentials stay on the current origin and are never exported in bookmarks; sign in again on another site. Extension credentials stay in the extension and work across websites. Signing out deletes that provider’s credentials.
