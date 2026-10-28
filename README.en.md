@@ -32,6 +32,8 @@ Built on Pi Durable, Pi Tab brings an agent into the webpage you are browsing. O
 
 Try: “Summarize this page,” “Turn this table into CSV,” or “Find out why this page scrolls horizontally.”
 
+Choose **Manage models** in the composer’s model menu to edit or delete saved providers and models. Provider connection changes apply to linked models. Deleting configurations keeps conversations and signed-in accounts; stop tasks that use a configuration before changing it.
+
 ## Quick start
 
 Use a tool-capable model with its Base URL, API key, and model name, or choose Account sign-in for a supported provider.
@@ -82,5 +84,3 @@ Licensed under the [Apache License 2.0](LICENSE).
 Uses Pi’s native OAuth login, token refresh, and provider implementations without a local service. Supports Anthropic’s copy-code flow and device authorization for OpenAI Codex (Pi’s legacy provider), GitHub Copilot, Kimi Coding, Meta, and xAI. Available models depend on account entitlements.
 
 The bookmark loads OAuth and Bedrock code from the installation site on demand and requires the page to allow those scripts and network requests. Bookmark credentials stay on the current origin and are never exported in bookmarks; sign in again on another site. Extension credentials stay in the extension and work across websites. Signing out deletes that provider’s credentials.
-
-Choose **Manage models** in the composer’s model menu to edit or delete saved providers and models. Provider connection changes apply to linked models. Deleting configurations keeps conversations and signed-in accounts; stop tasks that use a configuration before changing it.

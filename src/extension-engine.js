@@ -74,7 +74,6 @@ async function engineFor(site) {
       if (event.type === 'provider_saved') {
         void chrome.runtime.sendMessage({type:'shared-config',operation:'provider-save',provider:event.provider}).catch(()=>{});
       }
-      if(event.type==='models_saved')return;
       void chrome.runtime.sendMessage({type:'engine-event',site,event}).catch(() => {});
     });
     pi.resume();

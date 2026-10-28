@@ -650,7 +650,6 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
       if(change.action==='update-model')change={...change,values:await configure({...change.values,profileId:change.id},null,false)};
       const {data}=changeModels(state,change,busyIds);
       pi.replaceModelSettings(data);
-      emit({type:'models_saved',settings:{profiles:data.profiles,providers:data.providers}});
       return true;
     },
     replaceModelSettings(settings){
