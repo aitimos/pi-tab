@@ -16,7 +16,7 @@ async function engineFixture() {
     ready:Promise.resolve(),conversation:{id:1},config:{model:'test'},defaultPrompt:'test',
     Type:{Object:x=>x,String:()=>({}),Integer:()=>({}),Optional:x=>x},
     busyFor:id=>running.has(id),configFor:()=>({model:'test'}),
-    importProfiles(){},importProviders(){},resume(){},
+    replaceModelSettings(){},resume(){},
     tools:()=>[...tools.values()],unregisterTool:name=>tools.delete(name),registerTool:tool=>tools.set(tool.name,tool),
     onEvent:listener=>listeners.push(listener),listChats:async()=>[{id:1},{id:2}],
     selectChat:async id=>{pi.conversation={id};},

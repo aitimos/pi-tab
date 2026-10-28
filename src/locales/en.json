@@ -256,5 +256,16 @@
   "账户登录": "Account sign-in",
   "此账号没有可用模型。": "No models are available for this account.",
   "该提供商没有此模型。": "This provider does not offer this model.",
-  "网页阻止加载 OAuth，请使用扩展登录。": "This page blocked OAuth loading. Sign in using the extension."
+  "网页阻止加载 OAuth，请使用扩展登录。": "This page blocked OAuth loading. Sign in using the extension.",
+  "管理模型": "Manage models",
+  "编辑提供商": "Edit provider",
+  "编辑模型": "Edit model",
+  "编辑": "Edit",
+  "删除": "Delete",
+  "还没有保存的提供商。": "No saved providers.",
+  "删除提供商及其 {0} 个模型？会话记录和登录账户会保留。": "Delete this provider and its {0} models? Conversations and signed-in accounts will be kept.",
+  "删除此模型？会话记录会保留。": "Delete this model? Conversations will be kept.",
+  "此配置正在运行，请停止任务后再修改。": "This configuration is in use. Stop the task before making changes.",
+  "配置不存在。": "Configuration not found.",
+  "模型配置已删除，请重新选择。": "This model configuration was deleted. Select another model."
 }

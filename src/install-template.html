@@ -349,6 +349,12 @@ async function openChat(initialConfig, options = {}) {
     #model-menu button { display:block; width:100%; padding:8px 10px; border:0; border-radius:7px; background:transparent; color:var(--text); text-align:left; }
     #model-menu button:hover,#model-menu button[aria-current=true] { background:var(--raised); }
     #model-menu button small { display:block; color:var(--muted); font-size:12px; }
+    #model-manager { min-height:0; overflow:auto; overscroll-behavior:contain; }
+    .manager-group + .manager-group { border-top:.5px solid var(--line); padding-top:12px; margin-top:12px; }
+    .manager-row { display:flex; align-items:center; gap:12px; min-height:40px; }
+    .manager-row>:first-child { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .manager-confirm { display:flex; flex-wrap:wrap; gap:12px; padding:10px 0; color:var(--muted); font-size:12px; }
+    .manager-confirm span { flex-basis:100%; }
     #model-menu-actions { display:flex; gap:8px; border-top:.5px solid var(--line); margin-top:8px; padding-top:8px; }
     #model-menu-actions button { font-size:12px; color:var(--muted); }
     #model-menu-empty { padding:8px 10px; color:var(--muted); font-size:12px; }
@@ -456,7 +462,7 @@ async function openChat(initialConfig, options = {}) {
     <div id="content">
       <form id="setup" autocomplete="off">
         <div class="form-body" id="setup-fields">
-          <div class="field-heading"><h2 id="setup-title">设置模型</h2><button id="oauth-open" class="text-button" type="button">账户登录</button></div>
+          <div class="field-heading"><h2 id="setup-title">设置模型</h2><button id="setup-manage" class="text-button" type="button">管理模型</button><button id="oauth-open" class="text-button" type="button">账户登录</button></div>
           <fieldset class="form-section" aria-label="提供商连接">
             <label><span>接口类型</span><select id="api" aria-label="接口类型"></select></label>
             <div class="model-field"><label for="base-url">接口地址</label><div class="endpoint-field">
@@ -490,7 +496,7 @@ async function openChat(initialConfig, options = {}) {
             <button id="send" class="primary" title="发送消息" aria-label="发送消息" aria-haspopup="menu" aria-expanded="false" disabled>${icon('arrow')}</button>
             <button id="abort" title="停止任务" aria-label="停止任务" hidden>${icon('stop')}</button>
           </div>
-          <div id="model-menu" role="menu" aria-label="选择模型" hidden><div id="model-menu-list"></div><div id="model-menu-actions"><button id="model-menu-add" type="button" role="menuitem">添加模型</button><button id="oauth-menu" type="button" role="menuitem">账户登录</button></div></div>
+          <div id="model-menu" role="menu" aria-label="选择模型" hidden><div id="model-menu-list"></div><div id="model-menu-actions"><button id="model-menu-add" type="button" role="menuitem">添加模型</button><button id="model-manage" type="button" role="menuitem">管理模型</button><button id="oauth-menu" type="button" role="menuitem">账户登录</button></div></div>
           <div id="send-menu" role="menu" aria-label="发送方式" hidden><button id="send-follow-up" type="button" role="menuitem">排队发送</button><button id="send-steer" type="button" role="menuitem">直接发送</button></div>
         </div>
       </section>
@@ -525,6 +531,7 @@ async function openChat(initialConfig, options = {}) {
     </div>
     <section id="model-dialog" aria-labelledby="model-dialog-title" hidden>
       <div class="dialog-heading"><h2 id="model-dialog-title">选择模型</h2><button id="model-dialog-close" class="text-button" type="button">返回</button></div>
+      <div id="model-manager" hidden><div id="model-manager-list"></div></div>
       <form id="manual-model-form" hidden>
         <div class="form-body">
           <div class="field-heading"><label for="manual-model-provider">提供商</label><button id="manual-add-provider" type="button" class="text-button">添加提供商</button></div><select id="manual-model-provider" aria-label="提供商"></select>
@@ -535,7 +542,7 @@ async function openChat(initialConfig, options = {}) {
           <div id="manual-model-options" class="model-defaults" hidden><div class="model-capabilities"><label class="reasoning-override"><input id="manual-model-reasoning" type="checkbox" />支持思考</label><label class="reasoning-override"><input id="manual-model-vision" type="checkbox" />支持图片</label></div>
           <label class="setting-row"><span>默认思考强度</span><select id="manual-model-thinking" aria-label="默认思考强度"></select></label></div>
         </div>
-        <div class="form-footer"><button class="primary" type="submit">添加并使用</button></div>
+        <div class="form-footer"><p id="manual-model-error" class="error" role="alert" hidden></p><button class="primary" type="submit">添加并使用</button></div>
       </form>
       <form id="oauth-form" hidden></form>
       <form id="provider-form" hidden>
@@ -726,7 +733,7 @@ async function openChat(initialConfig, options = {}) {
   }
   async function openModelEditor() {
     if(state.busy || state.configuring)return;
-    closeModelMenu();
+    managing=false;closeModelMenu();
     byId('content').hidden=true;
     byId('model-dialog').hidden=false;
     await openManualModelForm();
@@ -805,6 +812,8 @@ async function openChat(initialConfig, options = {}) {
     selectDraftModel(state.candidates.find(model=>model.id===id) || agent.describeModel({...draftProvider(),model:id}));
   });
   byId('model-dialog-close').addEventListener('click',()=>{
+    if(managing && byId('model-manager').hidden){void openModelManager();return;}
+    if(managing){managing=false;closeModelDialog();void switchConversation(agent.id);return;}
     if(!byId('oauth-form').hidden){void cancelOAuth();byId('oauth-form').hidden=true;closeModelDialog();return;}
     if (!byId('provider-form').hidden) {
       byId('provider-form').hidden=true;
@@ -887,6 +896,7 @@ async function openChat(initialConfig, options = {}) {
   });
   byId('manual-model-reasoning').addEventListener('change',updateManualThinking);
   async function openManualModelForm() {
+    editingModel=null;byId('model-manager').hidden=true;byId('manual-model-error').hidden=true;i18n.text(byId('manual-model-form').querySelector('[type=submit]'),()=>t('添加并使用'));
     state.providers=await agent.listProviders();
     const providers=state.providers;
     byId('manual-model-provider').replaceChildren(...providers.map(provider=>new Option(provider.providerName || provider.baseUrl,provider.id)));
@@ -910,11 +920,13 @@ async function openChat(initialConfig, options = {}) {
     const provider=manualProvider();
     if(!provider)return;
     const {api,baseUrl,apiKey,headers,proxyUrl,proxyToken,providerName,nativeProvider=null}=provider;
-    closeModelDialog();
-    const config=Object.fromEntries(Object.entries({api,baseUrl,apiKey,headers,proxyUrl,proxyToken,providerName,nativeProvider,model,modelInfo:selectedManualModel || undefined,reasoning,input,thinking:byId('manual-model-thinking').value}).filter(([,value])=>value!==undefined));
-    await configureModel(config);
+    const config=Object.fromEntries(Object.entries({providerId:provider.id,api,baseUrl,apiKey,headers,proxyUrl,proxyToken,providerName,nativeProvider,model,modelInfo:selectedManualModel || undefined,reasoning,input,thinking:byId('manual-model-thinking').value}).filter(([,value])=>value!==undefined));
+    if(editingModel){try{await runtimePi.manageModels({action:'update-model',id:editingModel.id,values:config});await openModelManager();}catch(error){i18n.text(byId('manual-model-error'),()=>t(error.message));byId('manual-model-error').hidden=false;}}
+    else{closeModelDialog();await configureModel(config);}
   });
   byId('manual-add-provider').addEventListener('click',()=>{
+    editingProvider=null;for(const id of ['provider-api','provider-url','provider-key']){byId(id).disabled=false;byId(id).closest('label').hidden=false;}
+    i18n.text(byId('provider-form').querySelector('[type=submit]'),()=>t('保存并选择模型'));
     byId('manual-model-form').hidden=true;
     byId('provider-form').hidden=false;
     i18n.text(byId('model-dialog-title'), () => t("添加提供商"));
@@ -926,12 +938,15 @@ async function openChat(initialConfig, options = {}) {
     byId('provider-error').hidden=true;
     byId('provider-url').focus();
   });
+  for(const id of ['provider-api','provider-url'])byId(id).addEventListener(id==='provider-api'?'change':'input',()=>{if(editingProvider)byId('provider-key').value='';});
   byId('provider-form').addEventListener('submit',async event=>{
     event.preventDefault();
     const error=byId('provider-error');
     error.hidden=true;
     try {
-      const saved=await agent.saveProvider({providerName:byId('provider-name').value.trim(),api:byId('provider-api').value,baseUrl:byId('provider-url').value.trim(),apiKey:byId('provider-key').value.trim()});
+      const values={providerName:byId('provider-name').value.trim(),api:byId('provider-api').value,baseUrl:byId('provider-url').value.trim(),apiKey:byId('provider-key').value.trim()};
+      if(editingProvider){await runtimePi.manageModels({action:'update-provider',id:editingProvider.id,values});await openModelManager();return;}
+      const saved=await agent.saveProvider(values);
       state.selectedProviderId=saved.id;
       await openManualModelForm();
     } catch(failure) {
@@ -939,10 +954,63 @@ async function openChat(initialConfig, options = {}) {
       error.hidden=false;
     }
   });
+  let editingModel=null,editingProvider=null,managing=false;
+  async function openModelManager(){
+    closeModelMenu();managing=true;editingModel=null;editingProvider=null;
+    byId('content').hidden=true;byId('model-dialog').hidden=false;
+    for(const id of ['manual-model-form','provider-form','oauth-form'])byId(id).hidden=true;
+    byId('model-manager').hidden=false;
+    i18n.text(byId('model-dialog-title'),()=>t('管理模型'));
+    const [providers,models]=await Promise.all([agent.listProviders(),agent.listModels()]);
+    const list=byId('model-manager-list');list.replaceChildren();
+    const action=(label,run)=>{const b=document.createElement('button');b.type='button';b.className='text-button';i18n.text(b,()=>t(label));b.onclick=run;return b;};
+    const remove=(kind,record,row,count)=>{
+      row.parentElement.querySelector('.manager-confirm')?.remove();
+      const confirmation=document.createElement('div');confirmation.className='manager-confirm';
+      const note=document.createElement('span');i18n.text(note,()=>kind==='provider'?t('删除提供商及其 {0} 个模型？会话记录和登录账户会保留。',count):t('删除此模型？会话记录会保留。'));
+      confirmation.append(note,action('取消',()=>confirmation.remove()),action('删除',async()=>{
+        try{await runtimePi.manageModels({action:'delete-'+kind,id:record.id});await openModelManager();}
+        catch(error){i18n.text(note,()=>t(error.message));}
+      }));row.after(confirmation);
+    };
+    for(const provider of providers){
+      const group=document.createElement('section');group.className='manager-group';
+      const related=models.filter(m=>m.providerId===provider.id||(!m.providerId&&m.api===provider.api&&m.baseUrl===provider.baseUrl&&(m.nativeProvider||'')===(provider.nativeProvider||'')));
+      const row=document.createElement('div');row.className='manager-row';
+      const name=document.createElement('strong');name.textContent=provider.providerName||new URL(provider.baseUrl).hostname;
+      row.append(name,action('编辑',()=>{
+        editingProvider=provider;byId('model-manager').hidden=true;byId('provider-form').hidden=false;
+        i18n.text(byId('model-dialog-title'),()=>t('编辑提供商'));
+        byId('provider-api').replaceChildren(...agent.apis().map(api=>new Option(api.name,api.id)));
+        for(const [id,value] of [['provider-name',provider.providerName],['provider-api',provider.api],['provider-url',provider.baseUrl],['provider-key',provider.apiKey]])byId(id).value=value||'';
+        for(const id of ['provider-api','provider-url','provider-key']){byId(id).disabled=!!provider.nativeProvider;byId(id).closest('label').hidden=!!provider.nativeProvider;}
+        byId('provider-error').hidden=true;i18n.text(byId('provider-form').querySelector('[type=submit]'),()=>t('保存'));
+      }),action('删除',()=>remove('provider',provider,row,related.length)));
+      group.append(row);
+      for(const model of related){
+        const item=document.createElement('div');item.className='manager-row';item.dataset.modelId=model.id;
+        const title=document.createElement('span');title.textContent=model.model;
+        item.append(title,action('编辑',async()=>{
+          await openManualModelForm();editingModel=model;byId('model-manager').hidden=true;
+          manualDiscoveryVersion++;selectedManualModel=null;manualModels=[];
+          byId('manual-model-provider').value=provider.id;byId('manual-model-id').value=model.model;
+          byId('manual-model-reasoning').checked=!!model.reasoning;byId('manual-model-vision').checked=model.input?.includes('image');
+          updateManualThinking();byId('manual-model-thinking').value=model.thinking||'off';renderManualModels();i18n.text(byId('manual-model-status'),'');
+          i18n.text(byId('model-dialog-title'),()=>t('编辑模型'));i18n.text(byId('manual-model-form').querySelector('[type=submit]'),()=>t('保存'));
+        }),action('删除',()=>remove('model',model,item)));
+        group.append(item);
+      }
+      list.append(group);
+    }
+    if(!providers.length)i18n.text(list,()=>t('还没有保存的提供商。'));
+  }
+  byId('model-manage').onclick=()=>void openModelManager();
+  byId('setup-manage').onclick=()=>void openModelManager();
+
   let oauthUI;
   async function cancelOAuth(){await oauthUI?.cancel();}
   async function openOAuth(){
-    closeModelMenu();
+    closeModelMenu();managing=false;byId('model-manager').hidden=true;
     try{
       oauthUI ??= (await runtimePi.oauthUI())({root,i18n,auth:(action,input)=>runtimePi.auth(action,input),onSelect:async(providerId,name)=>{
         const available=await runtimePi.auth('models',{providerId});
@@ -1638,6 +1706,9 @@ async function openChat(initialConfig, options = {}) {
     const pi = agent;
     if (!pi || typeof pi.onEvent !== 'function') return;
     state.unsubscribe = runtimePi.onEvent(event => {
+      if(event.type==='models_changed'){
+        void agent.savedConfig().then(config=>{state.activeConfig=config;if(config)syncModelControls(config);if(byId('model-dialog').hidden){if(!config){state.connected=false;showSetup();}else if(state.connected)i18n.text(byId('chat-model'),config.model);}});return;
+      }
       if (event.type === 'chat_title_changed') {
         const row = byId('chat-entries').querySelector(`[data-chat-id="${event.conversationId}"]`);
         if (row) {
@@ -1745,6 +1816,7 @@ async function openChat(initialConfig, options = {}) {
       rememberWindow();
       state.activeConfig = await agent.savedConfig();
       state.profiles = await agent.listModels();
+      if(initialConfig?.profileId && !state.profiles.some(p=>p.id===initialConfig.profileId))initialConfig=undefined;
       state.bookmarkConfig = initialConfig ? JSON.stringify(initialConfig) : null;
       initializeModelControls();
       subscribeEvents();
@@ -2537,7 +2609,7 @@ if (!PI_RUNTIME) {
       },
     });
     const runtime = window.pi?.__piConsolePlugin ? window.pi : window.__piTabAgent;
-    runtime.onEvent(event => { if (event.type === 'provider_saved') void generateBookmark(); });
+    runtime.onEvent(event => { if (['provider_saved','models_changed'].includes(event.type)){void runtime.savedConfigFor(runtime.conversation.id).then(config=>{savedConfig=config;return generateBookmark();});} });
     void runtime.ready.then(async () => {
       const chats = await runtime.listChats();
       const openIds = JSON.parse(sessionStorage.getItem('pi-tab-open-chats') || '[]');

@@ -81,4 +81,6 @@ Licensed under the [Apache License 2.0](LICENSE).
 
 Uses Pi’s native OAuth login, token refresh, and provider implementations without a local service. Supports Anthropic’s copy-code flow and device authorization for OpenAI Codex (Pi’s legacy provider), GitHub Copilot, Kimi Coding, Meta, and xAI. Available models depend on account entitlements.
 
-The bookmark loads OAuth code from the installation site on demand and requires the page to allow those scripts and network requests. Bookmark credentials stay on the current origin and are never exported in bookmarks; sign in again on another site. Extension credentials stay in the extension and work across websites. Signing out deletes that provider’s credentials.
+The bookmark loads OAuth and Bedrock code from the installation site on demand and requires the page to allow those scripts and network requests. Bookmark credentials stay on the current origin and are never exported in bookmarks; sign in again on another site. Extension credentials stay in the extension and work across websites. Signing out deletes that provider’s credentials.
+
+Choose **Manage models** in the composer’s model menu to edit or delete saved providers and models. Provider connection changes apply to linked models. Deleting configurations keeps conversations and signed-in accounts; stop tasks that use a configuration before changing it.

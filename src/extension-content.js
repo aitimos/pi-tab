@@ -45,6 +45,7 @@ async function initializeExtension() {
     ready:Promise.resolve(),
     defaultPrompt:initial.defaultPrompt,
     oauthUI:async()=>PiTabOAuthUI.createOAuthUI,
+    manageModels:change=>engineCall('manageModels',[change]),
     auth:(action,input)=>engineCall('auth',[action,input]),
     get conversation(){return {id:activeId};},
     get config(){return configs.get(activeId);},

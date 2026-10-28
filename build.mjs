@@ -20,6 +20,19 @@ const apis = [...new Set(catalog.map(model => model.api))].map(id => ({
 }));
 
 await mkdir('dist', { recursive: true });
+const browserTransports={
+      // Bedrock's browser path uses the AWS SDK's fetch transport. Its static
+      // Node-only proxy imports must not pull net/tls into the standalone bundle.
+      name: 'browser-only-transports',
+      setup(builder) {
+        builder.onResolve({ filter: /^(@smithy\/node-http-handler|http-proxy-agent|https-proxy-agent)$/ }, args => ({ path: args.path, namespace: 'node-transport' }));
+        builder.onLoad({ filter: /.*/, namespace: 'node-transport' }, () => ({
+          contents: `class NodeTransport { constructor() { throw new Error('Node.js proxy transports are not available in this browser.'); } }
+            export { NodeTransport as NodeHttpHandler, NodeTransport as HttpProxyAgent, NodeTransport as HttpsProxyAgent };`,
+          loader: 'js',
+        }));
+      },
+    };
 const oauthPlugin={
       name:'browser-oauth',
       setup(builder) {
@@ -41,7 +54,7 @@ const oauthPlugin={
         builder.onLoad({filter:/.*/,namespace:'browser-node'},()=>({contents:`export function createServer(){throw new Error('This login method requires a loopback server');} export function randomBytes(n){return crypto.getRandomValues(new Uint8Array(n));}`}));
       },
     };
-await build({entryPoints:['src/oauth.js'],bundle:true,platform:'browser',format:'iife',globalName:'PiTabOAuth',target:'chrome110',minify:true,outfile:'dist/oauth.js',plugins:[oauthPlugin]});
+await build({entryPoints:['src/oauth.js'],bundle:true,platform:'browser',format:'iife',globalName:'PiTabOAuth',target:'chrome110',minify:true,outfile:'dist/oauth.js',plugins:[oauthPlugin,browserTransports]});
 const oauthSource=await readFile('dist/oauth.js','utf8');
 const oauthHash=createHash('sha256').update(oauthSource).digest('hex').slice(0,16);
 await mkdir('oauth',{recursive:true});
@@ -59,19 +72,6 @@ await build({
   logLevel: 'info',
   plugins: [
     {name:'oauth-url',setup(builder){builder.onResolve({filter:/^#oauth-url$/},()=>({path:'url',namespace:'oauth-url'}));builder.onLoad({filter:/.*/,namespace:'oauth-url'},()=>({contents:`export default 'https://aitimos.github.io/pi-tab/oauth/${oauthHash}.js';`}));}},
-    {
-      // Bedrock's browser path uses the AWS SDK's fetch transport. Its static
-      // Node-only proxy imports must not pull net/tls into the standalone bundle.
-      name: 'browser-only-transports',
-      setup(builder) {
-        builder.onResolve({ filter: /^(@smithy\/node-http-handler|http-proxy-agent|https-proxy-agent)$/ }, args => ({ path: args.path, namespace: 'node-transport' }));
-        builder.onLoad({ filter: /.*/, namespace: 'node-transport' }, () => ({
-          contents: `class NodeTransport { constructor() { throw new Error('Node.js proxy transports are not available in this browser.'); } }
-            export { NodeTransport as NodeHttpHandler, NodeTransport as HttpProxyAgent, NodeTransport as HttpsProxyAgent };`,
-          loader: 'js',
-        }));
-      },
-    },
     {
       name: 'pi-catalog',
       setup(builder) {

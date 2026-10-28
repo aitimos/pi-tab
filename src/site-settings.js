@@ -10,6 +10,10 @@ export class SiteSettings {
     this.storage.setItem(this.key, JSON.stringify(data));
     return data;
   }
+  importModels(kind, records) {
+    const removed=kind==='profiles'?'removedProfiles':'removedProviders';
+    this.update(data=>{data[kind]=[...new Map([...records.filter(p=>!(data[removed]||[]).includes(p.id)),...data[kind]].map(p=>[p.id,p])).values()];});
+  }
   initialize(previous) {
     if (this.storage.getItem(this.key) !== null) return;
     const {config=null, profiles=[], providers=[], preferences={}} = previous ?? {};

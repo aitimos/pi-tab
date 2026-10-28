@@ -23,8 +23,7 @@ async function engineFor(site) {
     // Viewing a conversation must not move its tools to another window's page.
     const bindTarget=(id,tabId,forTask=false)=>{if(!targets.has(id)||(forTask&&!pi.busyFor(id)))targets.set(id,tabId);};
     const saved = await background({type:'shared-config',operation:'get'});
-    pi.importProfiles(saved.profiles || []);
-    pi.importProviders(saved.providers || []);
+    pi.replaceModelSettings({profiles:saved.profiles || [],providers:saved.providers || []});
     if (!pi.config && saved.profiles?.length) await pi.configure({ ...saved.profiles[0], profileId:saved.profiles[0].id });
 
     for (const tool of pi.tools().filter(item => pageToolNames.has(item.name))) {
@@ -75,6 +74,7 @@ async function engineFor(site) {
       if (event.type === 'provider_saved') {
         void chrome.runtime.sendMessage({type:'shared-config',operation:'provider-save',provider:event.provider}).catch(()=>{});
       }
+      if(event.type==='models_saved')return;
       void chrome.runtime.sendMessage({type:'engine-event',site,event}).catch(() => {});
     });
     pi.resume();
@@ -94,12 +94,11 @@ chrome.runtime.onMessage.addListener((message, _sender, respond) => {
     return true;
   }
   if (message.type === 'shared-config-updated') {
-    for(const engine of engines.values())void engine.then(({pi})=>{
-      pi.importProfiles(message.profiles);
-      pi.importProviders(message.providers);
-    });
-    respond({ok:true});
-    return false;
+    Promise.all([...engines.values()].map(async engine=>{
+      const {pi}=await engine;
+      pi.replaceModelSettings({profiles:message.profiles,providers:message.providers});
+    })).then(()=>respond({ok:true}),error=>respond({ok:false,error:error.message}));
+    return true;
   }
   if (message.target !== 'engine') return false;
   (async () => {
@@ -134,6 +133,12 @@ chrome.runtime.onMessage.addListener((message, _sender, respond) => {
       if (message.name === 'abort') return agent.abort();
       if (['prompt','steer','followUp'].includes(message.name)) return agent[message.name](args[0]);
       throw new Error('未知 agent 操作。');
+    }
+    if(method==='manageModels'){
+      const busy=(await Promise.all([...engines.values()].map(async engine=>(await engine).pi.modelUsage()))).flat();
+      await pi.manageModels(args[0],busy);
+      await background({type:'shared-config',operation:'replace',profiles:await pi.savedProfiles(),providers:await pi.listProviders()});
+      return true;
     }
     if (method === 'auth') return pi.auth(...args);
     if (method === 'getPreferences') return pi.getPreferences();

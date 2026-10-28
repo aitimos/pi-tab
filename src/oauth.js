@@ -1,3 +1,4 @@
+export * as bedrockApi from '@earendil-works/pi-ai/api/bedrock-converse-stream';
 export {createOAuthUI} from './oauth-ui.js';
 import {anthropicProvider} from '@earendil-works/pi-ai/providers/anthropic';
 import {openaiCodexProvider} from '@earendil-works/pi-ai/providers/openai-codex';

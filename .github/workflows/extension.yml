@@ -49,7 +49,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [extension-zh, extension-en, tabs, bookmarklet, i18n, stop, oauth]
+        suite: [extension-zh, extension-en, tabs, bookmarklet, i18n, stop, oauth, management]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v4

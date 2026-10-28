@@ -26,3 +26,10 @@ test('existing settings are imported once and stale session data cannot overwrit
   assert.equal(reopened.read().profiles.length,1);
   assert.equal(new SiteSettings(origin,'other-extension-site').read().profiles.length,0);
 });
+test('old bookmark defaults cannot restore deleted records or overwrite edited records',()=>{
+ const site=new SiteSettings(storage(),'site');site.initialize();
+ site.importModels('profiles',[{id:'a',apiKey:'old'},{id:'b'}]);site.importModels('providers',[{id:'p'}]);
+ site.update(data=>{data.profiles=[{id:'a',apiKey:'new'}];data.providers=[];data.removedProfiles=['b'];data.removedProviders=['p'];});
+ site.importModels('profiles',[{id:'a',apiKey:'old'},{id:'b'}]);site.importModels('providers',[{id:'p'}]);
+ assert.deepEqual(site.read().profiles,[{id:'a',apiKey:'new'}]);assert.deepEqual(site.read().providers,[]);
+});

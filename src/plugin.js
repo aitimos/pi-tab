@@ -1,5 +1,6 @@
 export {renderMarkdown} from './markdown.js';
 import oauthUrl from '#oauth-url';
+import {changeModels,savedProviders,providerIdentity} from './model-settings.js';
 import { SiteSettings } from './site-settings.js';
 import { getI18n } from './i18n.js';
 export { getI18n } from './i18n.js';
@@ -15,7 +16,7 @@ import { anthropicMessagesApi } from '@earendil-works/pi-ai/api/anthropic-messag
 import { azureOpenAIResponsesApi } from '@earendil-works/pi-ai/api/azure-openai-responses.lazy';
 import { googleGenerativeAIApi } from '@earendil-works/pi-ai/api/google-generative-ai.lazy';
 import { googleVertexApi } from '@earendil-works/pi-ai/api/google-vertex.lazy';
-import * as bedrockApi from '@earendil-works/pi-ai/api/bedrock-converse-stream';
+
 import { mistralConversationsApi } from '@earendil-works/pi-ai/api/mistral-conversations.lazy';
 import { openAICodexResponsesApi } from '@earendil-works/pi-ai/api/openai-codex-responses.lazy';
 import { piMessagesApi } from '@earendil-works/pi-ai/api/pi-messages.lazy';
@@ -43,7 +44,7 @@ const APIS = {
   'azure-openai-responses': azureOpenAIResponsesApi,
   'google-generative-ai': googleGenerativeAIApi,
   'google-vertex': googleVertexApi,
-  'bedrock-converse-stream': () => bedrockApi,
+  'bedrock-converse-stream': () => globalThis.PiTabOAuth.bedrockApi,
   'mistral-conversations': mistralConversationsApi,
   'openai-codex-responses': openAICodexResponsesApi,
   'pi-messages': piMessagesApi,
@@ -131,7 +132,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
   const toolMap = new Map(), listeners = new Set(), events = [], consoleEntries = [], requests = [];
   let harness, conversation, configuration, disposed = false;
   let releaseStorageLock, storageLock;
-  const activeRuns = new Map(), eventStreams = new Map(), configurations = new Map(), durableBusy = new Map(), sharedProfiles = new Map(), sharedProviders = new Map();
+  const activeRuns = new Map(), eventStreams = new Map(), configurations = new Map(), durableBusy = new Map();
   const titleJobs = new Map();
   let promptText = DEFAULT_PROMPT;
   const consoleWrappers = new Map();
@@ -389,7 +390,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     refreshTools();
   }
   function onSiteSettings(event) {
-    if (event.storageArea === localStorage && event.key === siteSettings.key) syncPreferences();
+    if (event.storageArea === localStorage && event.key === siteSettings.key){syncPreferences();emit({type:'models_changed'});}
   }
 
   async function configure(options, chatId = conversation.id, save = true) {
@@ -397,12 +398,12 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     ensureOpen();
     if (activeRuns.has(chatId) || durableBusy.get(chatId)) throw new Error('agent 正在运行。请先停止当前任务再修改模型。');
     const previous = configurations.get(chatId);
-    const next = { ...(options.profileId && options.profileId !== previous?.profileId ? {} : previous), ...options };
+    const next = { ...(options.profileId ? {} : previous), ...options };
     if(Object.hasOwn(options,'apiKey') && !Object.hasOwn(options,'nativeProvider'))delete next.nativeProvider;
     if ((options.model && options.model !== previous?.model) || (options.api && options.api !== previous?.api)) {
       for (const field of ['modelInfo','reasoning','contextWindow','maxTokens','compat','thinkingLevelMap','input']) if (!Object.hasOwn(options, field)) delete next[field];
     }
-    if(next.nativeProvider)await getOAuth();
+    if(next.nativeProvider || next.api==='bedrock-converse-stream')await getOAuth();
     const nativeModel=next.nativeProvider ? models.getModel(next.nativeProvider,next.model) : null;
     if(next.nativeProvider && !nativeModel)throw new Error('该提供商没有此模型。');
     if(nativeModel){
@@ -451,6 +452,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
         streamSimple: (m, transcript, opts) => streamApi.streamSimple(m, transcript, streamOptions(opts)),
       },
     }));
+    if(chatId===null)return Object.fromEntries(Object.entries(next).filter(([key,value])=>key!=='fetch' && key!=='modelInfo' && typeof value!=='function'));
     promptText = preferences.systemPrompt || DEFAULT_PROMPT; refreshTools();
     const target = chatId === conversation.id ? conversation : await harness.conversation(chatId, ctx);
     if (!target) throw new Error('对话不存在。');
@@ -477,7 +479,8 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     syncPreferences();
     const current = configurations.get(chatId);
     const profile = siteSettings.read().profiles.find(item => item.id === current.profileId);
-    if (profile && !pi.busyFor(chatId)) await configure({ ...current, ...profile }, chatId, false);
+    if(!profile)throw Error('模型配置已删除，请重新选择。');
+    if (profile && !pi.busyFor(chatId)) await configure({ ...profile, profileId:profile.id }, chatId, false);
     text = normalizeUserContent(text, modelConfig.describe(configurations.get(chatId)));
     if (whenBusy === 'reject' && activeRuns.has(chatId)) throw new Error('agent 正在运行。可以使用 steer 或 followUp。');
     const target = chatId === conversation.id ? conversation : await harness.conversation(chatId, ctx);
@@ -608,14 +611,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     },
     async listProviders() {
       await pi.ready; ensureOpen();
-      const state = siteSettings.read();
-      const configured = [...sharedProfiles.values(), ...(state?.profiles ?? [])].map(profile => ({
-        id: profile.id, api: profile.api, baseUrl: profile.baseUrl, apiKey: profile.apiKey || '',
-        providerName: profile.providerName || '', headers: profile.headers,
-        proxyUrl: profile.proxyUrl, proxyToken: profile.proxyToken, nativeProvider:profile.nativeProvider,
-      }));
-      const providers = [...configured, ...sharedProviders.values(), ...(state?.providers ?? [])];
-      return [...new Map(providers.filter(item => item.api && item.baseUrl).map(item => [`${item.nativeProvider || ''}\n${item.api}\n${item.baseUrl}\n${item.apiKey || ''}`, item])).values()];
+      return savedProviders(siteSettings.read());
     },
     async oauthUI(){await getOAuth();return globalThis.PiTabOAuth.createOAuthUI;},
     async auth(action,input) {await pi.ready;return (await getOAuth()).action(action,input);},
@@ -625,34 +621,48 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
       const url = new URL(provider.baseUrl);
       if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error('请填写有效的接口地址。');
       const saved = {
-        id: crypto.randomUUID(), api: provider.api, baseUrl: provider.baseUrl.replace(/\/+$/, ''),
+        id: savedProviders(siteSettings.read()).find(p=>providerIdentity(p)===providerIdentity(provider))?.id || crypto.randomUUID(), api: provider.api, baseUrl: provider.baseUrl.replace(/\/+$/, ''),
         ...(provider.nativeProvider?{nativeProvider:provider.nativeProvider}:{}),
         apiKey: provider.apiKey || '', providerName: provider.providerName?.trim() || url.hostname,
       };
-      siteSettings.update(data => { data.providers.push(saved); });
+      siteSettings.update(data => { data.providers=[...data.providers.filter(p=>p.id!==saved.id),saved]; });
       emit({ type: 'provider_saved', provider: saved });
       return saved;
     },
     importProviders(providers) {
-      sharedProviders.clear();
-      for (const provider of providers) if (provider?.id && provider.api && provider.baseUrl) sharedProviders.set(provider.id, provider);
-      if (useTabStorage) siteSettings.update(data => { data.providers = [...new Map([...sharedProviders.values(), ...data.providers].map(item => [item.id,item])).values()]; });
+      siteSettings.importModels('providers',providers);
     },
     async listModels() {
       await pi.ready; ensureOpen();
-      const state = siteSettings.read();
-      return [...new Map([...sharedProfiles.values(), ...(state?.profiles ?? [])].map(profile => [profile.id, profile])).values()]
-        .map(profile => ({ ...publicConfig(profile), id: profile.id }));
+      const data=siteSettings.read(),providers=savedProviders(data);
+      return data.profiles.map(profile=>({...publicConfig(profile),id:profile.id,providerId:providers.find(p=>providerIdentity(p)===providerIdentity(profile))?.id}));
     },
     importProfiles(profiles) {
-      sharedProfiles.clear();
-      for (const profile of profiles) if (profile?.id && profile.model && profile.baseUrl && profile.api) sharedProfiles.set(profile.id, profile);
-      if (useTabStorage) siteSettings.update(data => { data.profiles = [...new Map([...sharedProfiles.values(), ...data.profiles].map(item => [item.id,item])).values()]; });
+      siteSettings.importModels('profiles',profiles);
+    },
+    modelUsage(){return [...configurations].filter(([id])=>pi.busyFor(id)||titleJobs.has(id)).map(([,config])=>config.profileId);},
+    async manageModels(change, busyIds=pi.modelUsage()) {
+      await pi.ready; ensureOpen();
+      const state=siteSettings.read();
+      // Validate the affected records and busy state before registering a draft.
+      changeModels(state,change,busyIds);
+      if(change.action==='update-provider' && !APIS[change.values.api])throw Error('请选择接口类型。');
+      if(change.action==='update-model')change={...change,values:await configure({...change.values,profileId:change.id},null,false)};
+      const {data}=changeModels(state,change,busyIds);
+      pi.replaceModelSettings(data);
+      emit({type:'models_saved',settings:{profiles:data.profiles,providers:data.providers}});
+      return true;
+    },
+    replaceModelSettings(settings){
+      siteSettings.update(data=>{Object.assign(data,settings);if(data.config)data.config=data.profiles.find(p=>p.id===data.config.profileId)||null;});
+      const profiles=siteSettings.read().profiles;
+      for(const [id,config] of configurations)if(!profiles.some(p=>p.id===config.profileId)&&!pi.busyFor(id)){configurations.delete(id);if(id===conversation.id)configuration=null;}
+      emit({type:'models_changed'});
     },
     async selectModel(profileId, chatId = conversation.id) {
       await pi.ready; ensureOpen();
       const state = siteSettings.read();
-      const profile = state?.profiles?.find(item => item.id === profileId) ?? sharedProfiles.get(profileId);
+      const profile = state?.profiles?.find(item => item.id === profileId);
       if (!profile) throw new Error('模型配置不存在。');
       return configure({ ...profile, profileId }, chatId);
     },
@@ -669,7 +679,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
       if (!message?.trim()) throw new Error('请输入要发送的任务。');
       return queueAgentMessage(to, message, author);
     },
-    configFor(chatId) { return publicConfig(configurations.get(chatId)); },
+    configFor(chatId) { const current=configurations.get(chatId);return publicConfig(siteSettings.read().profiles.find(p=>p.id===current?.profileId)||null); },
     busyFor(chatId) { return activeRuns.has(chatId) || durableBusy.get(chatId) === true; },
     agent(initialId) {
       let chatId = initialId;
@@ -731,7 +741,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
       if(config.nativeProvider){const available=await (await getOAuth()).action('models',{providerId:config.nativeProvider});return {models:available.map(model=>({...modelConfig.describe({...config,model:model.id,modelInfo:model}),source:'provider'})),source:'provider',warning:''};}
       return modelConfig.discover({...configuration,...config}, {...options,fetch:nativeFetch});
     },
-    get config() { return publicConfig(configuration); },
+    get config() { return conversation ? pi.configFor(conversation.id) : null; },
     get harness() { return harness; }, get conversation() { return conversation; }, get registry() { return registry; }, get models() { return models; },
     get busy() { return pi.busyFor(conversation.id); }, get events() { return [...events]; },
     tools: () => [...toolMap.values()].map(({ name, description, parameters }) => ({ name, description, parameters })),
