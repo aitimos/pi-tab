@@ -106,7 +106,7 @@ try{
     // Deleting an active configuration is rejected before mutation.
     hold=true;await click('#message-input');await browser('keyboard','inserttext','Hold request');await browser('press','Enter');
     await wait(`!${root}.getElementById('abort').hidden`);
-    const error=await (async()=>{try{await call('manageModels',[{action:'delete-model',id:'fixture'}]);return '';}catch(error){return error.message;}})();assert.match(error,/正在运行/);
+    const error=mode==='bookmarklet'?await evaluate(`(async()=>{try{await pi.manageModels({action:'delete-model',id:'fixture'});return '';}catch(error){return error.message;}})()`):await (async()=>{try{await call('manageModels',[{action:'delete-model',id:'fixture'}]);return '';}catch(error){return error.message;}})();assert.match(error,/正在运行/);
     await click('#abort');hold=false;await wait(`${root}.getElementById('abort').hidden`);
     await manage();await click('[data-model-id="fixture"] button:last-child');await click('.manager-confirm button');
     assert.equal((await call('listModels')).length,1,'cancel keeps model');

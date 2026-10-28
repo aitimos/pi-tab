@@ -16,6 +16,11 @@ export function changeModels(current, change, busyIds = []) {
   const related=p=>isProvider?(p.providerId===id || providerIdentity(p)===providerIdentity(record)):p.id===id;
   const affected=data.profiles.filter(related);
   if(affected.some(p=>busyIds.includes(p.id)))throw Error('此配置正在运行，请停止任务后再修改。');
+  if(isProvider){
+    const duplicateIds=data.providers.filter(p=>providerIdentity(p)===providerIdentity(record)).map(p=>p.id);
+    data.providers=data.providers.filter(p=>!duplicateIds.includes(p.id));
+    data.removedProviders=[...new Set([...(data.removedProviders||[]),...duplicateIds.filter(key=>key!==id)])];
+  }
   if(action.startsWith('delete')){
     if(!isProvider){const provider=savedProviders(data).find(p=>providerIdentity(p)===providerIdentity(record));if(provider&&!data.providers.some(p=>p.id===provider.id))data.providers.push(provider);}
     data.profiles=data.profiles.filter(p=>!related(p));

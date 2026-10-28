@@ -50,3 +50,12 @@ test('changing an endpoint without an explicitly supplied key clears the old key
  const {data}=changeModels(fixture(),{action:'update-provider',id:'p',values:{baseUrl:'https://different.test'}});
  assert.ok(data.profiles.every(p=>p.apiKey===''));
 });
+test('editing or deleting duplicated saved providers does not leave hidden duplicates behind',()=>{
+ for(const action of ['update-provider','delete-provider']){
+  const state=fixture();state.providers.push({...state.providers[0],id:'duplicate'});
+  const {data}=changeModels(state,{action,id:'duplicate',values:{apiKey:'new'}});
+  assert.equal(data.providers.length,action==='update-provider'?1:0);
+  assert.ok(data.removedProviders.includes('p'));
+  if(action==='update-provider')assert.ok(data.profiles.every(p=>p.apiKey==='new'));
+ }
+});
