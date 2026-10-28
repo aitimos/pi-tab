@@ -267,5 +267,10 @@
   "删除此模型？会话记录会保留。": "Delete this model? Conversations will be kept.",
   "此配置正在运行，请停止任务后再修改。": "This configuration is in use. Stop the task before making changes.",
   "配置不存在。": "Configuration not found.",
-  "模型配置已删除，请重新选择。": "This model configuration was deleted. Select another model."
+  "模型配置已删除，请重新选择。": "This model configuration was deleted. Select another model.",
+  "认证方式": "Authentication",
+  "提供商认证方式": "Provider authentication",
+  "无需认证": "No authentication",
+  "登录并选择模型": "Sign in and choose a model",
+  "账户": "Account"
 }

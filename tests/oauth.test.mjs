@@ -95,3 +95,14 @@ test('native Copilot model filtering retains account entitlements',async()=>{
   const available=await action('models',{providerId:'github-copilot'});
   assert.deepEqual(available.map(m=>m.id),[id]);
 });
+
+test('native login and available models respect the selected API',async()=>{
+ const {action,credentials}=setup(()=>{throw Error('No network expected');});
+ const methods=await action('list',{api:'openai-codex-responses'});
+ assert.deepEqual(Array.from(methods,m=>m.id),['openai-codex']);
+ assert.deepEqual(Array.from(await action('list',{api:'google-generative-ai'})),[]);
+ await assert.rejects(()=>action('start',{providerId:'kimi-coding',api:'anthropic-messages'}),/请选择/);
+ await credentials.modify('github-copilot',async()=>({type:'oauth',access:'test',refresh:'test',expires:Date.now()+3600000}));
+ const available=await action('models',{providerId:'github-copilot',api:'anthropic-messages'});
+ assert.ok(available.length);assert.ok(available.every(m=>m.api==='anthropic-messages'));
+});

@@ -38,11 +38,11 @@ export function installOAuth(models, catalog) {
   }
   const sessions=new Map();
   const action = async (action,input={}) => {
-    if(action==='list')return Promise.all(providers.map(async p=>({id:p.id,name:p.auth.oauth.name,connected:(await credentials.read(p.id))?.type==='oauth'})));
+    if(action==='list')return Promise.all(providers.filter(p=>!input.api||p.getModels().some(m=>m.api===input.api)).map(async p=>({id:p.id,name:p.auth.oauth.name,connected:(await credentials.read(p.id))?.type==='oauth'})));
     if(action==='start'){
       if(!navigator.locks)throw new Error('登录需要 HTTPS 网页。');
       const provider=providers.find(p=>p.id===input.providerId);
-      if(!provider)throw new Error('请选择支持浏览器登录的提供商。');
+      if(!provider || input.api && !provider.getModels().some(m=>m.api===input.api))throw new Error('请选择支持浏览器登录的提供商。');
       const id=crypto.randomUUID(),controller=new AbortController();
       const session={state:'pending',events:[],prompt:null,controller};sessions.set(id,session);
       const timer=setTimeout(()=>controller.abort(),900000);timer.unref?.();
@@ -66,7 +66,7 @@ export function installOAuth(models, catalog) {
       return {id};
     }
     if(action==='logout'){await models.logout(input.providerId);return {};}
-    if(action==='models')return models.getAvailable(input.providerId);
+    if(action==='models')return (await models.getAvailable(input.providerId)).filter(m=>!input.api||m.api===input.api);
     const session=sessions.get(input.id);
     if(!session)throw new Error('登录已结束，请重新开始。');
     if(action==='cancel'){session.controller.abort();return {};}

@@ -77,7 +77,7 @@ try{
     const point=await evaluate(`(()=>{const e=${root}.querySelector(${JSON.stringify(selector)});e.scrollIntoView({block:'nearest'});const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);
     await browser('mouse','move',String(Math.round(point.x)),String(Math.round(point.y)));await browser('mouse','down','left');await browser('mouse','up','left');
   };
-  const choose=async()=>evaluate(`(()=>{const s=${root}.getElementById('oauth-provider');s.value='kimi-coding';s.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+  const select=async(id,value)=>evaluate(`(()=>{const s=${root}.getElementById(${JSON.stringify(id)});s.value=${JSON.stringify(value)};s.dispatchEvent(new Event('change',{bubbles:true}));})()`);
   const call=async(method,args=[])=>{
     if(mode==='bookmarklet')return evaluate(`window.pi[${JSON.stringify(method)}](...${JSON.stringify(args)})`);
     await browser('tab','t2');
@@ -96,16 +96,39 @@ try{
       await browser('tab','t1');
     }
     await wait(`${root}?.getElementById('api')?.options.length>0`);
-    await click('#oauth-open');await wait(`${root}.getElementById('oauth-provider')?.options.length===6`);
-    assert.equal(await evaluate(`${root}.getElementById('model-dialog-title').textContent`),language==='en'?'Account sign-in':'账户登录');
-    await choose();await click('#oauth-submit');
+    // Test API/authentication as one connected form, including switching away
+    // from an OAuth-only API and returning to a custom key-based endpoint.
+    await select('api','openai-codex-responses');
+    assert.deepEqual(await evaluate(`Array.from(${root}.getElementById('setup-auth').options,o=>o.value)`),['openai-codex']);
+    assert.equal(await evaluate(`${root}.getElementById('api-key').disabled`),true);
+    assert.equal(await evaluate(`${root}.getElementById('base-url').disabled`),true);
+    await select('api','anthropic-messages');
+    assert.ok((await evaluate(`Array.from(${root}.getElementById('setup-auth').options,o=>o.value)`)).includes('anthropic'));
+    assert.ok(!(await evaluate(`Array.from(${root}.getElementById('setup-auth').options,o=>o.value)`)).includes('kimi-coding'));
+    await select('api','google-generative-ai');
+    assert.deepEqual(await evaluate(`Array.from(${root}.getElementById('setup-auth').options,o=>o.value)`),['api_key','none']);
+    await select('setup-auth','none');assert.equal(await evaluate(`${root}.getElementById('api-key').disabled`),true);
+    await select('api','openai-completions');
+    assert.equal(await evaluate(`${root}.getElementById('api-key').disabled`),false);
+    assert.equal(await evaluate(`${root}.getElementById('base-url').disabled`),false);
+    const aligned=await evaluate(`(()=>{const r=${root};const title=r.getElementById('setup-title').getBoundingClientRect(),action=r.getElementById('setup-manage').getBoundingClientRect(),api=r.getElementById('api').getBoundingClientRect(),auth=r.getElementById('setup-auth').getBoundingClientRect();return {heading:Math.abs(title.y+title.height/2-action.y-action.height/2),fields:Math.abs(api.y-auth.y),fit:auth.right<=r.getElementById('shell').getBoundingClientRect().right}})()`);
+    assert.ok(aligned.heading<2 && aligned.fields<2 && aligned.fit,JSON.stringify(aligned));
+    await browser('screenshot',join(directory,`${mode}-${language}-setup.png`));
+    const originalWidth=await evaluate(`document.querySelector('[data-pi-overlay]').style.width`);
+    await evaluate(`document.querySelector('[data-pi-overlay]').style.width='340px'`);
+    await browser('screenshot',join(directory,`${mode}-${language}-setup-narrow.png`));
+    assert.equal(await evaluate(`(()=>{const r=${root},api=r.getElementById('api').getBoundingClientRect(),auth=r.getElementById('setup-auth').getBoundingClientRect();return auth.y>api.bottom && Math.abs(api.x-auth.x)<1 && auth.right<=r.getElementById('shell').getBoundingClientRect().right})()`),true);
+    await evaluate(`document.querySelector('[data-pi-overlay]').style.width=${JSON.stringify(originalWidth)}`);
+    await select('setup-auth','kimi-coding');await click('#start');await wait(`${root}.getElementById('oauth-form')?.dataset.provider==='kimi-coding'`);
+    assert.equal(await evaluate(`${root}.getElementById('model-dialog-title').textContent`),'Kimi Code (subscription)');
+    await click('#oauth-submit');
     await wait(`${root}.getElementById('oauth-events').textContent.includes('TEST-123')`);
     await browser('screenshot',join(directory,`${mode}-${language}-device.png`));
     assert.ok((await api('list')).every(p=>!p.connected));
     await click('#oauth-cancel');assert.equal((await api('list')).find(p=>p.id==='kimi-coding').connected,false);
-    await click('#model-dialog-close');await click('#oauth-open');await wait(`${root}.getElementById('oauth-provider')?.options.length===6`);
+    await click('#model-dialog-close');await click('#start');await wait(`${root}.getElementById('oauth-form')?.dataset.provider==='kimi-coding'`);
     assert.equal(await evaluate(`${root}.getElementById('oauth-events').textContent`),'');
-    await choose();approved=true;await click('#oauth-submit');
+    approved=true;await click('#oauth-submit');
     await wait(`!${root}.getElementById('manual-model-form').hidden && ${root}.getElementById('manual-model-results').querySelector('button')`);
     await click('#manual-model-results button');await click('#manual-model-form [type=submit]');
     await wait(`${root}.getElementById('chat').style.display==='flex'`);
@@ -120,10 +143,22 @@ try{
     await wait(`${root}?.getElementById('chat')?.style.display==='flex'`);
     assert.ok((await api('list')).find(p=>p.id==='kimi-coding').connected,'OAuth survives reload');
     if(mode==='extension')assert.equal(await evaluate("localStorage.getItem('pi-tab-oauth')"),null,'extension tokens stay in the extension origin');
-    await click('#model-settings');await click('#oauth-menu');await wait(`${root}.getElementById('oauth-provider')?.options.length===6`);await choose();
+    await click('#model-settings');await click('#model-manage');await wait(`${root}.querySelector('.manager-group>.manager-row button:last-child')`);await click('.manager-group>.manager-row button:last-child');await wait(`${root}.getElementById('oauth-form')?.dataset.provider==='kimi-coding'`);
     assert.equal(await evaluate(`${root}.getElementById('oauth-logout').hidden`),false);
     await click('#oauth-logout');await wait(`!${root}.getElementById('oauth-submit').disabled`);
     assert.equal((await api('list')).find(p=>p.id==='kimi-coding').connected,false);
+    await click('#model-dialog-close');await click('#model-dialog-close');
+    await click('#model-settings');await click('#model-menu-add');await click('#manual-add-provider');
+    await select('provider-api','openai-codex-responses');
+    assert.deepEqual(await evaluate(`Array.from(${root}.getElementById('provider-auth').options,o=>o.value)`),['openai-codex']);
+    assert.equal(await evaluate(`${root}.getElementById('provider-url').disabled`),true);
+    await select('provider-api','openai-completions');
+    assert.equal(await evaluate(`${root}.getElementById('provider-key').disabled`),false);
+    await browser('screenshot',join(directory,`${mode}-${language}-provider.png`));
+    await select('provider-auth','kimi-coding');await click('#provider-form [type=submit]');
+    await wait(`${root}.getElementById('oauth-form')?.dataset.provider==='kimi-coding'`);
+    await click('#oauth-submit');await wait(`${root}.getElementById('manual-model-results').querySelector('button') && !${root}.getElementById('manual-model-form').hidden`);
+    assert.ok((await api('list')).find(p=>p.id==='kimi-coding').connected);
     console.log(`PASS ${mode} ${language}: native login, cancel, models, send, refresh, persistence, sign out`);
   }finally{await browser('close');}
  }

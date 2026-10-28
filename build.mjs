@@ -6,6 +6,7 @@ import { builtinProviders } from '@earendil-works/pi-ai/providers/all';
 import { makeBookmarklet } from './make-bookmarklet.mjs';
 import { deflateSync, gzipSync } from 'node:zlib';
 import { createBookmarklet } from './src/bookmarklet.js';
+import {authenticationForApi,browserOAuthProviders} from './src/browser-auth.js';
 import * as radixColors from '@radix-ui/colors';
 
 const providers = builtinProviders();
@@ -13,6 +14,7 @@ const catalog = providers.flatMap(provider => provider.getModels());
 const apis = [...new Set(catalog.map(model => model.api))].map(id => ({
   id,
   name: id,
+  authMethods: authenticationForApi(providers,id),
   endpoints: [...new Map(catalog.filter(model => model.api === id).map(model => [model.baseUrl, {
     name: providers.find(provider => provider.id === model.provider)?.name || model.provider,
     url: model.baseUrl,
@@ -37,7 +39,7 @@ const oauthPlugin={
       name:'browser-oauth',
       setup(builder) {
         const root=new URL('./node_modules/@earendil-works/pi-ai/dist/',import.meta.url).pathname;
-        const names=['anthropic','openai-codex','github-copilot','kimi-coding','meta','xai'];
+        const names=browserOAuthProviders;
         builder.onResolve({filter:/^#native-catalog$/},()=>({path:'catalog',namespace:'native-models'}));
         builder.onLoad({filter:/^catalog$/,namespace:'native-models'},()=>({contents:`export const nativeCatalog=Object.fromEntries(${JSON.stringify(names)}.map(id=>[id,{}]));`}));
         builder.onLoad({filter:/\.models\.js$/},async args=>{

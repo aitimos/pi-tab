@@ -36,7 +36,7 @@ Choose **Manage models** in the composer’s model menu to edit or delete saved 
 
 ## Quick start
 
-Use a tool-capable model with its Base URL, API key, and model name, or choose Account sign-in for a supported provider.
+Choose an API type, then a supported authentication method: API key, no authentication, or a provider account. After sign-in, select from models available to that account and API. Key-based connections use a Base URL, API key, and model name.
 
 ### Bookmark
 

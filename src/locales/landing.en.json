@@ -44,5 +44,5 @@
   "在对话窗口中提问或描述任务。空白书签需先配置模型。": "Ask a question or describe a task. Unconfigured bookmarks need a model first.",
   "本页保存的全部模型、供应商和当前默认选择都会随书签保存。其他网站的独立配置不会被覆盖。": "The bookmark includes all saved models and providers, plus your current default selection. Site-specific settings take priority.",
   "支持账号登录吗？": "Can I sign in with a provider account?",
-  "点击“账户登录”，按提供商提示授权，无需本地服务。书签登录状态仅在当前网站保存，不会随书签导出；扩展登录状态可跨网站复用。书签登录需要网页允许相应脚本和网络请求。": "Choose Account sign-in and follow your provider’s authorization steps. No local service is needed. Bookmark credentials stay on the current website and are not exported; extension sign-in works across websites. Bookmark sign-in requires the page to allow the scripts and network requests."
+  "选择接口类型后，在“认证方式”中选择提供商账号，按提示授权，无需本地服务。书签登录状态仅在当前网站保存，不会随书签导出；扩展登录状态可跨网站复用。书签登录需要网页允许相应脚本和网络请求。": "Choose an API type, then select a provider account under Authentication and follow its authorization steps. No local service is needed. Bookmark credentials stay on the current website and are not exported; extension sign-in works across websites. Bookmark sign-in requires the page to allow the scripts and network requests."
 }

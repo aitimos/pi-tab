@@ -737,7 +737,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     describeModel: config => modelConfig.describe(config),
     async discoverModels(config = {}, options = {}) {
       await pi.ready; ensureOpen();
-      if(config.nativeProvider){const available=await (await getOAuth()).action('models',{providerId:config.nativeProvider});return {models:available.map(model=>({...modelConfig.describe({...config,model:model.id,modelInfo:model}),source:'provider'})),source:'provider',warning:''};}
+      if(config.nativeProvider){const available=await (await getOAuth()).action('models',{providerId:config.nativeProvider,api:config.api});return {models:available.map(model=>({...modelConfig.describe({...config,model:model.id,modelInfo:model}),source:'provider'})),source:'provider',warning:''};}
       return modelConfig.discover({...configuration,...config}, {...options,fetch:nativeFetch});
     },
     get config() { return conversation ? pi.configFor(conversation.id) : null; },
