@@ -1,3 +1,5 @@
+export {createId} from './id.js';
+import {createId} from './id.js';
 export {renderMarkdown} from './markdown.js';
 import oauthUrl from '#oauth-url';
 import {changeModels,savedProviders,providerIdentity} from './model-settings.js';
@@ -440,7 +442,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
         throw new Error(`模型请求失败: ${error.message}。请检查地址、网络以及当前网页的 CSP/CORS 限制；可以配置 proxyUrl 使用附带的本地转发服务。`);
       }
     };
-    const profileId = options.profileId ?? (previous?.profileId && previous.model === next.model && previous.baseUrl === next.baseUrl && previous.api === next.api ? previous.profileId : crypto.randomUUID());
+    const profileId = options.profileId ?? (previous?.profileId && previous.model === next.model && previous.baseUrl === next.baseUrl && previous.api === next.api ? previous.profileId : createId());
     next.profileId = profileId;
     const providerId = next.nativeProvider || `page-${profileId}`;
     const model = { ...resolved, id:next.model, api:next.api, provider:providerId, baseUrl:next.baseUrl, contextWindow:next.contextWindow, maxTokens:next.maxTokens };
@@ -621,7 +623,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
       const url = new URL(provider.baseUrl);
       if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new Error('请填写有效的接口地址。');
       const saved = {
-        id: savedProviders(siteSettings.read()).find(p=>providerIdentity(p)===providerIdentity(provider))?.id || crypto.randomUUID(), api: provider.api, baseUrl: provider.baseUrl.replace(/\/+$/, ''),
+        id: savedProviders(siteSettings.read()).find(p=>providerIdentity(p)===providerIdentity(provider))?.id || createId(), api: provider.api, baseUrl: provider.baseUrl.replace(/\/+$/, ''),
         ...(provider.nativeProvider?{nativeProvider:provider.nativeProvider}:{}),
         apiKey: provider.apiKey || '', providerName: provider.providerName?.trim() || url.hostname,
       };
@@ -749,7 +751,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     async runTool(name, args = {}, {signal} = {}) {
       await pi.ready; ensureOpen();
       const tool = toolMap.get(name); if (!tool) throw new Error(`未知工具: ${name}`);
-      const validated = validateToolArguments(tool, { type: 'toolCall', id: crypto.randomUUID(), name, arguments: args });
+      const validated = validateToolArguments(tool, { type: 'toolCall', id: createId(), name, arguments: args });
       signal?.throwIfAborted();
       const output = await tool.execute(validated, { models, output: text => nativeConsole.info('[pi tool]', text), details: async () => {}, diagnostic: () => {} }, withAbortSignal(signal ?? new AbortController().signal, ctx));
       return output;
@@ -809,13 +811,13 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
       if (useTabStorage && !storageName) {
         const reloading = performance.getEntriesByType('navigation')[0]?.type === 'reload';
         harness = await acquire('pi-tab', reloading ? {} : { ifAvailable: true });
-        storageName = harness ? 'pi-tab' : `pi-tab-${crypto.randomUUID()}`;
+        storageName = harness ? 'pi-tab' : `pi-tab-${createId()}`;
         sessionStorage.setItem('pi-tab-storage-name', storageName);
       }
       harness ??= await acquire(storageName, {});
     } else {
       if (useTabStorage && !storageName) {
-        storageName = `pi-tab-${crypto.randomUUID()}`;
+        storageName = `pi-tab-${createId()}`;
         sessionStorage.setItem('pi-tab-storage-name', storageName);
       }
       harness = await openHarness(storageName);

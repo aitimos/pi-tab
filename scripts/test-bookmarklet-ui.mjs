@@ -48,7 +48,7 @@ const url=`http://127.0.0.1:${server.address().port}/`;
 const installer=url.replace('127.0.0.1','localhost')+'install';
 const otherUrl=`http://127.0.0.1:${otherSite.address().port}/`;
 async function browser(...args){
-  const {stdout}=await run('agent-browser',['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox','--session',session,'--json',...args],{maxBuffer:4*1024*1024});
+  const {stdout}=await run('agent-browser',['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox,--no-proxy-server,--host-resolver-rules=MAP pi-tab-http.test 127.0.0.1','--session',session,'--json',...args],{maxBuffer:4*1024*1024});
   const reply=JSON.parse(stdout);
   if(!reply.success)throw new Error(JSON.stringify(reply.error));
   return reply.data;
@@ -306,6 +306,24 @@ try{
   assert.equal(await evaluate(`pi.agent(${selected}).config.model`),'site-model');
   assert.equal(await evaluate(`pi.agent(${selected}).savedConfig().then(c=>c.apiKey)`),'shared-site-key');
   console.log('PASS settings survive closing all site tabs and reopening the bookmark');
+  // localhost is treated as secure even over HTTP. Use an ordinary hostname
+  // mapped to the fixture server to exercise the real insecure-context path.
+  const insecureUrl=url.replace('127.0.0.1','pi-tab-http.test');
+  await browser('open',insecureUrl);
+  assert.equal(await evaluate('isSecureContext'),false);
+  assert.equal(await evaluate('typeof crypto.randomUUID'),'undefined');
+  assert.equal(await evaluate('typeof navigator.locks'),'undefined');
+  await launch();
+  const insecureId=await evaluate(selected);
+  await evaluate(`pi.agent(${selected}).configure({api:'openai-completions',baseUrl:${JSON.stringify(insecureUrl+'v1')},apiKey:'http-test-key',model:'http-model'})`);
+  await send('Send from an insecure HTTP page');
+  await browser('wait','--fn',`${root}.getElementById('chat-messages').textContent.includes('Bookmark test reply') && !pi.busyFor(${selected})`);
+  assert.equal(authorizations.at(-1),'Bearer http-test-key');
+  assert.equal(await evaluate("pi.runTool('js_eval',{code:'return 1+1'})"),2);
+  await browser('reload');await launch();
+  assert.equal(await evaluate(`pi.agent(${selected}).savedConfig().then(c=>c.apiKey)`),'http-test-key');
+  assert.ok((await evaluate('pi.listChats()')).some(chat=>chat.id===insecureId));
+  console.log('PASS non-secure HTTP bookmark starts, configures, sends, executes tools and reloads');
   console.log(`Screenshots: ${directory}`);
 }catch(error){
   await browser('screenshot',join(directory,'failure.png')).catch(()=>{});

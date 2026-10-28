@@ -1,3 +1,4 @@
+import {createId} from './id.js';
 export * as bedrockApi from '@earendil-works/pi-ai/api/bedrock-converse-stream';
 export {createOAuthUI} from './oauth-ui.js';
 import {anthropicProvider} from '@earendil-works/pi-ai/providers/anthropic';
@@ -43,7 +44,7 @@ export function installOAuth(models, catalog) {
       if(!navigator.locks)throw new Error('登录需要 HTTPS 网页。');
       const provider=providers.find(p=>p.id===input.providerId);
       if(!provider || input.api && !provider.getModels().some(m=>m.api===input.api))throw new Error('请选择支持浏览器登录的提供商。');
-      const id=crypto.randomUUID(),controller=new AbortController();
+      const id=createId(),controller=new AbortController();
       const session={state:'pending',events:[],prompt:null,controller};sessions.set(id,session);
       const timer=setTimeout(()=>controller.abort(),900000);timer.unref?.();
       void models.login(provider.id,'oauth',{
@@ -53,7 +54,7 @@ export function installOAuth(models, catalog) {
           // These are Pi's existing non-loopback flows, not replacement OAuth protocols.
           if(prompt.type==='select'&&provider.id==='anthropic')return Promise.resolve('copy_code');
           return new Promise((resolve,reject)=>{
-            const {signal,...display}=prompt,promptId=crypto.randomUUID();
+            const {signal,...display}=prompt,promptId=createId();
             const cancel=()=>{cleanup();session.prompt=null;reject(new Error('登录已取消。'));};
             const cleanup=()=>{controller.signal.removeEventListener('abort',cancel);signal?.removeEventListener('abort',cancel);};
             session.prompt={...display,id:promptId};session.answer=value=>{cleanup();session.prompt=null;resolve(value);};

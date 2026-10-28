@@ -403,7 +403,7 @@ async function openChat(initialConfig, options = {}) {
   }
 
   const host = document.createElement('div');
-  host.id = options.mount ? '__pi_quick_chat_host' : `__pi_quick_chat_host_${crypto.randomUUID()}`;
+  host.id = options.mount ? '__pi_quick_chat_host' : `__pi_quick_chat_host_${PiConsolePlugin.createId()}`;
   host.setAttribute('data-pi-overlay', 'true');
   host.style.cssText = 'all:initial;position:fixed;right:12px;top:12px;z-index:2147483647;display:block;color-scheme:dark;';
   if (!options.mount && prior) {

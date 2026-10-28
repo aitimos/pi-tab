@@ -34,7 +34,7 @@ async function engineFor(site) {
           if (!tabId) throw new Error('请先在网页中打开这个 agent，再操作页面。');
           const signal = context.abortSignal;
           signal?.throwIfAborted();
-          const requestId = crypto.randomUUID();
+          const requestId = PiConsolePlugin.createId();
           let cancel;
           try {
             return await Promise.race([
