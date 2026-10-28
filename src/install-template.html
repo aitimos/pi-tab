@@ -221,14 +221,15 @@ async function openChat(initialConfig, options = {}) {
     .ai .speaker { color:#d6e1ff; }
     .ai .speaker .pi-icon { width:16px; height:16px; margin-right:5px; }
     .human .speaker { display:none; }
-    .queue-status { display:flex; align-items:center; justify-content:flex-end; gap:6px; color:var(--muted); font-size:12px; }
-    .queue-status details { position:relative; }
-    .queue-status summary { display:grid; place-items:center; width:28px; height:28px; margin:0; border-radius:8px; font-size:17px; line-height:1; }
-    .queue-status summary::after { content:none; }
-    .queue-status summary:hover { background:var(--raised); }
-    .queue-menu { position:absolute; z-index:2; right:0; top:30px; width:144px; padding:5px; border:.5px solid var(--line); border-radius:10px; background:var(--raised); box-shadow:0 8px 28px rgba(0,0,0,.15); }
-    .queue-menu button { display:block; width:100%; padding:8px 9px; border:0; border-radius:6px; background:transparent; color:var(--text); font-size:12px; text-align:left; }
-    .queue-menu button:hover { background:var(--surface); }
+    .message[data-queue-id] { gap:4px; }
+    .queue-status { display:flex; align-items:center; justify-content:flex-end; gap:8px; padding:0 4px; color:var(--muted); font-size:12px; }
+    .queue-more { display:grid; place-items:center; width:28px; height:28px; padding:6px; border:0; border-radius:7px; background:transparent; color:var(--muted); }
+    .queue-more svg { width:16px; height:16px; }
+    .queue-more:hover,.queue-more[aria-expanded=true] { background:var(--raised); color:var(--text); }
+    .queue-menu { position:fixed; inset:auto; margin:0; width:168px; overflow:auto; padding:5px; border:.5px solid var(--line); border-radius:10px; background:var(--bg); color:var(--text); box-shadow:0 6px 20px rgba(0,0,0,.14); }
+    .queue-menu:popover-open { display:flex; flex-direction:column; gap:2px; }
+    .queue-menu button { display:block; flex:none; width:100%; min-height:32px; padding:6px 10px; border:0; border-radius:6px; background:transparent; color:var(--text); font-size:12px; line-height:20px; text-align:left; }
+    .queue-menu button:hover,.queue-menu button:focus-visible { background:var(--raised); }
     .queue-edit { width:min(100%,360px); min-height:72px; padding:9px 11px; border:.5px solid var(--line); border-radius:10px; background:var(--surface); color:var(--text); resize:vertical; }
     .queue-edit-actions { display:flex; justify-content:flex-end; gap:8px; margin-top:6px; }
     .queue-edit-actions button { padding:5px 9px; border:.5px solid var(--line); border-radius:7px; background:var(--raised); color:var(--text); }
@@ -414,6 +415,7 @@ async function openChat(initialConfig, options = {}) {
   root.appendChild(style);
 
   const icons = {
+    more:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
     attach:'<path d="m8 13 6-6a3 3 0 0 1 4 4l-8 8a5 5 0 0 1-7-7l9-9a2 2 0 0 1 3 3l-9 9"/>',
     settings:'<path d="M4 7h8m4 0h4M4 17h3m4 0h9"/><circle cx="14" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
     plus:'<path d="M12 5v14M5 12h14"/>',
@@ -1043,7 +1045,7 @@ async function openChat(initialConfig, options = {}) {
   function reportProgress(text) { i18n.text(byId('progress-label'), () => t(text)); }
   function followOutput(update) {
     const list = byId('chat-messages');
-    const nearBottom = list.scrollHeight - list.clientHeight - list.scrollTop < 64;
+    const nearBottom = list.scrollHeight - list.clientHeight - list.scrollTop < 64 && !list.querySelector('.queue-menu:popover-open');
     update();
     if (nearBottom) list.scrollTop = list.scrollHeight;
   }
@@ -1429,12 +1431,15 @@ async function openChat(initialConfig, options = {}) {
     if (scroll) list.scrollTop = list.scrollHeight;
     return wrap;
   }
+  byId('chat-messages').addEventListener('scroll', () => {
+    for (const menu of root.querySelectorAll('.queue-menu:popover-open')) menu.hidePopover();
+  });
   async function refreshQueuedMessages() {
     const list = byId('chat-messages');
     const chatId = agent.id;
     const queued = await agent.queuedMessages();
     if (chatId !== agent.id) return;
-    const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 60;
+    const atBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 60 && !list.querySelector('.queue-menu:popover-open');
     const existing = new Map([...list.querySelectorAll('[data-queue-id]')].map(row => [row.dataset.queueId, row]));
     const pending = new Set(queued.map(item => String(item.id)));
     for (const [id, row] of existing) if (!pending.has(id)) row.remove();
@@ -1454,12 +1459,25 @@ async function openChat(initialConfig, options = {}) {
       status.className = 'queue-status';
       const label = document.createElement('span');
       i18n.text(label, () => item.mode === 'followUp' ? t("排队中") : t("直接发送"));
-      const actions = document.createElement('details');
-      const summary = document.createElement('summary');
-      i18n.text(summary, '⋯');
+      const summary = document.createElement('button');
+      summary.type = 'button';
+      summary.className = 'queue-more';
+      summary.innerHTML = icon('more');
+      summary.setAttribute('aria-expanded','false');
       i18n.attr(summary, 'aria-label', () => t("排队消息操作"));
       const menu = document.createElement('div');
       menu.className = 'queue-menu';
+      menu.popover = 'auto';
+      menu.addEventListener('toggle', () => summary.setAttribute('aria-expanded',String(menu.matches(':popover-open'))));
+      summary.addEventListener('click', event => {
+        if (!menu.togglePopover()) return;
+        const anchor = summary.getBoundingClientRect(), bounds = list.getBoundingClientRect();
+        menu.style.maxHeight = `${bounds.height-16}px`;
+        const rect = menu.getBoundingClientRect();
+        menu.style.left = `${Math.max(bounds.left+8,Math.min(anchor.right-rect.width,bounds.right-rect.width-8))}px`;
+        menu.style.top = `${Math.max(bounds.top+8,anchor.bottom+6+rect.height<=bounds.bottom-8 ? anchor.bottom+6 : anchor.top-rect.height-6)}px`;
+        if (!event.detail) menu.querySelector('button').focus();
+      });
       for (const [title, action] of [[t("编辑消息"), 'edit'], ...(item.mode === 'followUp' ? [[t("改为直接发送"), 'promote']] : []), [t("取消消息"), 'cancel']]) {
         const button = document.createElement('button');
         button.type = 'button';
@@ -1468,14 +1486,13 @@ async function openChat(initialConfig, options = {}) {
         button.addEventListener('click', () => changeQueueItem(row, item, action));
         menu.appendChild(button);
       }
-      actions.append(summary, menu);
-      status.append(label, actions);
-      row.prepend(status);
+      status.append(label, summary, menu);
+      row.append(status);
     }
     if (atBottom) list.scrollTop = list.scrollHeight;
   }
   async function changeQueueItem(row, item, action) {
-    row.querySelector('details').open = false;
+    row.querySelector('.queue-menu').hidePopover();
     if (action === 'edit') {
       const bubble = row.querySelector('.bubble');
       bubble.hidden = true;
