@@ -18,7 +18,8 @@ let bookmark='', hold=false, requests=0;
 const authorizations=[];
 const handler=(request,response)=>{
   response.setHeader('Access-Control-Allow-Origin','*');
-  response.setHeader('Access-Control-Allow-Headers','Authorization, Content-Type');
+  response.setHeader('Access-Control-Allow-Headers',request.headers['access-control-request-headers'] || 'Authorization, Content-Type');
+  response.setHeader('Access-Control-Allow-Methods','GET, POST, OPTIONS');
   if(request.method==='OPTIONS'){response.writeHead(204);response.end();return;}
   if(request.url==='/install'){response.setHeader('Content-Type','text/html;charset=utf-8');response.end(html);return;}
   if(request.url.endsWith('/models')){response.setHeader('Content-Type','application/json');response.end(JSON.stringify({data:[{id:'test-model',reasoning:false}]}));return;}

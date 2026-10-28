@@ -42,5 +42,5 @@
   "AI 可读取并操作页面，请在信任的网页使用。": "AI can read and act on the page. Use it on trusted sites.",
   "先在左侧配置模型，再拖入书签，即可在其他网站复用。": "Configure a model on the left, then save the bookmark to reuse it on other sites.",
   "在对话窗口中提问或描述任务。空白书签需先配置模型。": "Ask a question or describe a task. Unconfigured bookmarks need a model first.",
-  "网页内修改的配置仅保存在本站；跨网站复用需在本页配置后重新保存书签。": "Changes made on a webpage stay on that site. To reuse them across sites, configure them here and save the bookmark again."
+  "本页配置会随书签保存。在其他网站修改的配置仅对该网站生效，不会改写书签。": "Settings on this page are saved with the bookmark. Changes on other sites stay on those sites and do not update the bookmark."
 }
