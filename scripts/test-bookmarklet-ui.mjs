@@ -319,7 +319,7 @@ try{
   await send('Send from an insecure HTTP page');
   await browser('wait','--fn',`${root}.getElementById('chat-messages').textContent.includes('Bookmark test reply') && !pi.busyFor(${selected})`);
   assert.equal(authorizations.at(-1),'Bearer http-test-key');
-  assert.equal(await evaluate("pi.runTool('js_eval',{code:'return 1+1'})"),2);
+  assert.deepEqual(await evaluate("pi.runTool('js_eval',{code:'return 1+1'})"),{output:[{type:'text',text:'2'}]});
   await browser('reload');await launch();
   assert.equal(await evaluate(`pi.agent(${selected}).savedConfig().then(c=>c.apiKey)`),'http-test-key');
   assert.ok((await evaluate('pi.listChats()')).some(chat=>chat.id===insecureId));
