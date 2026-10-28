@@ -60,7 +60,7 @@ async function launch(){
   await browser('wait','--fn',`${root}?.getElementById('message-input')?.offsetHeight>0 && ${root}.getElementById('settings').disabled===false`);
 }
 async function click(selector){
-  const point=await evaluate(`(()=>{const r=${root}.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+  const point=await evaluate(`(()=>{const element=${root}.querySelector(${JSON.stringify(selector)});element.scrollIntoView({block:'nearest',inline:'nearest'});const r=element.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
   await browser('mouse','move',String(Math.round(point.x)),String(Math.round(point.y)));
   await browser('mouse','down','left');
   await browser('mouse','up','left');
@@ -192,6 +192,11 @@ try{
   console.log('PASS empty conversation reused without accumulating empty history');
   assert.ok(authorizations.length>0 && authorizations.every(value=>value==='Bearer test-only'),'all model requests use the saved credential');
   console.log(`Screenshots: ${directory}`);
+}catch(error){
+  await browser('screenshot',join(directory,'failure.png')).catch(()=>{});
+  console.log(await browser('errors'));
+  console.log('Setup error:',await evaluate(`${root}?.getElementById('setup-error')?.textContent`));
+  throw error;
 }finally{
   await browser('close').catch(()=>{});
   for(const site of [server,otherSite])site.closeAllConnections();
