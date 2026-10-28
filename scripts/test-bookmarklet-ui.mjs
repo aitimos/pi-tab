@@ -6,7 +6,6 @@ import {createServer} from 'node:http';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {promisify} from 'node:util';
-import {createBookmarklet} from '../src/bookmarklet.js';
 
 const chrome=process.env.PI_TAB_TEST_CHROME;
 if(!chrome)throw new Error('Set PI_TAB_TEST_CHROME to Chrome for Testing.');
@@ -14,12 +13,20 @@ const run=promisify(execFile);
 const language=process.env.PI_TAB_TEST_LANGUAGE || 'zh-CN';
 const session=`pi-tab-bookmark-${process.pid}`;
 const directory=await mkdtemp(join(tmpdir(),'pi-tab-bookmark-'));
-let bookmark, hold=false, requests=0;
-const server=createServer((request,response)=>{
+const html=await readFile('pi-bookmarklet-chat-install.html','utf8');
+let bookmark='', hold=false, requests=0;
+const authorizations=[];
+const handler=(request,response)=>{
+  response.setHeader('Access-Control-Allow-Origin','*');
+  response.setHeader('Access-Control-Allow-Headers','Authorization, Content-Type');
+  if(request.method==='OPTIONS'){response.writeHead(204);response.end();return;}
+  if(request.url==='/install'){response.setHeader('Content-Type','text/html;charset=utf-8');response.end(html);return;}
+  if(request.url.endsWith('/models')){response.setHeader('Content-Type','application/json');response.end(JSON.stringify({data:[{id:'test-model',reasoning:false}]}));return;}
   if(request.url.endsWith('/chat/completions')){
     let body='';
     request.on('data',chunk=>body+=chunk);
     request.on('end',()=>{
+      authorizations.push(request.headers.authorization);
       const input=JSON.parse(body);
       const title=input.messages.some(item=>['system','developer'].includes(item.role)&&JSON.stringify(item.content).includes('你是会话标题生成器'));
       if(!title){requests++;if(hold)return;}
@@ -33,14 +40,12 @@ const server=createServer((request,response)=>{
   }
   response.writeHead(200,{'Content-Type':'text/html;charset=utf-8'});
   response.end(`<title>Bookmark regression</title><a id="launch" href="${bookmark.replaceAll('&','&amp;').replaceAll('"','&quot;')}">Pi Tab</a>`);
-});
-await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+};
+const server=createServer(handler), otherSite=createServer(handler);
+await Promise.all([server,otherSite].map(server=>new Promise(resolve=>server.listen(0,'127.0.0.1',resolve))));
 const url=`http://127.0.0.1:${server.address().port}/`;
-const html=await readFile('pi-bookmarklet-chat-install.html','utf8');
-bookmark=createBookmarklet(await readFile('dist/pi-console.js','utf8'),{
-  openChat:html.match(/<script>\s*(async function openChat[\s\S]*?)\nconst PI_RUNTIME/)[1],
-  config:{api:'openai-completions',baseUrl:url+'v1',apiKey:'test-only',model:'test-model',reasoning:false,thinking:'off'},
-});
+const installer=url.replace('127.0.0.1','localhost')+'install';
+const otherUrl=`http://127.0.0.1:${otherSite.address().port}/`;
 async function browser(...args){
   const {stdout}=await run('agent-browser',['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox','--session',session,'--json',...args],{maxBuffer:4*1024*1024});
   const reply=JSON.parse(stdout);
@@ -66,6 +71,44 @@ async function send(text){
   await browser('press','Enter');
 }
 try{
+  await browser('open',installer);
+  await browser('set','viewport','1440','1000');
+  await browser('wait','--fn',`${root}?.getElementById('api')?.options.length>0 && document.getElementById('pi-bookmarklet').hasAttribute('href')`);
+  await evaluate(`(()=>{const r=${root};r.getElementById('base-url').value=${JSON.stringify(url+'v1')};r.getElementById('api-key').value='test-only';r.getElementById('discover-models').click()})()`);
+  await browser('wait','--fn',`${root}.getElementById('setup-model-select').value==='test-model'`);
+  await click('#start');
+  await browser('wait','--fn',`${root}.getElementById('chat').style.display==='flex'`);
+  const firstBookmark=await evaluate("document.getElementById('pi-bookmarklet').getAttribute('href')");
+  await browser('reload');
+  await browser('wait','--fn',`${root}?.getElementById('chat')?.style.display==='flex' && document.getElementById('pi-bookmarklet').hasAttribute('href')`);
+  bookmark=await evaluate("document.getElementById('pi-bookmarklet').getAttribute('href')");
+  console.log('PASS installer restores configured chat and generates bookmark after reload');
+
+  await browser('open',otherUrl);
+  await launch();
+  await send('Use restored installer credentials on another site');
+  await browser('wait','--fn',`${root}.getElementById('chat-messages').textContent.includes('Bookmark test reply') && !pi.busy`);
+  assert.equal(await evaluate('pi.config.model'),'test-model');
+  assert.equal(authorizations.at(-1),'Bearer test-only');
+  console.log('PASS generated bookmark sends an authenticated request on a separate origin');
+
+  await browser('open',installer);
+  await browser('wait','--fn',`${root}?.getElementById('chat')?.style.display==='flex'`);
+  await click('#model-settings');await click('#model-menu-add');
+  await browser('wait','--fn',`${root}.querySelectorAll('#manual-model-results button').length===1`);
+  await evaluate(`(()=>{const input=${root}.getElementById('manual-model-id');input.value='other-model';input.dispatchEvent(new Event('input',{bubbles:true}))})()`);
+  await click('#manual-model-form [type=submit]');
+  await browser('wait','--fn',`${root}.getElementById('chat-model').textContent==='other-model'`);
+  const otherBookmark=await evaluate("document.getElementById('pi-bookmarklet').getAttribute('href')");
+  assert.ok(firstBookmark!==otherBookmark,'saving a different model updates the generated bookmark');
+  await click('#model-settings');
+  await browser('wait','--fn',`${root}.querySelectorAll('#model-menu-list button').length===2`);
+  await click('#model-menu-list button:nth-child(2)');
+  await browser('wait','--fn',`${root}.getElementById('chat-model').textContent==='test-model'`);
+  bookmark=await evaluate("document.getElementById('pi-bookmarklet').getAttribute('href')");
+  assert.ok(bookmark!==otherBookmark,'selecting a saved model updates the generated bookmark');
+  console.log('PASS selecting a saved model updates the bookmark');
+
   await browser('open',url);
   await evaluate(`localStorage.setItem('pi-tab-language',${JSON.stringify(language)})`);
   await launch();
@@ -147,9 +190,10 @@ try{
   assert.equal(await evaluate(selected),empty);
   assert.equal(await evaluate('pi.listChats().then(chats=>chats.length)'),count);
   console.log('PASS empty conversation reused without accumulating empty history');
+  assert.ok(authorizations.length>0 && authorizations.every(value=>value==='Bearer test-only'),'all model requests use the saved credential');
   console.log(`Screenshots: ${directory}`);
 }finally{
   await browser('close').catch(()=>{});
-  server.closeAllConnections();
-  await new Promise(resolve=>server.close(resolve));
+  for(const site of [server,otherSite])site.closeAllConnections();
+  await Promise.all([server,otherSite].map(site=>new Promise(resolve=>site.close(resolve))));
 }

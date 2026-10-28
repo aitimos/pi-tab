@@ -35,12 +35,12 @@
   "基于 Pi Durable，通过书签或扩展打开，阅读、整理和操作当前网页。": "Powered by Pi Durable. Open with a bookmark or extension to read, organize, and interact with the page.",
   "填写模型信息，直接开始对话。": "Set up your model and start chatting.",
   "设置模型并试用 Pi Tab": "Set up a model and try Pi Tab",
-  "将按钮拖到浏览器书签栏后松开。也可以先保存书签，使用时再填写模型信息。": "Drop the button onto your bookmarks bar. You can set up the model now or when you use it.",
-  "按提示补全模型信息，就能在对话窗口中提问或描述任务。": "Complete any missing model settings, then ask a question or describe a task.",
   "模型密钥会保存在书签中，也可能随浏览器同步。请勿分享包含密钥的书签。": "Your API key is saved in the bookmark and may sync with your browser. Do not share bookmarks containing keys.",
-  "保存新的模型设置后，请将上方按钮重新拖到书签栏，替换旧书签。": "After saving new model settings, drag the button to your bookmarks bar again to replace the old bookmark.",
   "复制下方地址，在浏览器的书签管理器中新建书签。填写名称，将地址粘贴到新书签的“网址”栏，再保存。": "Copy the URL below and create a bookmark in your browser's bookmark manager. Enter a name, paste the URL, and save.",
   "得到 pi-tab-extension 文件夹。更新时替换原目录文件。": "Locate the pi-tab-extension folder. To update, replace the files in the original folder.",
   "点击“加载已解压的扩展程序”，选择 pi-tab-extension 文件夹，在普通网页点击工具栏中的 Pi Tab 图标并配置模型。更新后需重新加载扩展并刷新网页。": "Choose “Load unpacked” and select the pi-tab-extension folder. On a regular webpage, click the Pi Tab toolbar icon and configure a model. After updating, reload the extension and refresh the page.",
-  "AI 可读取并操作页面，请在信任的网页使用。": "AI can read and act on the page. Use it on trusted sites."
+  "AI 可读取并操作页面，请在信任的网页使用。": "AI can read and act on the page. Use it on trusted sites.",
+  "先在左侧配置模型，再拖入书签，即可在其他网站复用。": "Configure a model on the left, then save the bookmark to reuse it on other sites.",
+  "在对话窗口中提问或描述任务。空白书签需先配置模型。": "Ask a question or describe a task. Unconfigured bookmarks need a model first.",
+  "网页内修改的配置仅保存在本站；跨网站复用需在本页配置后重新保存书签。": "Changes made on a webpage stay on that site. To reuse them across sites, configure them here and save the bookmark again."
 }

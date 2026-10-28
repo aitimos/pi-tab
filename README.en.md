@@ -42,7 +42,7 @@ You need a model that supports tool calling, its Base URL, API key, and model na
 2. Drag the **Pi Tab** button to your bookmarks bar.
 3. Open a webpage, click the bookmark, and enter a task.
 
-No extension is required. You can also save the bookmark first and configure it when you use it.
+No extension is required. Configure the installer before saving the bookmark to carry your model and key to other sites. Changes made on a webpage stay on that site and do not update existing bookmarks.
 
 ### Chrome extension
 
