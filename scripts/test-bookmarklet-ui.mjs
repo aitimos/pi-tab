@@ -123,7 +123,7 @@ try{
   await click('#manual-model-form [type=submit]');
   await browser('wait','--fn',`${root}.getElementById('chat-model').textContent==='provider-model'`);
   await click('#model-settings');
-  await browser('wait','--fn',`${root}.querySelectorAll('#model-menu-list button').length===3`);
+  await browser('wait','--fn',`${root}.querySelectorAll('#model-menu-list button:has(small)').length===3`);
   // Find the saved default by name instead of relying on its sort position.
   const defaultIndex=await evaluate(`[...${root}.querySelectorAll('#model-menu-list button')].findIndex(button=>button.querySelector('span').textContent==='test-model')+1`);
   await click(`#model-menu-list button:nth-child(${defaultIndex})`);
@@ -227,7 +227,7 @@ try{
   console.log('PASS empty conversation reused without accumulating empty history');
   assert.ok(authorizations.length>0 && authorizations.every(value=>value==='Bearer test-only'),'all model requests use the saved credential');
   await click('#model-settings');
-  await browser('wait','--fn',`${root}.querySelectorAll('#model-menu-list button').length===3`);
+  await browser('wait','--fn',`${root}.querySelectorAll('#model-menu-list button:has(small)').length===3`);
   const providerIndex=await evaluate(`[...${root}.querySelectorAll('#model-menu-list button')].findIndex(button=>button.querySelector('span').textContent==='provider-model')+1`);
   await click(`#model-menu-list button:nth-child(${providerIndex})`);
   await browser('wait','--fn',`${root}.getElementById('chat-model').textContent==='provider-model'`);
