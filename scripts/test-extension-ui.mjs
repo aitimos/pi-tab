@@ -659,7 +659,8 @@ try {
       await browser('wait','--fn',`${root}.querySelector('.streaming .bubble')?.textContent==='Before after'`);
       assert.equal(await evaluate(`${root}.querySelectorAll('.streaming').length`),1);
       assert.equal(await evaluate(`${root}.getElementById('shell').dataset.busy`),'true');
-      assert.equal(await evaluate(`${root}.getElementById('busy-text').hidden`),false);
+      assert.equal(await evaluate(`${root}.getElementById('abort').hidden`),false);
+      assert.equal(await evaluate(`${root}.querySelector('#busy-text,.ai .speaker')===null`),true);
     } finally { await browser('tab','t2'); }
   });
   await check('queued attachment editing keeps image and file contents',async()=>{

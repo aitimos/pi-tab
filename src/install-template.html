@@ -87,7 +87,7 @@ async function openChat(initialConfig, options = {}) {
     #shell[data-theme=light] { box-shadow:0 16px 48px rgba(0,0,0,.15),0 2px 8px rgba(0,0,0,.05); }
     #shell :is(#top,#chat-list,#model-dialog,#tool-dialog) { background:var(--bg); }
     #shell :is(#composer,.human .bubble) { background:var(--surface); }
-    #shell[data-theme=light] :is(label,.ai .speaker,.subtle) { color:var(--text); }
+    #shell[data-theme=light] :is(label,.subtle) { color:var(--text); }
     #shell[data-theme=light] :is(input,textarea)::placeholder { color:var(--muted); }
     #shell[data-theme=light] .primary:not(#send) { background:#3e63dd; color:#fdfdfe; }
     #shell[data-theme=light] .primary:not(#send):hover:not(:disabled) { background:#3358d4; }
@@ -218,9 +218,6 @@ async function openChat(initialConfig, options = {}) {
     .agent .speaker { color:var(--muted); }
     .agent .bubble { padding:9px 13px; border:.5px solid var(--line); border-radius:10px; }
     .speaker { display:flex; align-items:center; gap:7px; color:var(--muted); font-size:12px; font-weight:500; }
-    .ai .speaker { color:#d6e1ff; }
-    .ai .speaker .pi-icon { width:16px; height:16px; margin-right:5px; }
-    .human .speaker { display:none; }
     .message[data-queue-id] { gap:4px; }
     .queue-status { display:flex; align-items:center; justify-content:flex-end; gap:8px; padding:0 4px; color:var(--muted); font-size:12px; }
     .queue-more { display:grid; place-items:center; width:28px; height:28px; padding:6px; border:0; border-radius:7px; background:transparent; color:var(--muted); }
@@ -244,15 +241,14 @@ async function openChat(initialConfig, options = {}) {
     .markdown li > p { margin:4px 0; }
     .markdown blockquote { margin-left:0; padding-left:12px; border-left:.5px solid var(--line); color:var(--muted); }
     .markdown code { font:12px/1.7 ui-monospace,SFMono-Regular,Consolas,monospace; background:var(--raised); padding:2px 4px; border-radius:3px; }
-    .markdown pre { padding:12px; border:.5px solid var(--line); border-radius:6px; background:var(--surface); overflow:auto; white-space:pre; overscroll-behavior:contain; }
+    .markdown pre { padding:12px; border:.5px solid var(--line); border-radius:6px; background:var(--surface); overflow:auto; white-space:pre; overscroll-behavior-x:contain; overscroll-behavior-y:auto; }
     .markdown pre code { background:none; padding:0; border:0; }
-    .markdown table { display:block; max-width:100%; overflow:auto; border-collapse:collapse; font-size:12px; overscroll-behavior:contain; }
+    .markdown table { display:block; max-width:100%; overflow:auto; border-collapse:collapse; font-size:12px; overscroll-behavior-x:contain; overscroll-behavior-y:auto; }
     .markdown :is(th,td) { border:.5px solid var(--line); padding:6px 9px; text-align:left; }
     .markdown th { font-weight:600; background:var(--surface); }
     .markdown a { color:var(--accent); text-decoration:underline; text-underline-offset:2px; }
     .markdown hr { border:0; border-top:.5px solid var(--line); margin:16px 0; }
     .human .bubble { padding:9px 13px; border-radius:14px 14px 4px 14px; background:var(--raised); border:.5px solid #ffffff09; }
-    .system .speaker { display:none; }
     .system .bubble { color:var(--muted); font-size:12px; border-left:2px solid #6e6e6e; padding:3px 0 3px 12px; }
     .answer-actions { display:flex; align-items:center; gap:6px; color:var(--muted); }
     .answer-actions .icon-button { width:26px; height:26px; }
@@ -319,11 +315,6 @@ async function openChat(initialConfig, options = {}) {
     .tool-panel pre { max-height:60dvh; margin:0; padding:16px; overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; border:.5px solid var(--line); border-radius:10px; background:#ffffff09; color:var(--text); font:12px/20px ui-monospace,SFMono-Regular,Consolas,monospace; white-space:pre; }
     @media(prefers-reduced-motion:reduce) { .trace-group[data-open=true]>.trace-items { animation:none; } .trace-chevron { transition:none; } :is(.thinking,.trace-group>.trace-trigger)[data-running=true] .thinking-caption,:is(.tool-row,.trace-group>.trace-trigger)[data-state=running] .tool-name { background:none; color:var(--muted); } }
     .streaming .bubble::after { content:''; display:inline-block; width:2px; height:13px; background:#d6e1ff; margin-left:3px; vertical-align:-1px; animation:pulse 1s ease-in-out infinite; }
-    #busy-text { display:flex; align-items:center; gap:7px; min-height:22px; padding:1px 18px 4px; font-size:12px; color:var(--muted); }
-    .pixel-loader { display:grid; grid-template-columns:repeat(3,3px); gap:2px; flex:none; }
-    .pixel-loader i { width:3px; height:3px; background:#b4b4b4; animation:pulse 1.2s ease-in-out infinite; }
-    .pixel-loader i:nth-child(3n+1) { animation-delay:-.4s; }
-    .pixel-loader i:nth-child(3n+2) { animation-delay:-.8s; }
     @keyframes pulse { 50% { opacity:.3; } }
     #composer { position:relative; flex:none; margin:8px; padding:8px 0 2px; border:.5px solid var(--line); border-radius:10px; background:var(--surface); box-shadow:0 5px 18px rgba(0,0,0,.15); transition:border-color .25s ease-out; }
     #shell[data-theme=light] #composer { box-shadow:0 5px 18px rgba(0,0,0,.05); }
@@ -488,7 +479,6 @@ async function openChat(initialConfig, options = {}) {
       <section id="chat" aria-label="对话">
         <div id="chat-tools">${icon('page')}<span id="page-title"></span><span class="context-dot" aria-hidden="true"></span><span>当前网页</span></div>
         <div id="chat-messages" role="log" aria-label="对话记录" aria-live="polite"></div>
-        <div id="busy-text" role="status" hidden><span class="pixel-loader" aria-hidden="true">${'<i></i>'.repeat(9)}</span><span id="progress-label"></span></div>
         <div id="composer">
           <div id="attachments" aria-label="待发送附件"></div><p id="attachment-error" role="status"></p>
           <input id="attachment-input" type="file" multiple hidden />
@@ -583,7 +573,16 @@ async function openChat(initialConfig, options = {}) {
     root.addEventListener(type, event => event.stopPropagation());
   }
   root.addEventListener('wheel', event => {
-    if (options.mount || event.ctrlKey) return;
+    if (event.ctrlKey) return;
+    const block = event.composedPath().find(element => element instanceof Element && element.matches('.markdown pre,.markdown table'));
+    if (block && (event.shiftKey || Math.abs(event.deltaX)>Math.abs(event.deltaY))) {
+      const delta = event.shiftKey ? event.deltaY || event.deltaX : event.deltaX;
+      block.scrollLeft += delta * (event.deltaMode===1 ? 16 : event.deltaMode===2 ? block.clientWidth : 1);
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+    if (options.mount) return;
     event.stopPropagation();
     const canScroll = event.composedPath().some(element => {
       if (!(element instanceof Element) || element.getRootNode() !== root) return false;
@@ -1042,7 +1041,6 @@ async function openChat(initialConfig, options = {}) {
     i18n.text(byId('page-title'), title);
     byId('page-title').title = title;
   }
-  function reportProgress(text) { i18n.text(byId('progress-label'), () => t(text)); }
   function followOutput(update) {
     const list = byId('chat-messages');
     const nearBottom = list.scrollHeight - list.clientHeight - list.scrollTop < 64 && !list.querySelector('.queue-menu:popover-open');
@@ -1056,11 +1054,21 @@ async function openChat(initialConfig, options = {}) {
     text ??= '';
     return text.length > 6000 ? t("{0}\n… 仅显示前 6000 个字符", text.slice(0, 6000)) : text;
   }
+  function preserveMarkdownScroll(container) {
+    const selector = '.markdown pre,.markdown table';
+    const positions = [...container.querySelectorAll(selector)].map(block => [block.scrollLeft,block.scrollTop]);
+    return () => container.querySelectorAll(selector).forEach((block,index) => {
+      if (positions[index]) [block.scrollLeft,block.scrollTop] = positions[index];
+    });
+  }
   function renderAnswer(node, text) {
+    if (node._answer === text) return;
     node._answer = text;
     const body = node.querySelector('.bubble');
     body.classList.add('markdown');
+    const restoreScroll = preserveMarkdownScroll(body);
     body.replaceChildren(PiConsolePlugin.renderMarkdown(text));
+    restoreScroll();
   }
 
   function addAnswerActions(node) {
@@ -1263,8 +1271,6 @@ async function openChat(initialConfig, options = {}) {
     }
     renderStream();
     if (state.stream?.ended) finishStream();
-    if (state.stream?.blocks.some(block => block?.type === 'text' && block.text)) reportProgress(t("正在回复"));
-    else if (state.stream?.blocks.some(block => block?.type === 'thinking' && block.thinking)) reportProgress(t("正在思考"));
   }
   function showFinalAnswer(answer) {
     const stream = state.stream;
@@ -1416,14 +1422,16 @@ async function openChat(initialConfig, options = {}) {
     if (!preserveTrace) { state.trace = null; refreshTraces(); }
     const wrap = document.createElement('div');
     wrap.className = `message ${kind}`;
-    const speaker = document.createElement('span');
-    speaker.className = 'speaker';
-    if (kind === 'ai') speaker.innerHTML = `${piIcon()}Pi Tab`;
-    else i18n.text(speaker, () => kind === 'human' ? t("你") : kind === 'agent' ? t("其他 agent") : t("提示"));
+    if (kind === 'agent') {
+      const speaker = document.createElement('span');
+      speaker.className = 'speaker';
+      i18n.text(speaker, () => t("其他 agent"));
+      wrap.append(speaker);
+    }
     const bubble = document.createElement('div');
     bubble.className = 'bubble';
     i18n.text(bubble, value);
-    wrap.append(speaker, bubble);
+    wrap.append(bubble);
     if (kind === 'ai' && value) { renderAnswer(wrap,value); addAnswerActions(wrap); }
     const list = byId('chat-messages');
     list.appendChild(wrap);
@@ -1529,6 +1537,9 @@ async function openChat(initialConfig, options = {}) {
     const draft = editor?.value;
     const history = await agent.history();
     if (chatId !== agent.id || version !== state.historyVersion) return;
+    const scrollTop = list.scrollTop;
+    const followEnd = list.scrollHeight-list.clientHeight-scrollTop < 64;
+    const restoreScroll = preserveMarkdownScroll(list);
     list.replaceChildren();
     for (let index = 0; index < history.entries.length; index++) {
       const entry = history.entries[index];
@@ -1559,7 +1570,8 @@ async function openChat(initialConfig, options = {}) {
         }
       }
     }
-    list.scrollTop = list.scrollHeight;
+    restoreScroll();
+    list.scrollTop = followEnd ? list.scrollHeight : scrollTop;
   }
   function setBusy(value) {
     state.busy = value;
@@ -1575,7 +1587,6 @@ async function openChat(initialConfig, options = {}) {
     byId('abort').hidden = !value;
     byId('new-chat').disabled = !state.connected || state.configuring;
     byId('settings').disabled = !state.connected;
-    byId('busy-text').hidden = !value;
     if (!value) {
       finishStream();
       for (const row of state.tools.values()) {
@@ -1590,15 +1601,13 @@ async function openChat(initialConfig, options = {}) {
       }
       state.trace = null;
       refreshTraces();
-      reportProgress('');
       reportStatus(t("准备就绪"));
-      byId('message-input').focus();
+      byId('message-input').focus({preventScroll:true});
     } else {
       state.tools.clear();
       state.trace = null;
       state.traces = [];
       state.stream = null;
-      reportProgress(t("正在回复"));
       reportStatus(t("正在处理…"));
     }
   }
@@ -1650,13 +1659,7 @@ async function openChat(initialConfig, options = {}) {
         return;
       }
       if (!state.busy) return;
-      if (event.type === 'tool_execution_start') {
-        updateToolCall(event);
-        reportProgress(t("正在操作页面"));
-      } else if (event.type === 'tool_execution_end') {
-        updateToolCall(event);
-        reportProgress(t("正在整理回复"));
-      } else if (event.type === 'tool_execution_update') {
+      if (['tool_execution_start','tool_execution_end','tool_execution_update'].includes(event.type)) {
         updateToolCall(event);
       } else if (['message_start', 'message_update', 'message_end'].includes(event.type)) {
         handleMessage(event);
@@ -1865,7 +1868,6 @@ async function openChat(initialConfig, options = {}) {
   });
   byId('abort').addEventListener('click', async () => {
     if (!state.busy) return;
-    reportProgress(t("正在停止…"));
     try { await agent.abort(); }
     catch (error) { message('system', t("停止失败：{0}", error.message || error)); }
   });

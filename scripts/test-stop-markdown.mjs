@@ -15,8 +15,10 @@ const session=`pi-tab-stop-${process.pid}`;
 const run=promisify(execFile);
 const requests=[];
 const pending=new Map();
-let finishMarkdown;
+let finishMarkdown, appendMarkdown;
 const markdown='# 标题 Heading\n\n**粗体 Bold** and *italic* &amp; text\n\n- first\n  - nested\n- [x] done\n\n| Name | Value |\n| --- | --- |\n| one | two |\n\n```js\nconst x = "<img src=x onerror=alert(1)>";\n'+ 'a'.repeat(180)+'\n```\n\n[Safe](https://example.com/?a=1&amp;b=2) [Bad](javascript:alert(1))\n\n<img src=x onerror="window.MARKDOWN_EXECUTED=1">';
+const wideTable='|'+Array.from({length:20},(_,i)=>'Column '+i).join('|')+'|\n|'+Array(20).fill('---').join('|')+'|\n|'+Array(20).fill('value').join('|')+'|';
+const scrollMarkdown=markdown.replace('| Name | Value |\n| --- | --- |\n| one | two |',wideTable)+'\n\n'+Array(12).fill('Reading space').join('\n\n');
 function reply(response,delta,finish='stop') {
   response.writeHead(200,{'Content-Type':'text/event-stream'});
   for(const choice of [{delta,finish_reason:null},{delta:{},finish_reason:finish}])response.write('data: '+JSON.stringify({id:'test',object:'chat.completion.chunk',created:1,model:'test-model',choices:[{index:0,...choice}]})+'\n\n');
@@ -32,7 +34,8 @@ const server=createServer((request,response)=>{
     const text=typeof last.content==='string'?last.content:last.content.filter(p=>p.type==='text').map(p=>p.text).join('\n');
     if(text==='MARKDOWN_STREAM'){
       response.writeHead(200,{'Content-Type':'text/event-stream'});
-      response.write('data: '+JSON.stringify({id:'md',object:'chat.completion.chunk',created:1,model:'test-model',choices:[{index:0,delta:{role:'assistant',content:markdown},finish_reason:null}]})+'\n\n');
+      response.write('data: '+JSON.stringify({id:'md',object:'chat.completion.chunk',created:1,model:'test-model',choices:[{index:0,delta:{role:'assistant',content:scrollMarkdown},finish_reason:null}]})+'\n\n');
+      appendMarkdown=()=>response.write('data: '+JSON.stringify({id:'md',object:'chat.completion.chunk',created:1,model:'test-model',choices:[{index:0,delta:{content:'\n\nIncremental reply'},finish_reason:null}]})+'\n\n');
       finishMarkdown=()=>response.end('data: '+JSON.stringify({id:'md',object:'chat.completion.chunk',created:1,model:'test-model',choices:[{index:0,delta:{},finish_reason:'stop'}]})+'\n\ndata: [DONE]\n\n');return;
     }
     if(text.startsWith('HOLD_')){const record={closed:false};pending.set(text,record);response.on('close',()=>{record.closed=true;});response.writeHead(200,{'Content-Type':'text/event-stream'});response.write('data: '+JSON.stringify({id:'hold',object:'chat.completion.chunk',created:1,model:'test-model',choices:[{index:0,delta:{role:'assistant',content:'Waiting'},finish_reason:null}]})+'\n\n');return;}
@@ -48,6 +51,20 @@ async function browser(...args){
 }
 const evaluate=async code=>(await browser('eval','-b',Buffer.from(code).toString('base64'))).result;
 const command=(name,args={})=>'PI_TAB_TOOL '+JSON.stringify({name,args});
+async function wheel(point,deltaX,deltaY,modifiers=0) {
+  const endpoint=new URL((await browser('get','cdp-url')).cdpUrl);
+  endpoint.protocol='http:';endpoint.pathname='/json/list';
+  const page=(await (await fetch(endpoint)).json()).find(target=>target.type==='page'&&target.url===url);
+  const socket=new WebSocket(page.webSocketDebuggerUrl);
+  try {
+    await new Promise((resolve,reject)=>{socket.addEventListener('open',resolve,{once:true});socket.addEventListener('error',reject,{once:true});});
+    await new Promise((resolve,reject)=>{
+      socket.addEventListener('message',event=>{const reply=JSON.parse(event.data);if(reply.id===1)reply.error?reject(new Error(reply.error.message)):resolve();});
+      socket.send(JSON.stringify({id:1,method:'Input.dispatchMouseEvent',params:{type:'mouseWheel',x:Math.round(point.x),y:Math.round(point.y),deltaX,deltaY,modifiers}}));
+    });
+  } finally {socket.close();}
+}
+
 try{
   await cp(resolve('dist/extension'),extension,{recursive:true});
   await writeFile(join(extension,'test-controller.html'),'<!doctype html><title>Tab test controller</title>');
@@ -98,10 +115,35 @@ try{
     await start(source,'MARKDOWN_STREAM');await browser('tab','t1');
     await browser('set','media',language==='en'?'dark':'light');
     await browser('wait','--fn',`${root}.querySelector('.streaming table')!==null`);
+    for(const tag of ['table','pre']) {
+      const selector='.streaming '+tag;
+      const point=await evaluate(`(()=>{const r=${root},block=r.querySelector(${JSON.stringify(selector)});block.scrollIntoView({block:'center'});block.scrollLeft=0;const rect=block.getBoundingClientRect(),list=r.getElementById('chat-messages');return {x:rect.x+rect.width/2,y:rect.y+rect.height/2,top:list.scrollTop,page:scrollY}})()`);
+      await wheel(point,180,24);
+      await browser('wait','--fn',`${root}.querySelector(${JSON.stringify(selector)}).scrollLeft>0`);
+      assert.equal(await evaluate(`${root}.getElementById('chat-messages').scrollTop`),point.top,'diagonal horizontal scrolling must not move messages');
+      await evaluate(`${root}.querySelector(${JSON.stringify(selector)}).scrollLeft=100000`);
+      await wheel(point,300,24);
+      assert.equal(await evaluate(`${root}.getElementById('chat-messages').scrollTop`),point.top,'horizontal boundary must not chain to messages');
+      await wheel(point,0,-120,8);
+      await browser('wait','--fn',`(()=>{const b=${root}.querySelector(${JSON.stringify(selector)});return b.scrollLeft+b.clientWidth<b.scrollWidth-1})()`);
+      assert.equal(await evaluate(`${root}.getElementById('chat-messages').scrollTop`),point.top,'shift-wheel stays horizontal');
+      await wheel(point,0,100);
+      await browser('wait','--fn',`${root}.getElementById('chat-messages').scrollTop>${point.top}`);
+      assert.equal(await evaluate('scrollY'),point.page,'host page does not scroll');
+    }
+    const before=await evaluate(`(()=>{const r=${root};return {left:r.querySelector('.streaming pre').scrollLeft,top:r.getElementById('chat-messages').scrollTop}})()`);
+    appendMarkdown();
+    await browser('wait','--fn',`${root}.querySelector('.streaming').textContent.includes('Incremental reply')`);
+    assert.equal(await evaluate(`${root}.querySelector('.streaming pre').scrollLeft`),before.left,'streaming keeps code scroll position');
+    assert.equal(await evaluate(`${root}.getElementById('chat-messages').scrollTop`),before.top,'streaming preserves reading position');
+    assert.equal(await evaluate(`${root}.querySelector('#busy-text,.ai .speaker')===null`),true);
+    console.log(`PASS ${language}: table/code horizontal, diagonal, boundary, shift and vertical scrolling; streaming preserves reading position`);
     finishMarkdown();await idle(source);await browser('tab','t1');
-    await browser('wait','--fn',`${root}.querySelector('.markdown table')!==null`);
+    await browser('wait','--fn',`${root}.querySelector('.markdown table')!==null && ${root}.querySelector('.streaming')===null`);
+    assert.equal(await evaluate(`[...${root}.querySelectorAll('.markdown pre')].at(-1).scrollLeft`),before.left,'completed reply keeps code scroll position');
+    assert.equal(await evaluate(`${root}.getElementById('chat-messages').scrollTop`),before.top,'completed reply does not jump to the end');
     const rendered=await evaluate(`(()=>{const r=${root},m=[...r.querySelectorAll('.markdown')].at(-1);return {heading:!!m.querySelector('h1'),bold:!!m.querySelector('strong'),nested:!!m.querySelector('ul ul'),table:m.querySelectorAll('td').length,code:m.querySelector('pre code').textContent,links:[...m.querySelectorAll('a')].map(a=>a.href),unsafe:!!m.querySelector('img,script'),text:m.textContent,overflow:r.getElementById('shell').scrollWidth>r.getElementById('shell').clientWidth+1}})()`);
-    assert.equal(rendered.heading,true);assert.equal(rendered.bold,true);assert.equal(rendered.nested,true);assert.equal(rendered.table,2);assert.equal(rendered.unsafe,false);assert.equal(rendered.overflow,false);
+    assert.equal(rendered.heading,true);assert.equal(rendered.bold,true);assert.equal(rendered.nested,true);assert.equal(rendered.table,20);assert.equal(rendered.unsafe,false);assert.equal(rendered.overflow,false);
     assert.ok(rendered.code.includes('<img'));assert.ok(rendered.text.includes('& text'));assert.ok(!rendered.text.includes('[x]'));assert.deepEqual(rendered.links,['https://example.com/?a=1&b=2']);
     assert.equal(await evaluate('window.MARKDOWN_EXECUTED===undefined'),true);
     await browser('screenshot',`/tmp/pi-tab-markdown-${language}.png`);
