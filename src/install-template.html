@@ -56,7 +56,7 @@ body>header,body>main,body>footer{position:relative;z-index:1}
 <div class="drop-area"><a id="pi-bookmarklet" draggable="true" tabindex="0" aria-label="Pi Tab" aria-describedby="bookmark-hint" title="点击在当前页打开，或拖到书签栏"><svg class="pi-icon" viewBox="0 0 4 4" shape-rendering="crispEdges" aria-hidden="true"><path fill="#e48a7a" d="M0 0h3v1H0zM2 1h1v1H2z"/><path fill="#4f8eb3" d="M0 1h1v3H0zM1 2h1v1H1z"/><path fill="#eab65d" d="M3 2h1v2H3z"/></svg>Pi Tab</a><div class="drag-hint" id="bookmark-hint"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 3 14 9-7 1-3 7Z"/></svg>拖到书签栏，在其他网页继续使用</div></div>
 <ol class="instructions"><li><div><strong>显示浏览器书签栏</strong><div class="shortcuts"><span>Mac <kbd>⌘ ⇧ B</kbd></span><span>Windows <kbd>Ctrl Shift B</kbd></span></div></div></li><li><div><strong>拖动上方按钮，保存书签</strong><p>先在左侧配置模型，再拖入书签，即可在其他网站复用。</p></div></li><li><div><strong>打开网页，点击书签</strong><p>在对话窗口中提问或描述任务。空白书签需先配置模型。</p></div></li></ol>
 <p class="small privacy-note">模型密钥会保存在书签中，也可能随浏览器同步。请勿分享包含密钥的书签。</p>
-<p class="small update-note">本页配置会随书签保存。在其他网站修改的配置仅对该网站生效，不会改写书签。</p>
+<p class="small update-note">本页保存的全部模型、供应商和当前默认选择都会随书签保存。其他网站的独立配置不会被覆盖。</p>
 <details class="manual"><summary>手动添加书签</summary><div class="manual-content"><p>复制下方地址，在浏览器的书签管理器中新建书签。填写名称，将地址粘贴到新书签的“网址”栏，再保存。</p><button class="secondary" id="copy-bookmark" type="button">复制书签地址</button><p id="copy-status" role="status" aria-live="polite"></p><textarea id="bookmark-url" readonly aria-label="书签地址" spellcheck="false" hidden></textarea></div></details>
 </section>
 </div>
@@ -2419,14 +2419,25 @@ document.getElementById('site-theme').addEventListener('click', () => {
   window.dispatchEvent(new Event('pi-tab-theme-change'));
 });
 
-function generateBookmark() {
-  bookmark.href = createBookmarklet(PI_RUNTIME, { openChat, config:savedConfig });
-  bookmark.removeAttribute('aria-disabled');
-  bookmark.draggable = true;
-  copyButton.disabled = false;
+async function generateBookmark() {
+  bookmark.removeAttribute('href');
+  bookmark.setAttribute('aria-disabled','true');
+  bookmark.draggable = false;
+  copyButton.disabled = true;
   i18n.text(copyStatus, '');
   bookmarkUrl.value = '';
   bookmarkUrl.hidden = true;
+  try {
+    const runtime = window.pi?.__piConsolePlugin ? window.pi : window.__piTabAgent;
+    const [profiles, providers] = await Promise.all([runtime.savedProfiles(), runtime.listProviders()]);
+    bookmark.href = createBookmarklet(PI_RUNTIME, { openChat, config:savedConfig, profiles, providers });
+    bookmark.removeAttribute('aria-disabled');
+    bookmark.draggable = true;
+    copyButton.disabled = false;
+  } catch (error) {
+    i18n.text(copyStatus, () => t(error.message));
+    document.querySelector('.manual').open = true;
+  }
 }
 copyButton.addEventListener('click', async () => {
   const url = bookmark.getAttribute('href');
@@ -2480,11 +2491,12 @@ if (!PI_RUNTIME) {
     await openChat(undefined, {
       mount:document.getElementById('chat-preview'),
       onConfigReady(config) {
-        if (config) savedConfig = { api:config.api, baseUrl:config.baseUrl, apiKey:config.apiKey, model:config.model, thinking:config.thinking, reasoning:config.reasoning, input:config.input, modelInfo:config.modelInfo };
+        if (config) savedConfig = config;
         generateBookmark();
       },
     });
     const runtime = window.pi?.__piConsolePlugin ? window.pi : window.__piTabAgent;
+    runtime.onEvent(event => { if (event.type === 'provider_saved') void generateBookmark(); });
     void runtime.ready.then(async () => {
       const chats = await runtime.listChats();
       const openIds = JSON.parse(sessionStorage.getItem('pi-tab-open-chats') || '[]');

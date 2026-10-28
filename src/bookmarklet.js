@@ -1,4 +1,4 @@
-export function createBookmarklet(source, { openChat, config } = {}) {
+export function createBookmarklet(source, { openChat, config, profiles = [], providers = [] } = {}) {
   const code = `void(async()=>{try{
     let pi=window.pi?.__piConsolePlugin?window.pi:window.__piTabAgent?.__piConsolePlugin?window.__piTabAgent:null;
     if(!pi){
@@ -11,6 +11,8 @@ export function createBookmarklet(source, { openChat, config } = {}) {
       pi=PiConsolePlugin.install({globalName:'pi' in window?'__piTabAgent':'pi'});
     }
     await pi.ready;
+    ${profiles.length ? `pi.importProfiles(${JSON.stringify(profiles)});` : ''}
+    ${providers.length ? `pi.importProviders(${JSON.stringify(providers)});` : ''}
     ${openChat ? `const launch={};
     if(!window.__piQuickChatOverlay){
       const chats=await pi.listChats();

@@ -88,3 +88,24 @@ test('bookmark opens blank conversations but resumes unfinished tasks', async ()
     assert.deepEqual(JSON.parse(JSON.stringify(await opened)),expected,name);
   }
 });
+
+test('bookmark imports every model and provider before opening the selected default', async () => {
+  const profiles = [
+    { id:'one', api:'openai-completions', baseUrl:'https://one.example/v1', model:'first', apiKey:'key-one' },
+    { id:'two', api:'openai-completions', baseUrl:'https://two.example/v1', model:'second', apiKey:'key-<&%20?#😀' },
+  ];
+  const providers = [
+    { id:'provider-two', api:'openai-completions', baseUrl:'https://two.example/v1', apiKey:'key-<&%20?#😀' },
+    { id:'unused', api:'openai-completions', baseUrl:'https://unused.example/v1', apiKey:'unused-key' },
+  ];
+  const order=[];
+  const page={pi:{__piConsolePlugin:true,ready:Promise.resolve(),listChats:async()=>[],
+    importProfiles(value){order.push('models');assert.deepEqual(JSON.parse(JSON.stringify(value)),profiles);},
+    importProviders(value){order.push('providers');assert.deepEqual(JSON.parse(JSON.stringify(value)),providers);},
+  }};
+  const opened=new Promise(resolve=>{page.opened=config=>{order.push('open');resolve(config);};});
+  const url=createBookmarklet('',{config:profiles[1],profiles,providers,openChat:function(config){window.opened(config);}});
+  runInNewContext(decodeURIComponent(url.slice(11)),{window:page,console,sessionStorage:{getItem:()=>null}});
+  assert.deepEqual(JSON.parse(JSON.stringify(await opened)),profiles[1]);
+  assert.deepEqual(order,['models','providers','open']);
+});
