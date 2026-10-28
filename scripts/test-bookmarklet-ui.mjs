@@ -191,6 +191,33 @@ try{
   assert.equal(await evaluate('pi.listChats().then(chats=>chats.length)'),count);
   console.log('PASS empty conversation reused without accumulating empty history');
   assert.ok(authorizations.length>0 && authorizations.every(value=>value==='Bearer test-only'),'all model requests use the saved credential');
+  // A site's explicit settings take priority over the bookmark's default.
+  await click('#model-settings');await click('#model-menu-add');
+  await browser('wait','--fn',`${root}.querySelectorAll('#manual-model-results button').length===1`);
+  await click('#manual-add-provider');
+  await evaluate(`(()=>{const r=${root};r.getElementById('provider-name').value='Site override';r.getElementById('provider-url').value=${JSON.stringify(url+'site-v1')};r.getElementById('provider-key').value='site-only'})()`);
+  await click('#provider-form [type=submit]');
+  await browser('wait','--fn',`${root}.getElementById('provider-form').hidden && ${root}.querySelectorAll('#manual-model-results button').length===1`);
+  await evaluate(`(()=>{const input=${root}.getElementById('manual-model-id');input.value='site-model';input.dispatchEvent(new Event('input',{bubbles:true}))})()`);
+  await click('#manual-model-form [type=submit]');
+  await browser('wait','--fn',`${root}.getElementById('chat-model').textContent==='site-model'`);
+  await browser('reload');await launch();
+  assert.equal(await evaluate(`pi.agent(${selected}).config.model`),'site-model');
+  await send('Keep this site override');
+  await browser('wait','--fn',`${root}.getElementById('chat-messages').textContent.includes('Bookmark test reply') && !pi.busyFor(${selected})`);
+  assert.equal(authorizations.at(-1),'Bearer site-only');
+  console.log('PASS site-specific model and key survive reopening the default bookmark');
+
+  await browser('open',otherUrl);await launch();
+  assert.equal(await evaluate(`pi.agent(${selected}).config.model`),'test-model');
+  await send('Other site still uses the default');
+  await browser('wait','--fn',`${root}.getElementById('chat-messages').textContent.includes('Bookmark test reply') && !pi.busyFor(${selected})`);
+  assert.equal(authorizations.at(-1),'Bearer test-only');
+  await browser('open',installer);
+  await browser('wait','--fn',`${root}?.getElementById('chat')?.style.display==='flex'`);
+  assert.equal(await evaluate(`pi.agent(${selected}).config.model`),'test-model');
+  assert.equal(await evaluate(`pi.agent(${selected}).savedConfig().then(config=>config.apiKey)`),'test-only');
+  console.log('PASS site override does not change another site or installer defaults');
   console.log(`Screenshots: ${directory}`);
 }catch(error){
   await browser('screenshot',join(directory,'failure.png')).catch(()=>{});
