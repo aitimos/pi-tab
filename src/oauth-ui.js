@@ -63,6 +63,7 @@ export function createOAuthUI({root,i18n,auth,onSelect}) {
           if(select)byId('oauth-choice').replaceChildren(...oauthPrompt.options.map(item=>i18n.option(()=>selectedProvider==='openai-codex'?t(item.id==='browser'?'网页登录，粘贴回调 URL':'设备码登录'):item.label,item.id)));
           else{byId('oauth-input').type=oauthPrompt.type==='secret'?'password':'text';byId('oauth-input').value='';byId('oauth-input').placeholder=oauthPrompt.type==='manual_code'?t('粘贴完整回调 URL 或授权码'):oauthPrompt.placeholder||'';byId('oauth-input').spellcheck=false; if(oauthPrompt.type==='manual_code'&&selectedProvider==='openai-codex')i18n.text(byId('oauth-status'),()=>t('授权后的 localhost 页面可能无法打开，复制地址栏中的完整 URL 并粘贴到这里。'));}
           i18n.text(byId('oauth-submit'),()=>t('继续'));
+          byId(select?'oauth-choice':'oauth-input').focus({preventScroll:true});
         }
       }
       oauthTimer=setTimeout(()=>void pollOAuth(),800);

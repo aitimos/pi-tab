@@ -194,6 +194,10 @@ async function openChat(initialConfig, options = {}) {
     #manual-model-form,#provider-form,#oauth-form { flex:1; min-height:0; display:flex; flex-direction:column; margin:0 -20px -20px; }
     #manual-model-form .form-body,#provider-form .form-body,#oauth-form .form-body { padding-top:0; }
     #manual-model-form label,#provider-form label { margin-bottom:14px; }
+    #oauth-status { margin:0; color:var(--muted); }
+    #oauth-events { display:flex; flex-direction:column; align-items:flex-start; gap:12px; margin:16px 0; }
+    #oauth-events:empty { display:none; }
+    #oauth-events pre { margin:0; font-size:13px; }
     #manual-model-results { display:grid; gap:4px; max-height:180px; overflow:auto; margin:8px 0 14px; }
     #manual-model-results:empty { display:none; }
     #manual-model-status { display:block; color:var(--muted); font-size:12px; margin-top:8px; }

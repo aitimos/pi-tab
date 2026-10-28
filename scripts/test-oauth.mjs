@@ -176,6 +176,8 @@ try{
         await select('oauth-choice','browser');await click('#oauth-submit');
       }
       await wait(`!${root}.getElementById('oauth-prompt').hidden && !${root}.getElementById('oauth-input').hidden && ${root}.querySelector('#oauth-events a')`);
+      assert.equal(await evaluate(`${root}.activeElement?.id`),'oauth-input');
+      assert.ok(await evaluate(`(()=>{const r=${root};return r.getElementById('oauth-prompt').getBoundingClientRect().top-r.getElementById('oauth-events').getBoundingClientRect().bottom>=12})()`));
       const authorization=new URL(await evaluate(`${root}.querySelector('#oauth-events a').href`));
       const callback=new URL(authorization.searchParams.get('redirect_uri'));
       callback.searchParams.set('code','fixture-callback-code');callback.searchParams.set('state',authorization.searchParams.get('state'));
