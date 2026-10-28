@@ -126,7 +126,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     })().catch(error=>{oauth=null;throw error;});
     return oauth;
   }
-  const credentials=Object.fromEntries(['read','list','modify','delete'].map(method=>[method,async(...args)=>args[0]?.startsWith('page-')?undefined:(await getOAuth()).credentials[method](...args)]));
+  const credentials=Object.fromEntries(['read','list','modify','delete'].map(method=>[method,async(...args)=>method!=='list'&&args[0].startsWith('page-')?undefined:(await getOAuth()).credentials[method](...args)]));
   const registry = createRegistry(), models = createModels({credentials});
   const toolMap = new Map(), listeners = new Set(), events = [], consoleEntries = [], requests = [];
   let harness, conversation, configuration, disposed = false;

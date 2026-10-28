@@ -91,6 +91,7 @@ try{
     if(mode==='bookmarklet')await browser('click','#launch');
     else{
       await browser('tab','new',`chrome-extension://${extensionId}/test-controller.html`);
+      await evaluate(`chrome.storage.local.set({'pi-tab-language':${JSON.stringify(language)}})`);
       tabId=await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(base+'/'+mode+language)}});await chrome.storage.session.set({['active:'+tab.id]:true});const r=await chrome.tabs.sendMessage(tab.id,{type:'activate'});if(!r.ok)throw Error(r.error);return tab.id})()`);
       await browser('tab','t1');
     }
