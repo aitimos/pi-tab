@@ -114,11 +114,11 @@ try{
     const aligned=await evaluate(`(()=>{const r=${root};const title=r.getElementById('setup-title').getBoundingClientRect(),action=r.getElementById('setup-manage').getBoundingClientRect(),api=r.getElementById('api').getBoundingClientRect(),auth=r.getElementById('setup-auth').getBoundingClientRect();return {heading:Math.abs(title.y+title.height/2-action.y-action.height/2),fields:Math.abs(api.y-auth.y),fit:auth.right<=r.getElementById('shell').getBoundingClientRect().right}})()`);
     assert.ok(aligned.heading<2 && aligned.fields<2 && aligned.fit,JSON.stringify(aligned));
     await browser('screenshot',join(directory,`${mode}-${language}-setup.png`));
-    const originalWidth=await evaluate(`document.querySelector('[data-pi-overlay]').style.width`);
-    await evaluate(`document.querySelector('[data-pi-overlay]').style.width='340px'`);
+    const originalWidth=await evaluate(`document.querySelector('[data-pi-overlay]').style.getPropertyValue('--window-width')`);
+    await evaluate(`document.querySelector('[data-pi-overlay]').style.setProperty('--window-width','340px')`);
     await browser('screenshot',join(directory,`${mode}-${language}-setup-narrow.png`));
     assert.equal(await evaluate(`(()=>{const r=${root},api=r.getElementById('api').getBoundingClientRect(),auth=r.getElementById('setup-auth').getBoundingClientRect();return auth.y>api.bottom && Math.abs(api.x-auth.x)<1 && auth.right<=r.getElementById('shell').getBoundingClientRect().right})()`),true);
-    await evaluate(`document.querySelector('[data-pi-overlay]').style.width=${JSON.stringify(originalWidth)}`);
+    await evaluate(`document.querySelector('[data-pi-overlay]').style.setProperty('--window-width',${JSON.stringify(originalWidth)})`);
     await select('setup-auth','kimi-coding');await click('#start');await wait(`${root}.getElementById('oauth-form')?.dataset.provider==='kimi-coding'`);
     assert.equal(await evaluate(`${root}.getElementById('model-dialog-title').textContent`),'Kimi Code (subscription)');
     await click('#oauth-submit');
