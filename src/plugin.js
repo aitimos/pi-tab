@@ -1,4 +1,5 @@
 export {renderMarkdown} from './markdown.js';
+import { SiteSettings } from './site-settings.js';
 import { getI18n } from './i18n.js';
 export { getI18n } from './i18n.js';
 import loadModelCatalog from '#model-catalog';
@@ -31,7 +32,7 @@ Settings.Set({ useAcceleration: false });
 const ctx = BACKGROUND_CONTEXT;
 const TabState = defineDoc({
   kind: 'pi-tab.state', version: 1, scope: 'session',
-  initial: () => ({ config: null, profiles: [], providers: [], chatConfigs: {}, activeId: null, chats: [], preferences: {} }),
+  initial: () => ({ chatConfigs: {}, activeId: null, chats: [] }),
   checkpointWhen: () => true,
 });
 const APIS = {
@@ -109,6 +110,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
   const useTabStorage = storageName === undefined;
   if (useTabStorage) storageName = sessionStorage.getItem('pi-tab-storage-name');
 
+  const siteSettings = new SiteSettings(localStorage, useTabStorage ? 'pi-tab-site-settings' : `pi-tab-settings:${storageName}`);
   let modelConfig;
   let preferences = {};
   const nativeFetch = window.fetch.bind(window);
@@ -369,7 +371,16 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
   function ensureOpen() { if (disposed) throw new Error('pi 已关闭，请重新粘贴安装代码。'); }
   function publicConfig(config) { if (!config) return null; const { apiKey: _key, headers: _headers, fetch: _fetch, proxyToken: _token, ...rest } = config; return { ...rest, hasApiKey: Boolean(config.apiKey) }; }
 
-  async function configure(options, chatId = conversation.id) {
+  function syncPreferences() {
+    preferences = siteSettings.read().preferences;
+    promptText = preferences.systemPrompt || DEFAULT_PROMPT;
+    refreshTools();
+  }
+  function onSiteSettings(event) {
+    if (event.storageArea === localStorage && event.key === siteSettings.key) syncPreferences();
+  }
+
+  async function configure(options, chatId = conversation.id, save = true) {
     if (!harness) await pi.ready;
     ensureOpen();
     if (activeRuns.has(chatId) || durableBusy.get(chatId)) throw new Error('agent 正在运行。请先停止当前任务再修改模型。');
@@ -429,15 +440,13 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     const saved = Object.fromEntries(Object.entries(next).filter(([key, value]) => key !== 'fetch' && key !== 'modelInfo' && typeof value !== 'function'));
     await harness.commit(async tx => {
       const data = await tx.doc(TabState);
-      data.config = saved;
-      data.profiles ??= [];
-      data.chatConfigs ??= {};
-      const index = data.profiles.findIndex(item => item.id === profileId);
-      const profile = { ...saved, id: profileId };
-      if (index < 0) data.profiles.push(profile); else data.profiles[index] = profile;
       data.chatConfigs[chatId] = profileId;
     }, ctx);
-    emit({ type: 'config_saved', profile: { ...saved, id: profileId } });
+    if (save) siteSettings.update(data => {
+      data.config = saved;
+      data.profiles = [...data.profiles.filter(item => item.id !== profileId), { ...saved, id:profileId }];
+    });
+    if (save) emit({ type: 'config_saved', profile: { ...saved, id: profileId } });
     nativeConsole.info('[pi] 模型已配置', publicConfig(next));
     return publicConfig(next);
   }
@@ -445,6 +454,10 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
   async function submitMessage(text, whenBusy = 'reject', chatId = conversation.id, entry, onAccepted) {
     await pi.ready; ensureOpen();
     if (!configurations.get(chatId)) throw new Error('先配置模型。');
+    syncPreferences();
+    const current = configurations.get(chatId);
+    const profile = siteSettings.read().profiles.find(item => item.id === current.profileId);
+    if (profile && !pi.busyFor(chatId)) await configure({ ...current, ...profile }, chatId, false);
     text = normalizeUserContent(text, modelConfig.describe(configurations.get(chatId)));
     if (whenBusy === 'reject' && activeRuns.has(chatId)) throw new Error('agent 正在运行。可以使用 steer 或 followUp。');
     const target = chatId === conversation.id ? conversation : await harness.conversation(chatId, ctx);
@@ -535,7 +548,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
       emit({ type:'chat_deleted', conversationId:id, replacementId });
       return { replacementId };
     },
-    async getPreferences() { await pi.ready; return structuredClone(preferences); },
+    async getPreferences() { await pi.ready; return siteSettings.read().preferences; },
     async setPreferences(input) {
       await pi.ready; ensureOpen();
       const allowed = ['systemPrompt', 'autoCompact', 'maxRetries', 'toolExecution', 'steeringMode', 'followUpMode', 'afterFailedRun'];
@@ -547,8 +560,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
       if (input.steeringMode !== undefined && !['all', 'one-at-a-time'].includes(input.steeringMode)) throw new Error('直接发送方式无效。');
       if (input.followUpMode !== undefined && !['all', 'one-at-a-time'].includes(input.followUpMode)) throw new Error('排队发送方式无效。');
       if (input.afterFailedRun !== undefined && !['keep', 'continue', 'withdraw'].includes(input.afterFailedRun)) throw new Error('失败后处理方式无效。');
-      const next = { ...preferences, ...input };
-      await harness.commit(async tx => { (await tx.doc(TabState)).preferences = next; }, ctx);
+      const next = siteSettings.update(data => { data.preferences = { ...data.preferences, ...input }; }).preferences;
       preferences = next;
       promptText = preferences.systemPrompt || configuration?.systemPrompt || DEFAULT_PROMPT;
       refreshTools();
@@ -564,19 +576,19 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
       return { id, queued: delivery.queued, status: delivery.status };
     },
     resume() { if (!harness) throw new Error('Pi Tab 尚未就绪。'); harness.resume(); },
-    async savedConfig() { await pi.ready; return (await harness.snapshot(TabState, ctx))?.config ?? null; },
+    async savedConfig() { await pi.ready; return siteSettings.read().config; },
     async savedConfigFor(chatId) {
       await pi.ready;
       const state = await harness.snapshot(TabState, ctx);
-      return state?.profiles?.find(profile => profile.id === state.chatConfigs?.[chatId]) ?? null;
+      return siteSettings.read().profiles.find(profile => profile.id === state.chatConfigs?.[chatId]) ?? null;
     },
     async savedProfiles() {
       await pi.ready;
-      return (await harness.snapshot(TabState, ctx))?.profiles ?? [];
+      return siteSettings.read().profiles;
     },
     async listProviders() {
       await pi.ready; ensureOpen();
-      const state = await harness.snapshot(TabState, ctx);
+      const state = siteSettings.read();
       const configured = [...sharedProfiles.values(), ...(state?.profiles ?? [])].map(profile => ({
         id: profile.id, api: profile.api, baseUrl: profile.baseUrl, apiKey: profile.apiKey || '',
         providerName: profile.providerName || '', headers: profile.headers,
@@ -594,31 +606,29 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
         id: crypto.randomUUID(), api: provider.api, baseUrl: provider.baseUrl.replace(/\/+$/, ''),
         apiKey: provider.apiKey || '', providerName: provider.providerName?.trim() || url.hostname,
       };
-      await harness.commit(async tx => {
-        const state = await tx.doc(TabState);
-        state.providers ??= [];
-        state.providers.push(saved);
-      }, ctx);
+      siteSettings.update(data => { data.providers.push(saved); });
       emit({ type: 'provider_saved', provider: saved });
       return saved;
     },
     importProviders(providers) {
       sharedProviders.clear();
       for (const provider of providers) if (provider?.id && provider.api && provider.baseUrl) sharedProviders.set(provider.id, provider);
+      if (useTabStorage) siteSettings.update(data => { data.providers = [...new Map([...sharedProviders.values(), ...data.providers].map(item => [item.id,item])).values()]; });
     },
     async listModels() {
       await pi.ready; ensureOpen();
-      const state = await harness.snapshot(TabState, ctx);
+      const state = siteSettings.read();
       return [...new Map([...sharedProfiles.values(), ...(state?.profiles ?? [])].map(profile => [profile.id, profile])).values()]
         .map(profile => ({ ...publicConfig(profile), id: profile.id }));
     },
     importProfiles(profiles) {
       sharedProfiles.clear();
       for (const profile of profiles) if (profile?.id && profile.model && profile.baseUrl && profile.api) sharedProfiles.set(profile.id, profile);
+      if (useTabStorage) siteSettings.update(data => { data.profiles = [...new Map([...sharedProfiles.values(), ...data.profiles].map(item => [item.id,item])).values()]; });
     },
     async selectModel(profileId, chatId = conversation.id) {
       await pi.ready; ensureOpen();
-      const state = await harness.snapshot(TabState, ctx);
+      const state = siteSettings.read();
       const profile = state?.profiles?.find(item => item.id === profileId) ?? sharedProfiles.get(profileId);
       if (!profile) throw new Error('模型配置不存在。');
       return configure({ ...profile, profileId }, chatId);
@@ -725,6 +735,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
       if (window.fetch === observedFetch) window.fetch = originalFetch;
       window.removeEventListener('error', onError); window.removeEventListener('unhandledrejection', onError);
       window.removeEventListener('pagehide', onPageHide);
+      window.removeEventListener('storage', onSiteSettings);
       listeners.clear(); toolMap.clear(); configuration = null; models.clearProviders();
       if (window[globalName] === pi) delete window[globalName];
       nativeConsole.info('[pi] 已关闭。');
@@ -777,21 +788,21 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
       harness = await openHarness(storageName);
     }
     const state = await harness.snapshot(TabState, ctx);
-    preferences = state?.preferences ?? {};
-    promptText = preferences.systemPrompt || DEFAULT_PROMPT;
-    refreshTools();
+    siteSettings.initialize(state);
+    syncPreferences();
+    window.addEventListener('storage', onSiteSettings);
     conversation = state?.activeId && await harness.conversation(state.activeId, ctx) || await harness.root(ctx);
     if (!state?.chats?.length) await harness.commit(async tx => {
       const data = await tx.doc(TabState);
       data.activeId = conversation.id;
       data.chats = [{ id: conversation.id, title: '新对话' }];
     }, ctx);
-    const profiles = state?.profiles?.length ? state.profiles : state?.config?.model ? [{ ...state.config, id: crypto.randomUUID() }] : [];
+    const {profiles, config:defaultConfig} = siteSettings.read();
     const chatConfigs = state?.chatConfigs ?? {};
-    if (!state?.profiles?.length && profiles.length) chatConfigs[conversation.id] = profiles[0].id;
+    if (!chatConfigs[conversation.id] && defaultConfig) chatConfigs[conversation.id] = defaultConfig.profileId;
     for (const profile of profiles) {
       const linkedId = Object.keys(chatConfigs).find(id => chatConfigs[id] === profile.id);
-      if (linkedId) await configure({ ...profile, profileId: profile.id }, Number(linkedId));
+      if (linkedId) await configure({ ...profile, profileId: profile.id }, Number(linkedId), false);
     }
     for (const chat of state?.chats ?? [{ id: conversation.id }]) {
       const profile = profiles.find(item => item.id === chatConfigs[chat.id]);

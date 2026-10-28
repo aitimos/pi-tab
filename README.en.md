@@ -54,7 +54,7 @@ No extension is required. Configure the installer before saving the bookmark to 
 | --- | --- | --- |
 | Launch | Click the bookmark to inject it into the page | Click the browser toolbar icon |
 | After a reload | Click again for a blank conversation, or to resume an unfinished task | Enabled tabs restore automatically; background tasks keep running |
-| Conversations and settings | Stored within the webpage origin; concurrent tabs may use separate records | Conversations shared by exact hostname; model settings shared across websites |
+| Conversations and settings | Instructions, models and providers are shared by origin (scheme, hostname and port), independently of conversations; concurrent tabs can keep separate conversation records | Conversations shared by exact hostname; model settings shared across websites |
 | Collaboration | Multiple agents on the current page | Tasks across browser tabs |
 
 Stop cancels the current conversation and its queued messages. In extension mode, closing the task’s tab also stops its tasks; reloading preserves them. Page actions already performed are not undone.

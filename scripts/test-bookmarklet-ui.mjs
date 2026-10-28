@@ -15,7 +15,7 @@ const session=`pi-tab-bookmark-${process.pid}`;
 const directory=await mkdtemp(join(tmpdir(),'pi-tab-bookmark-'));
 const html=await readFile('pi-bookmarklet-chat-install.html','utf8');
 let bookmark='', hold=false, requests=0;
-const authorizations=[];
+const authorizations=[], modelInputs=[];
 const handler=(request,response)=>{
   response.setHeader('Access-Control-Allow-Origin','*');
   response.setHeader('Access-Control-Allow-Headers',request.headers['access-control-request-headers'] || 'Authorization, Content-Type');
@@ -28,7 +28,7 @@ const handler=(request,response)=>{
     request.on('data',chunk=>body+=chunk);
     request.on('end',()=>{
       authorizations.push(request.headers.authorization);
-      const input=JSON.parse(body);
+      const input=JSON.parse(body);modelInputs.push(input);
       const title=input.messages.some(item=>['system','developer'].includes(item.role)&&JSON.stringify(item.content).includes('你是会话标题生成器'));
       if(!title){requests++;if(hold)return;}
       response.writeHead(200,{'Content-Type':'text/event-stream'});
@@ -256,7 +256,41 @@ try{
   assert.equal(authorizations.at(-1),'Bearer site-only');
   console.log('PASS site-specific model and key survive reopening the default bookmark');
 
+  // Keep the original runtime open: the next tab must use a separate conversation
+  // database while sharing the origin's model, provider and instruction settings.
+  const originalStorage=await evaluate("sessionStorage.getItem('pi-tab-storage-name')");
+  await browser('tab','new',url+'another-path?source=second-tab');await launch();
+  assert.notEqual(await evaluate("sessionStorage.getItem('pi-tab-storage-name')"),originalStorage);
+  assert.equal(await evaluate(`pi.agent(${selected}).config.model`),'site-model');
+  assert.equal((await evaluate('pi.listModels()')).length,4);
+  assert.ok(await evaluate("pi.listProviders().then(items=>items.some(item=>item.providerName==='Unused provider'))"));
+  const peerProfile=await evaluate(`pi.agent(${selected}).savedConfig().then(value=>value.profileId)`);
+  for(const locale of ['zh-CN','en']) {
+    await click('#settings');
+    await click(`[data-language="${locale}"]`);
+    await evaluate(`(()=>{const r=${root};r.getElementById('setting-prompt').value='Site instructions ${locale}';r.getElementById('setting-retries').value='2';r.getElementById('setting-compact').checked=false;r.getElementById('preferences').requestSubmit()})()`);
+    await browser('wait','--fn',`pi.getPreferences().then(p=>p.systemPrompt==='Site instructions ${locale}' && p.maxRetries===2 && p.autoCompact===false)`);
+    await browser('tab','t1');
+    await browser('wait','--fn',`pi.getPreferences().then(p=>p.systemPrompt==='Site instructions ${locale}')`);
+    await send('Check shared instructions '+locale);
+    await browser('wait','--fn',`!pi.busyFor(${selected}) && ${root}.getElementById('chat-messages').textContent.includes('Bookmark test reply')`);
+    assert.ok(modelInputs.some(input=>input.messages.some(message=>JSON.stringify(message.content).includes('Site instructions '+locale))));
+    await browser('tab','t2');
+  }
+  await evaluate(`pi.agent(${selected}).configure({apiKey:'shared-site-key'})`);
+  await browser('tab','t1');
+  await send('Use updated site key');
+  await browser('wait','--fn',`!pi.busyFor(${selected})`);
+  assert.equal(authorizations.at(-1),'Bearer shared-site-key');
+  assert.equal(await evaluate(`pi.agent(${selected}).config.profileId`),peerProfile);
+  await browser('tab','t2');await browser('reload');await launch();
+  assert.equal((await evaluate('pi.getPreferences()')).systemPrompt,'Site instructions en');
+  assert.equal(await evaluate(`pi.agent(${selected}).savedConfig().then(c=>c.apiKey)`),'shared-site-key');
+  await browser('tab','close');await browser('tab','t1');
+  console.log('PASS independent same-origin tabs share settings, models, credentials and providers; live prompt updates and reload persist in both languages');
+
   await browser('open',otherUrl);await launch();
+  assert.equal((await evaluate('pi.getPreferences()')).systemPrompt,undefined);
   assert.equal(await evaluate(`pi.agent(${selected}).config.model`),'test-model');
   await send('Other site still uses the default');
   await browser('wait','--fn',`${root}.getElementById('chat-messages').textContent.includes('Bookmark test reply') && !pi.busyFor(${selected})`);
@@ -265,6 +299,7 @@ try{
   await browser('wait','--fn',`${root}?.getElementById('chat')?.style.display==='flex'`);
   assert.equal(await evaluate(`pi.agent(${selected}).config.model`),'test-model');
   assert.equal(await evaluate(`pi.agent(${selected}).savedConfig().then(config=>config.apiKey)`),'test-only');
+  assert.equal((await evaluate('pi.getPreferences()')).systemPrompt,undefined);
   console.log('PASS site override does not change another site or installer defaults');
   console.log(`Screenshots: ${directory}`);
 }catch(error){
