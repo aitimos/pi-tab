@@ -502,7 +502,7 @@ async function openChat(initialConfig, options = {}) {
             <button id="abort" title="停止任务" aria-label="停止任务" hidden>${icon('stop')}</button>
           </div>
           <div id="model-menu" role="menu" aria-label="选择模型" hidden><div id="model-menu-list"></div><div id="model-menu-actions"><button id="model-menu-add" type="button" role="menuitem">添加模型</button><button id="model-manage" type="button" role="menuitem">管理模型</button></div></div>
-          <div id="send-menu" role="menu" aria-label="发送方式" hidden><button id="send-follow-up" type="button" role="menuitem">排队发送</button><button id="send-steer" type="button" role="menuitem">直接发送</button></div>
+          <div id="send-menu" role="menu" aria-label="发送方式" hidden><button id="send-follow-up" type="button" role="menuitem">排队发送</button><button id="send-steer" type="button" role="menuitem">优先发送</button></div>
         </div>
       </section>
       <form id="preferences" aria-label="Pi 设置">
@@ -526,7 +526,7 @@ async function openChat(initialConfig, options = {}) {
           <section id="settings-execution" role="tabpanel" aria-labelledby="settings-execution-tab" hidden>
             <fieldset class="form-section"><legend>工具</legend><label class="setting-row"><span>调用方式</span><select id="setting-tools"><option value="sequential">依次执行</option><option value="parallel">并行执行</option></select></label></fieldset>
             <fieldset class="form-section"><legend>消息队列</legend><div class="field-grid">
-              <label><span>直接发送</span><select id="setting-steer"><option value="one-at-a-time">逐条处理</option><option value="all">一起处理</option></select></label>
+              <label><span>优先发送</span><select id="setting-steer"><option value="one-at-a-time">逐条处理</option><option value="all">一起处理</option></select></label>
               <label><span>排队发送</span><select id="setting-follow-up"><option value="one-at-a-time">逐条处理</option><option value="all">一起处理</option></select></label>
             </div><label class="setting-row"><span>任务失败后</span><select id="setting-failed"><option value="keep">保留消息</option><option value="continue">继续处理</option><option value="withdraw">取消消息</option></select></label></fieldset>
           </section>
@@ -1150,7 +1150,7 @@ async function openChat(initialConfig, options = {}) {
     const input = byId('message-input');
     byId('send').hidden = !input.value.trim() && !attachments.length;
     byId('send').disabled = !state.connected || readingAttachments;
-    i18n.attr(byId('send'), 'title', () => state.busy ? t("排队发送，长按可选直接发送") : t("发送消息"));
+    i18n.attr(byId('send'), 'title', () => state.busy ? t("排队发送，长按可选优先发送") : t("发送消息"));
     byId('send').setAttribute('aria-label', byId('send').title);
     input.style.height = 'auto';
     input.style.height = `${Math.min(180, input.scrollHeight)}px`;
@@ -1374,6 +1374,15 @@ async function openChat(initialConfig, options = {}) {
     });
   }
   function handleMessage(event) {
+    if (event.type === 'message_end' && event.entry?.model?.[0]?.role === 'user') {
+      if (byId('chat-messages').querySelector(`[data-entry-id="${event.entry.id}"]`)) return;
+      finishStream();
+      const row = event.entry.kind === 'pi-tab.agent-message'
+        ? message('agent', event.entry.data?.text || '') : message('human', '');
+      row.dataset.entryId = event.entry.id;
+      if (event.entry.kind !== 'pi-tab.agent-message') renderUserContent(row.querySelector('.bubble'), event.entry.model[0].content);
+      return;
+    }
     if (event.type === 'message_start') {
       if (event.message?.role !== 'assistant') return;
       finishStream();
@@ -1397,24 +1406,10 @@ async function openChat(initialConfig, options = {}) {
       state.stream.ended = true;
     }
     renderStream();
-    if (state.stream?.ended) finishStream();
-  }
-  function showFinalAnswer(answer) {
-    const stream = state.stream;
-    // The prompt promise can settle before the last event batch reaches the UI.
-    if (stream && !stream.blocks.some(block => block?.type === 'toolCall')) {
-      const textBlocks = [...stream.nodes.values()].filter(item => item.kind === 'text');
-      if (textBlocks.length) {
-        renderAnswer(textBlocks[0].node, answer);
-        addAnswerActions(textBlocks[0].node);
-        for (const item of textBlocks.slice(1)) item.node.remove();
-        finishStream();
-        return;
-      }
+    if (state.stream?.ended) {
+      for (const item of state.stream.nodes.values()) if (item.kind === 'text') addAnswerActions(item.node);
+      finishStream();
     }
-    const node = message('ai', '', false);
-    followOutput(() => renderAnswer(node, answer));
-    addAnswerActions(node);
   }
   function toolPreview(value) {
     let parsed = value;
@@ -1591,7 +1586,7 @@ async function openChat(initialConfig, options = {}) {
     for (const item of queued) {
       const current = existing.get(String(item.id));
       if (current) {
-        i18n.text(current.querySelector('.queue-status span'), () => item.mode === 'followUp' ? t("排队中") : t("直接发送"));
+        i18n.text(current.querySelector('.queue-status span'), () => item.mode === 'followUp' ? t("排队中") : t("优先发送"));
         if (!current.querySelector('.queue-edit')) renderUserContent(current.querySelector('.bubble'),item.content);
         const promote = current.querySelector('[data-queue-action="promote"]');
         if (promote) promote.hidden = item.mode !== 'followUp';
@@ -1603,7 +1598,7 @@ async function openChat(initialConfig, options = {}) {
       const status = document.createElement('div');
       status.className = 'queue-status';
       const label = document.createElement('span');
-      i18n.text(label, () => item.mode === 'followUp' ? t("排队中") : t("直接发送"));
+      i18n.text(label, () => item.mode === 'followUp' ? t("排队中") : t("优先发送"));
       const summary = document.createElement('button');
       summary.type = 'button';
       summary.className = 'queue-more';
@@ -1623,7 +1618,7 @@ async function openChat(initialConfig, options = {}) {
         menu.style.top = `${Math.max(bounds.top+8,anchor.bottom+6+rect.height<=bounds.bottom-8 ? anchor.bottom+6 : anchor.top-rect.height-6)}px`;
         if (!event.detail) menu.querySelector('button').focus();
       });
-      for (const [title, action] of [[t("编辑消息"), 'edit'], ...(item.mode === 'followUp' ? [[t("改为直接发送"), 'promote']] : []), [t("取消消息"), 'cancel']]) {
+      for (const [title, action] of [[t("编辑消息"), 'edit'], ...(item.mode === 'followUp' ? [[t("改为优先发送"), 'promote']] : []), [t("取消消息"), 'cancel']]) {
         const button = document.createElement('button');
         button.type = 'button';
         i18n.text(button, () => t(title));
@@ -1687,7 +1682,7 @@ async function openChat(initialConfig, options = {}) {
         continue;
       }
       if (entry.kind === 'pi-tab.agent-message') {
-        message('agent', entry.data?.text || '', false);
+        message('agent', entry.data?.text || '', false).dataset.entryId = entry.id;
         continue;
       }
       if (entry.kind !== 'pi.user' && entry.kind !== 'pi.assistant') continue;
@@ -1700,7 +1695,11 @@ async function openChat(initialConfig, options = {}) {
         if (next?.kind === 'pi.assistant' && next.model?.some(item => item.role === 'assistant' && item.stopReason !== 'aborted')) continue;
       }
       const content = typeof model?.content === 'string' ? model.content : model?.content?.filter(item => item.type === 'text').map(item => item.text).join('\n');
-      if (entry.kind === 'pi.user' && model?.content) renderUserContent(message('human','',false).querySelector('.bubble'),model.content);
+      if (entry.kind === 'pi.user' && model?.content) {
+        const row = message('human','',false);
+        row.dataset.entryId = entry.id;
+        renderUserContent(row.querySelector('.bubble'),model.content);
+      }
       else if (content) message('ai', content, false);
     }
     showWelcome();
@@ -1790,7 +1789,7 @@ async function openChat(initialConfig, options = {}) {
         if (![...manager.instances.values()].some(instance => instance.id === event.agentId)) openChat(undefined, { forceNew:true, chatId:event.agentId });
         return;
       }
-      if (event.type === 'queue_changed') { void refreshQueuedMessages(); return; }
+      if (event.type === 'queue_changed' || event.type === 'inbox_update') { void refreshQueuedMessages(); return; }
       if (event.type === 'snapshot') { const busy = Boolean(event.run) || state.pending > 0; if (state.busy !== busy) setBusy(busy); return; }
       if (event.type === 'run_start' && !state.busy) { setBusy(true); return; }
       if (event.type === 'run_end' && !state.pending) {
@@ -1807,7 +1806,6 @@ async function openChat(initialConfig, options = {}) {
         if (event.detail) message('system', t("其他 agent 的任务失败：{0}", event.detail));
         return;
       }
-      if (!state.busy) return;
       if (['tool_execution_start','tool_execution_end','tool_execution_update'].includes(event.type)) {
         updateToolCall(event);
       } else if (['message_start', 'message_update', 'message_end'].includes(event.type)) {
@@ -1827,17 +1825,13 @@ async function openChat(initialConfig, options = {}) {
     input.value = '';
     attachments = []; renderAttachments();
     i18n.text(byId('attachment-error'), '');
-    if (!state.busy) renderUserContent(message('human','').querySelector('.bubble'),content);
     console.log('human:', text);
     const wasBusy = state.busy;
     state.pendingByChat.set(chatId, (state.pendingByChat.get(chatId) || 0) + 1);
     state.pending = state.pendingByChat.get(chatId);
     if (!wasBusy) setBusy(true);
     try {
-      const result = await (wasBusy ? mode === 'followUp' ? pi.followUp(content) : pi.steer(content) : pi.prompt(content));
-      const answer = result && String(result).trim() ? String(result) : t("模型未返回文字回复。");
-      if (agent.id === chatId) showFinalAnswer(answer);
-      console.log('ai:', answer);
+      await (wasBusy ? mode === 'followUp' ? pi.followUp(content) : pi.steer(content) : pi.prompt(content));
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       if (!/agent 未完成: aborted/.test(detail)) {

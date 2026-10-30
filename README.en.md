@@ -22,7 +22,7 @@ Built on Pi Durable, Pi Tab brings an agent into the webpage you are browsing. O
 | Reading and extraction | Summarize pages, extract tables and lists, and organize data as JSON or CSV |
 | Page interaction and debugging | Click, fill forms, inspect DOM and styles, and execute JavaScript |
 | Files and images | Attach text and code files, drop files, or paste images with a vision-capable model |
-| Follow-up messages | Add tasks while a reply is running, edit the queue, or send a message directly to steer the current task |
+| Follow-up messages | Add tasks while a reply is running, edit the queue, or prioritize a message to steer the current task |
 | Formatted replies | Markdown headings, lists, tables, quotes, and code blocks; copying preserves the original Markdown |
 | Edge sidebar | Dock to either edge to collapse on mouse leave and expand on hover; active drafts stay open |
 | Conversation management | Generate titles automatically, see running status, switch or delete conversations, and open another task in a new window |

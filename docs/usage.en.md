@@ -24,7 +24,7 @@ Try these prompts:
 - “Convert the table on this page to CSV.”
 - “Find out why this page scrolls horizontally and fix it.”
 
-At desktop widths, press `Enter` to send or `Shift+Enter` for a new line; use the send button on narrow screens. Messages sent during a reply enter a queue. Hold or right-click the send button and choose **直接发送** to steer the current task. Queued messages can be edited, canceled, or promoted to steering messages.
+At desktop widths, press `Enter` to send or `Shift+Enter` for a new line; use the send button on narrow screens. Messages sent during a reply wait until the current task finishes (`followUp`). Hold or right-click the send button and choose **Send with priority** (`steer`) to deliver a message after all tools in the current round finish, before the next model request. During a text-only reply, it waits for that reply to finish. Priority messages do not interrupt an active model request or tool. Queued messages can be edited, canceled, or promoted to priority messages.
 
 The top **新对话** button starts a blank conversation in the current window. **新开窗口** opens another blank conversation with the same model configuration. You can switch conversations while tasks run; a ring on the right marks running conversations. To remove a conversation, click its trash icon, then **确认删除**. Stop running tasks first. Deleting the current conversation switches to another; deleting the last one creates a blank conversation.
 
