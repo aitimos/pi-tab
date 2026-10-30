@@ -1,5 +1,17 @@
 # 更新记录
 
+## v1.1.0 — 2026-10-30
+
+### 新增功能
+
+- feat: add linux filesystem wasm (95c0f29)
+- feat: github actions add release auto pushed (ec5bfd4)
+
+### 修复与性能改进
+
+- fix: fix github actions browser error (3e27ae9)
+
+
 ## v1.0.34 — 2026-10-30
 
 - 将“直接发送”改为“优先发送”，说明 steer 在本轮工具结束后生效，followUp 在当前任务完成后处理，均不会立即打断执行。
