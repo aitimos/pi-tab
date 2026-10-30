@@ -1,0 +1,35 @@
+{
+  "id": "2026-10-30-message-queue",
+  "kind": "bug",
+  "title": "修复消息队列状态和重复回答，明确优先发送的生效时机",
+  "date": "2026-10-30",
+  "status": "done",
+  "source": "用户反馈 steer、followUp 看似无效，直接发送不能立即收到；确认修改界面与说明。",
+  "scope": "保留 Pi Durable 原有发送规则，修复消息显示，统一中英文文案，补充浏览器回归和 CI 入口；用户已授权提交、推送并发布 v1.0.34。",
+  "baseline": "6a31c96，开始时工作区无已有改动；本记录的本地验收针对消息队列修复和重新构建的产物。",
+  "behavior": "见 ../usage.md 的连续对话说明。steer 在本轮工具全部结束或文字回复结束时读取；followUp 在当前任务结束时读取。两者均不打断执行。",
+  "findings": [
+    "Pi Durable 1.4.0 已正常读取 steer；原界面未处理 inbox_update，导致模型收到消息后仍显示排队。原版本浏览器回归实测得到 FOLLOW、STEER 两条残留队列，预期仅 FOLLOW。",
+    "界面忽略 user 的 message_end，排队消息被取走后未及时显示为已发送。",
+    "发送 Promise 和模型事件分别绘制回答；原任务与 steer 等待同一个回答时，重复返回值会重复绘制或覆盖后续回复。"
+  ],
+  "changes": [
+    "以模型消息事件绘制用户消息和回答，以 inbox_update 更新队列；删除 Promise 完成时重复绘制回答的路径。",
+    "通过消息条目 ID 避免历史恢复与实时用户消息重复显示，保留回答复制按钮。",
+    "直接发送改为优先发送，更新英文翻译、README 和使用指南。",
+    "新增 npm run test:queue，纳入现有 Linux 浏览器 CI。保留现有 npm 入口，本次不迁移构建体系。"
+  ],
+  "validation": {
+    "environment": "macOS arm64，Node.js 24.12.0，Chrome for Testing 143.0.7499.4；真实 Pi Durable、实际书签与扩展，模型服务使用本地可控 SSE 响应。未调用真实模型提供商。",
+    "build": "npm run build 通过，书签及扩展产物已更新。",
+    "unit": "63/63 通过。",
+    "queue": "npm run test:queue 在书签和扩展均通过：工具结束后接收 steer，任务完成后接收 followUp，队列实时移除，消息与回复仅显示一次，取消消息不进入模型，排队消息可改为优先发送，纯文字回复结束前两种消息均等待。",
+    "stop": "npm run test:stop 的停止连接、清空队列、取消长工具和刷新后停止检查通过。后续 Shift＋滚轮检查在 macOS 超时；从 HEAD 6a31c96 提取原扩展到隔离临时目录运行同一脚本，也在同一检查超时。完整 stop 套件未通过，后续 Markdown 检查未执行。",
+    "coverage": "node --test --experimental-test-coverage tests/*.test.mjs：已加载的 9 个 src 模块行覆盖率 92.57%，分支 87.19%。这不是全仓覆盖率；HTML 内界面逻辑及浏览器执行代码不在该统计内，本次界面通过浏览器行为测试验证，覆盖率未测量。",
+    "static": "git diff --check 和 node --check scripts/test-message-queue.mjs 通过。",
+    "review": "主代理按 deep-review 检查相关历史、消息提交、队列读取、事件顺序、历史恢复、回答复制与完整差异；删除双重回答绘制路径，无新增队列或执行状态实现。"
+  },
+  "reflection": "本次问题由显示状态和实际接收时机不一致造成。回归测试必须在模型仍生成时检查队列和消息，而不能只检查全部结束后的最终历史；此检查已固定在 test:queue。",
+  "remaining": "Linux 发布检查由 GitHub Actions 执行；远端结果以对应提交的 Actions 记录和 v1.0.34 Release 为准。",
+  "release_url": "https://github.com/aitimos/pi-tab/releases/tag/v1.0.34"
+}

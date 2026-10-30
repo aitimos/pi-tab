@@ -582,7 +582,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
       if (input.autoCompact !== undefined && typeof input.autoCompact !== 'boolean') throw new Error('自动压缩设置无效。');
       if (input.maxRetries !== undefined && (!Number.isInteger(input.maxRetries) || input.maxRetries < 0 || input.maxRetries > 10)) throw new Error('重试次数应在 0 到 10 之间。');
       if (input.toolExecution !== undefined && !['sequential', 'parallel'].includes(input.toolExecution)) throw new Error('工具执行方式无效。');
-      if (input.steeringMode !== undefined && !['all', 'one-at-a-time'].includes(input.steeringMode)) throw new Error('直接发送方式无效。');
+      if (input.steeringMode !== undefined && !['all', 'one-at-a-time'].includes(input.steeringMode)) throw new Error('优先发送方式无效。');
       if (input.followUpMode !== undefined && !['all', 'one-at-a-time'].includes(input.followUpMode)) throw new Error('排队发送方式无效。');
       if (input.afterFailedRun !== undefined && !['keep', 'continue', 'withdraw'].includes(input.afterFailedRun)) throw new Error('失败后处理方式无效。');
       const next = siteSettings.update(data => { data.preferences = { ...data.preferences, ...input }; }).preferences;
