@@ -2,6 +2,9 @@
   "name": "pi-tab",
   "version": "1.0.34",
   "private": true,
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
@@ -32,7 +35,9 @@
   },
   "devDependencies": {
     "@radix-ui/colors": "3.0.0",
+    "agent-browser": "0.34.0",
     "esbuild": "0.25.12",
+    "playwright": "1.57.0",
     "terser": "5.44.1"
   }
 }

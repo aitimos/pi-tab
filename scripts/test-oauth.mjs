@@ -1,5 +1,6 @@
 // Linux CI only. Exercises the shipped bookmark and extension with Pi's real
 // OAuth/provider implementations; only the provider's HTTP responses are fixtures.
+import {agentBrowser} from './browser-cli.mjs';
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {createHash,generateKeyPairSync} from 'node:crypto';
@@ -74,7 +75,7 @@ try{
     const engineHtml=await readFile(join(extension,'engine.html'),'utf8');await writeFile(join(extension,'engine.html'),engineHtml.replace('<script src="oauth.js">','<script src="oauth-fixture.js"></script><script src="oauth.js">'));
   }
   const browser=async(...args)=>{
-    const {stdout}=await run('agent-browser',['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox',...(mode==='extension'?['--extension',extension]:[]),'--session',session,'--json',...args],{maxBuffer:5*1024*1024});
+    const {stdout}=await run(agentBrowser,['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox',...(mode==='extension'?['--extension',extension]:[]),'--session',session,'--json',...args],{maxBuffer:5*1024*1024});
     const result=JSON.parse(stdout);assert.ok(result.success,JSON.stringify(result.error));return result.data;
   };
   const evaluate=async code=>(await browser('eval','-b',Buffer.from(code).toString('base64'))).result;
@@ -85,22 +86,23 @@ try{
     await browser('mouse','move',String(Math.round(point.x)),String(Math.round(point.y)));await browser('mouse','down','left');await browser('mouse','up','left');
   };
   const select=async(id,value)=>evaluate(`(()=>{const s=${root}.getElementById(${JSON.stringify(id)});s.value=${JSON.stringify(value)};s.dispatchEvent(new Event('change',{bubbles:true}));})()`);
+  let sourcePage,controllerPage;
   const call=async(method,args=[])=>{
     if(mode==='bookmarklet')return evaluate(`window.pi[${JSON.stringify(method)}](...${JSON.stringify(args)})`);
-    await browser('tab','t2');
+    await browser('tab',controllerPage);
     const result=await evaluate(`chrome.runtime.sendMessage(${JSON.stringify({target:'engine',site:'127.0.0.1',tabId,method,args})})`);
-    await browser('tab','t1');assert.ok(result.ok,result.error);return result.value;
+    await browser('tab',sourcePage);assert.ok(result.ok,result.error);return result.value;
   };
   const api=(action,input={})=>call('auth',[action,input]);
   try{
-    await browser('open',base+'/'+mode+language);await browser('set','viewport','1280','1000');
+    sourcePage=(await browser('open',base+'/'+mode+language)).targetId;await browser('set','viewport','1280','1000');
     await evaluate(`localStorage.setItem('pi-tab-language',${JSON.stringify(language)})`);
     if(mode==='bookmarklet')await browser('click','#launch');
     else{
-      await browser('tab','new',`chrome-extension://${extensionId}/test-controller.html`);
+      controllerPage=(await browser('tab','new',`chrome-extension://${extensionId}/test-controller.html`)).targetId;
       await evaluate(`chrome.storage.local.set({'pi-tab-language':${JSON.stringify(language)}})`);
       tabId=await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(base+'/'+mode+language)}});await chrome.storage.session.set({['active:'+tab.id]:true});const r=await chrome.tabs.sendMessage(tab.id,{type:'activate'});if(!r.ok)throw Error(r.error);return tab.id})()`);
-      await browser('tab','t1');
+      await browser('tab',sourcePage);
     }
     await wait(`${root}?.getElementById('api')?.options.length>0`);
     // Test API/authentication as one connected form, including switching away

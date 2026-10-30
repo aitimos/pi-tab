@@ -74,6 +74,8 @@ There is no interactive terminal, host directory mount or command mount in this 
 
 `npm run build` verifies and copies existing Linux assets. Use `npm run build:linux` with Docker to rebuild them. See the [Linux build guide](linux/README.md) for pinned versions, patches, source export and verification commands.
 
+Use Node.js 24 for development and tests (`nvm use`), then run `npm ci`. Browser tests invoke the project's pinned `agent-browser`, never a global installation. Run `npx playwright install chromium`, then set `PI_TAB_TEST_CHROME` to the path printed by `node --input-type=module -e "import {chromium} from 'playwright'; console.log(chromium.executablePath())"`. Commands such as `npm run test:bookmarklet` and `npm run test:extension` then use the same tool and browser versions as CI.
+
 ## Before you start
 
 - Inference uses your configured service. Page content and attachments needed for a task are sent to that API. Bookmarks may contain API keys; do not share bookmarks containing credentials.

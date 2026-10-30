@@ -72,6 +72,8 @@ Pi Tab 基于 Pi Durable，把 Agent 带进你正在浏览的网页。点击书�
 
 普通 `npm run build` 校验并复制已构建的 Linux 资源；重编译使用 `npm run build:linux`，需要 Docker。固定版本、补丁、源码导出和验证命令见 [Linux 构建说明](linux/README.md)。
 
+开发和测试使用 Node.js 24（可运行 `nvm use`），先执行 `npm ci`。浏览器测试直接使用项目锁定的 `agent-browser`，不使用全局安装版本。运行 `npx playwright install chromium` 后，将 `PI_TAB_TEST_CHROME` 设置为 `node --input-type=module -e "import {chromium} from 'playwright'; console.log(chromium.executablePath())"` 输出的路径，即可运行 `npm run test:bookmarklet`、`npm run test:extension` 等回归，与 CI 使用相同的工具和浏览器版本。
+
 ## 使用前了解
 
 - 模型推理使用你配置的服务，任务所需的页面内容和附件会发送到该接口。书签可能包含 API Key，请勿分享含密钥的书签。

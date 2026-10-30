@@ -1,4 +1,5 @@
 // Exercises the real kernel in an extension offscreen document, without Pi.
+import {agentBrowser} from './browser-cli.mjs';
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {createHash,generateKeyPairSync} from 'node:crypto';
@@ -60,7 +61,7 @@ await build({stdin:{resolveDir:process.cwd(),contents:`
   });
 `},bundle:true,format:'iife',platform:'browser',outfile:join(directory,'test.js')});
 async function browser(...args){
-  const {stdout}=await run('agent-browser',['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox','--extension',directory,'--session',session,'--json',...args],{maxBuffer:4*1024*1024,timeout:120000});
+  const {stdout}=await run(agentBrowser,['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox','--extension',directory,'--session',session,'--json',...args],{maxBuffer:4*1024*1024,timeout:120000});
   const reply=JSON.parse(stdout);assert.equal(reply.success,true,JSON.stringify(reply.error));return reply.data;
 }
 const evaluate=async code=>(await browser('eval','-b',Buffer.from(code).toString('base64'))).result;

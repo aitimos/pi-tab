@@ -1,4 +1,5 @@
 // Real extension + Durable tool execution, with a deterministic local model server.
+import {agentBrowser} from './browser-cli.mjs';
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {createHash,generateKeyPairSync} from 'node:crypto';
@@ -44,7 +45,7 @@ const server=createServer((request,response)=>{
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const url=`http://127.0.0.1:${server.address().port}/source`;
 async function browser(...args){
-  const {stdout}=await run('agent-browser',['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox','--extension',extension,'--session',session,'--json',...args],{maxBuffer:4*1024*1024,timeout:120000});
+  const {stdout}=await run(agentBrowser,['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox','--extension',extension,'--session',session,'--json',...args],{maxBuffer:4*1024*1024,timeout:120000});
   const reply=JSON.parse(stdout);assert.equal(reply.success,true,JSON.stringify(reply.error));return reply.data;
 }
 const evaluate=async code=>(await browser('eval','-b',Buffer.from(code).toString('base64'))).result;
@@ -56,11 +57,11 @@ try{
   const id=createHash('sha256').update(key).digest('hex').slice(0,32).replace(/[0-9a-f]/g,d=>String.fromCharCode(97+parseInt(d,16)));
   const manifest=JSON.parse(await readFile(join(extension,'manifest.json'),'utf8'));manifest.key=key.toString('base64');
   await writeFile(join(extension,'manifest.json'),JSON.stringify(manifest));
-  await browser('open',url);
-  await browser('tab','new',`chrome-extension://${id}/test-controller.html`);
+  const sourcePage=(await browser('open',url)).targetId;
+  const controllerPage=(await browser('tab','new',`chrome-extension://${id}/test-controller.html`)).targetId;
   const sourceTab=await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url)}});await chrome.storage.session.set({['active:'+tab.id]:true});const r=await chrome.tabs.sendMessage(tab.id,{type:'activate'});if(!r.ok)throw new Error(r.error);return tab.id})()`);
   const engine=async(method,args=[],chatId,name,site='127.0.0.1',tabId=sourceTab)=>{
-    await browser('tab','1');
+    await browser('tab',controllerPage);
     const result=await evaluate(`chrome.runtime.sendMessage(${JSON.stringify({target:'engine',site,tabId,method,args,chatId,name})})`);
     assert.equal(result.ok,true,result.error);return result.value;
   };
@@ -117,13 +118,20 @@ try{
   result=await call('read',{path,limit:1});assert.match(text(result),/^one/);
   const spawn=await call('agent_spawn',{task:command('bash',{command:`test ! -e ${quote(path)} && printf child-isolated`})});
   const child=JSON.parse(text(spawn)).id;
-  await browser('wait','--fn',`(async()=>{const r=await chrome.runtime.sendMessage({target:'engine',site:'127.0.0.1',method:'listChats'});return r.ok&&r.value.some(c=>c.id===${child}&&!c.busy)})()`);
-  const childHistory=await engine('agent',[],child,'history');
-  assert.ok(childHistory.entries.flatMap(e=>e.model||[]).some(m=>m.role==='toolResult'&&text(m)==='child-isolated'));
+  // Poll the resolved response: agent-browser wait --fn does not await Promises.
+  let childResult;
+  const childDeadline=Date.now()+60000;
+  while(!childResult&&Date.now()<childDeadline){
+    const history=await engine('agent',[],child,'history');
+    childResult=history.entries.flatMap(e=>e.model||[]).find(m=>m.role==='toolResult');
+    if(!childResult)await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  assert.ok(childResult,'child agent completed its tool call');
+  assert.equal(childResult.isError,false);assert.equal(text(childResult),'child-isolated');
   console.log('PASS model tools: bash → read → grep → edit, CRLF/quoted paths, errors, timeout, streaming, spill, image, direct results and child isolation');
 
   await engine('selectChat',[],source);
-  await browser('tab','0');await browser('reload');
+  await browser('tab',sourcePage);await browser('reload');
   const root=`document.querySelector('[data-pi-overlay]')?.shadowRoot`;
   await browser('wait','--fn',`!!${root}?.querySelector('.tool-row')`);
   // Extension scripts have an isolated JS world. Inspect rendered dialogs,

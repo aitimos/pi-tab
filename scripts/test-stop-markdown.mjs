@@ -1,4 +1,5 @@
 // Real extension + Durable tool execution, with a deterministic local model server.
+import {agentBrowser} from './browser-cli.mjs';
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {createHash,generateKeyPairSync} from 'node:crypto';
@@ -46,7 +47,7 @@ const server=createServer((request,response)=>{
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const url=`http://127.0.0.1:${server.address().port}/source`;
 async function browser(...args){
-  const {stdout}=await run('agent-browser',['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox','--extension',extension,'--session',session,'--json',...args],{maxBuffer:4*1024*1024});
+  const {stdout}=await run(agentBrowser,['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox','--extension',extension,'--session',session,'--json',...args],{maxBuffer:4*1024*1024});
   const reply=JSON.parse(stdout);assert.equal(reply.success,true,JSON.stringify(reply.error));return reply.data;
 }
 const evaluate=async code=>(await browser('eval','-b',Buffer.from(code).toString('base64'))).result;
@@ -72,11 +73,11 @@ try{
   const id=createHash('sha256').update(key).digest('hex').slice(0,32).replace(/[0-9a-f]/g,d=>String.fromCharCode(97+parseInt(d,16)));
   const manifest=JSON.parse(await readFile(join(extension,'manifest.json'),'utf8'));manifest.key=key.toString('base64');
   await writeFile(join(extension,'manifest.json'),JSON.stringify(manifest));
-  await browser('open',url);
-  await browser('tab','new',`chrome-extension://${id}/test-controller.html`);
+  const sourcePage=(await browser('open',url)).targetId;
+  const controllerPage=(await browser('tab','new',`chrome-extension://${id}/test-controller.html`)).targetId;
   const sourceTab=await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url)}});await chrome.storage.session.set({['active:'+tab.id]:true});const r=await chrome.tabs.sendMessage(tab.id,{type:'activate'});if(!r.ok)throw new Error(r.error);return tab.id})()`);
   const engine=async(method,args=[],chatId,name,site='127.0.0.1',tabId=sourceTab)=>{
-    await browser('tab','t2');
+    await browser('tab',controllerPage);
     const result=await evaluate(`chrome.runtime.sendMessage(${JSON.stringify({target:'engine',site,tabId,method,args,chatId,name})})`);
     assert.equal(result.ok,true,result.error);return result.value;
   };
@@ -84,35 +85,35 @@ try{
   await engine('agent',[{api:'openai-completions',baseUrl:new URL('/v1',url).href,apiKey:'test-only',model:'test-model',thinking:'off',reasoning:false}],source,'configure');
   const root=`document.querySelector('[data-pi-overlay]').shadowRoot`;
   async function start(chatId,text,tabId=sourceTab){
-    await browser('tab','t2');
+    await browser('tab',controllerPage);
     await evaluate(`void chrome.runtime.sendMessage(${JSON.stringify({target:'engine',site:'127.0.0.1',tabId,method:'agent',args:[text],chatId,name:'prompt'})})`);
   }
   async function idle(chatId){for(let i=0;i<30;i++){if(!(await engine('listChats')).find(c=>c.id===chatId)?.busy)return;await new Promise(resolve=>setTimeout(resolve,100));}throw Error('Conversation did not stop');}
   async function waitServer(predicate){for(let i=0;i<100;i++){if(predicate())return;await new Promise(resolve=>setTimeout(resolve,50));}assert.ok(predicate(),'server state reached');}
   async function stopButton(){
-    await browser('tab','t1');await browser('wait','--fn',`!${root}.getElementById('abort').hidden`);
+    await browser('tab',sourcePage);await browser('wait','--fn',`!${root}.getElementById('abort').hidden`);
     const rect=await evaluate(`(()=>{const r=${root}.getElementById('abort').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);
     await browser('mouse','move',String(Math.round(rect.x)),String(Math.round(rect.y)));await browser('mouse','down','left');await browser('mouse','up','left');
   }
-  await browser('tab','t1');await browser('reload');await browser('wait','[data-pi-overlay]');
+  await browser('tab',sourcePage);await browser('reload');await browser('wait','[data-pi-overlay]');
   await start(source,'HOLD_STOP');await waitServer(()=>pending.has('HOLD_STOP'));
-  await browser('tab','t2');
+  await browser('tab',controllerPage);
   await evaluate(`void chrome.runtime.sendMessage(${JSON.stringify({target:'engine',site:'127.0.0.1',tabId:sourceTab,method:'agent',args:['QUEUED_MUST_NOT_RUN'],chatId:source,name:'followUp'})})`);
   await stopButton();await idle(source);await waitServer(()=>pending.get('HOLD_STOP').closed);
   assert.equal((await engine('agent',[],source,'queuedMessages')).length,0);
   assert.ok(!requests.some(r=>JSON.stringify(r.messages.at(-1)).includes('QUEUED_MUST_NOT_RUN')));
   console.log('PASS actual Stop button closes model connection and clears queued follow-ups');
-  await start(source,'LONG_TOOL');await browser('tab','t1');await browser('wait','--fn',`document.title==='TOOL_WAITING'`);
+  await start(source,'LONG_TOOL');await browser('tab',sourcePage);await browser('wait','--fn',`document.title==='TOOL_WAITING'`);
   const started=Date.now();await stopButton();await idle(source);assert.ok(Date.now()-started<15000);
   console.log('PASS Stop interrupts the 60-second page tool wait promptly');
   await start(source,'HOLD_REFRESH');await waitServer(()=>pending.has('HOLD_REFRESH'));
-  await browser('tab','t1');await browser('reload');await browser('wait','[data-pi-overlay]');
+  await browser('tab',sourcePage);await browser('reload');await browser('wait','[data-pi-overlay]');
   assert.equal(pending.get('HOLD_REFRESH').closed,false);
   await stopButton();await idle(source);await waitServer(()=>pending.get('HOLD_REFRESH').closed);
   console.log('PASS navigation preserves running task; Stop after refresh cancels it');
   for(const language of ['zh-CN','en']){
-    await browser('tab','t2');await evaluate(`chrome.storage.local.set({'pi-tab-language':${JSON.stringify(language)}})`);
-    await start(source,'MARKDOWN_STREAM');await browser('tab','t1');
+    await browser('tab',controllerPage);await evaluate(`chrome.storage.local.set({'pi-tab-language':${JSON.stringify(language)}})`);
+    await start(source,'MARKDOWN_STREAM');await browser('tab',sourcePage);
     await browser('set','media',language==='en'?'dark':'light');
     await browser('wait','--fn',`${root}.querySelector('.streaming table')!==null`);
     for(const tag of ['table','pre']) {
@@ -138,7 +139,7 @@ try{
     assert.equal(await evaluate(`${root}.getElementById('chat-messages').scrollTop`),before.top,'streaming preserves reading position');
     assert.equal(await evaluate(`${root}.querySelector('#busy-text,.ai .speaker')===null`),true);
     console.log(`PASS ${language}: table/code horizontal, diagonal, boundary, shift and vertical scrolling; streaming preserves reading position`);
-    finishMarkdown();await idle(source);await browser('tab','t1');
+    finishMarkdown();await idle(source);await browser('tab',sourcePage);
     await browser('wait','--fn',`${root}.querySelector('.markdown table')!==null && ${root}.querySelector('.streaming')===null`);
     assert.equal(await evaluate(`[...${root}.querySelectorAll('.markdown pre')].at(-1).scrollLeft`),before.left,'completed reply keeps code scroll position');
     assert.equal(await evaluate(`${root}.getElementById('chat-messages').scrollTop`),before.top,'completed reply does not jump to the end');
@@ -151,12 +152,12 @@ try{
     console.log(`PASS ${language}: Markdown headings/lists/tables/code/links, inert HTML, narrow layout, restored history`);
   }
   // Controller owns extension APIs; page JavaScript intentionally does not.
-  await browser('tab','t2');
+  await browser('tab',controllerPage);
   const otherTab=await evaluate(`(async()=>{const t=await chrome.tabs.create({url:${JSON.stringify(new URL('/other',url).href)},active:false});return t.id})()`);
   const otherChat=await engine('createChat',[source],undefined,undefined,'127.0.0.1',otherTab);
   await start(source,'HOLD_CLOSE');await start(otherChat,'HOLD_OTHER',otherTab);
   await waitServer(()=>pending.has('HOLD_CLOSE')&&pending.has('HOLD_OTHER'));
-  await browser('tab','t2');await evaluate(`chrome.tabs.remove(${sourceTab})`);await idle(source);
+  await browser('tab',controllerPage);await evaluate(`chrome.tabs.remove(${sourceTab})`);await idle(source);
   await waitServer(()=>pending.get('HOLD_CLOSE').closed);assert.equal(pending.get('HOLD_OTHER').closed,false);
   await engine('agent',[],otherChat,'abort','127.0.0.1',otherTab);await waitServer(()=>pending.get('HOLD_OTHER').closed);
   console.log('PASS closing the owning tab cancels only its task; independent tab remains running');

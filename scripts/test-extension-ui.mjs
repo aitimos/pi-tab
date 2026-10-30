@@ -1,5 +1,6 @@
 // Run against the built extension in a separate Chrome for Testing session.
 // Requires agent-browser and PI_TAB_TEST_CHROME pointing to Chrome for Testing.
+import {agentBrowser} from './browser-cli.mjs';
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {createHash, generateKeyPairSync} from 'node:crypto';
@@ -63,7 +64,7 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const url = `http://127.0.0.1:${server.address().port}/`;
 const failures = [];
 async function browser(...args) {
-  const {stdout} = await run('agent-browser', ['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox','--extension',extension,'--session', session, '--json', ...args], {maxBuffer:4*1024*1024,timeout:120000});
+  const {stdout} = await run(agentBrowser, ['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox','--extension',extension,'--session', session, '--json', ...args], {maxBuffer:4*1024*1024,timeout:120000});
   const response = JSON.parse(stdout);
   if (!response.success) throw new Error(JSON.stringify(response.error));
   return response.data;
@@ -119,7 +120,7 @@ try {
   manifest.key = key.toString('base64');
   await writeFile(join(extension,'manifest.json'),JSON.stringify(manifest));
   controller = `chrome-extension://${extensionId}/test-controller.html`;
-  await browser('open',url);
+  const sourcePage=(await browser('open',url)).targetId;
   // Viewport emulation does not resize Chrome's native window. Native scroll
   // gestures outside that window are rejected even when DOM hit-testing works.
   const cdpUrl=(await browser('get','cdp-url')).cdpUrl;
@@ -139,13 +140,13 @@ try {
   cdp.close();
   // Match the user's existing saved large window before opening the extension.
   await evaluate(`localStorage.setItem('pi-tab-size',JSON.stringify({width:500,height:670}))`);
-  await browser('tab','new',controller);
+  const controllerPage=(await browser('tab','new',controller)).targetId;
   await evaluate(`chrome.storage.local.set({'pi-tab-language':${JSON.stringify(language)}})`);
   async function activate(openWindow=true) {
-    await browser('tab','1');
+    await browser('tab',controllerPage);
     const response = await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});await chrome.storage.session.set({['active:'+tab.id]:true});return chrome.tabs.sendMessage(tab.id,{type:'activate',openWindow:${openWindow}})})()`);
     assert.equal(response.ok,true,response.error);
-    await browser('tab','0');
+    await browser('tab',sourcePage);
     await browser('wait','[data-pi-overlay]');
     await browser('wait','--fn',`${root}.getElementById('api').options.length>0 || !${root}.getElementById('setup-error').hidden`);
     assert.equal(await evaluate(`${root}.getElementById('setup-error').textContent`),'');
@@ -431,9 +432,9 @@ try {
   await browser('reload');
   await activate();
   await check('closed-window state can be reopened after refresh',async()=>{assert.equal((await box()).visible,true);});
-  await browser('tab','1');
+  await browser('tab',controllerPage);
   await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});await chrome.scripting.executeScript({target:{tabId:tab.id},files:['content.js']});await chrome.scripting.executeScript({target:{tabId:tab.id},files:['content.js']});})()`);
-  await browser('tab','0');
+  await browser('tab',sourcePage);
   await check('reinjecting the content bundle does not duplicate windows',async()=>{
     assert.equal(await evaluate(`document.querySelectorAll('[data-pi-overlay]').length`),1);
     assert.equal((await box()).visible,true);
@@ -452,15 +453,15 @@ try {
     await browser('wait','--fn',`${root}.getElementById('attachment-error').textContent.includes(${JSON.stringify(en?'does not support images':'不支持图片')})`);
     assert.equal(await evaluate(`${root}.getElementById('attachments').children.length`),0);
   });
-  await browser('tab','1');
+  await browser('tab',controllerPage);
   const beforeChats = await evaluate(`chrome.runtime.sendMessage({target:'engine',site:'127.0.0.1',method:'listChats'})`);
-  await browser('tab','0');
+  await browser('tab',sourcePage);
   await click('chat-switch');
   await browser('screenshot',join(directory,'conversation-menu.png'));
   await click('chat-switch');
   await click('new-agent');
   await browser('wait','--fn',`document.querySelectorAll('[data-pi-overlay]').length===2`);
-  await browser('tab','1');
+  await browser('tab',controllerPage);
   const afterChats = await evaluate(`chrome.runtime.sendMessage({target:'engine',site:'127.0.0.1',method:'listChats'})`);
   await check('new window creates a separate empty conversation',async()=>{
     assert.equal(beforeChats.ok,true);assert.equal(afterChats.ok,true);
@@ -470,7 +471,7 @@ try {
     const history=await evaluate(`chrome.runtime.sendMessage({target:'engine',site:'127.0.0.1',method:'agent',chatId:${created.id},name:'history'})`);
     assert.equal(history.ok,true);assert.equal(history.value.entries.length,0);
   });
-  await browser('tab','0');
+  await browser('tab',sourcePage);
   await click('settings');
   await browser('wait','--fn',`${root}.getElementById('preferences').style.display==='flex'`);
   await check('theme belongs to settings and applies immediately',async()=>{
@@ -498,9 +499,9 @@ try {
       await browser('screenshot',join(directory,`settings-${locale}.png`));
     }
     await evaluate(`${root}.getElementById('message-input').value=''`);
-    await browser('tab','1');
+    await browser('tab',controllerPage);
     await browser('wait','--fn',`(async()=> (await chrome.storage.local.get('pi-tab-language'))['pi-tab-language']===${JSON.stringify(language)})()`);
-    await browser('tab','0');
+    await browser('tab',sourcePage);
   });
   await check('settings tabs retain drafts and separate instructions from execution',async()=>{
     assert.equal(await evaluate(`${root}.getElementById('settings-instructions').hidden`),true);
@@ -588,7 +589,7 @@ try {
     holdTitles=false;releaseTitle();
     await browser('wait','--fn',`${root}.querySelector('.chat-select[aria-current=true] .chat-title').textContent==='附件内容分析'`);
     await browser('screenshot',join(directory,'generated-title.png'));
-    await browser('tab','1');await evaluate('chrome.offscreen.closeDocument()');await browser('tab','0');
+    await browser('tab',controllerPage);await evaluate('chrome.offscreen.closeDocument()');await browser('tab',sourcePage);
     await browser('reload');await activate();
     await browser('wait','--fn',`${root}.querySelector('.message-image')?.complete`);
     await click('chat-switch');
@@ -615,7 +616,7 @@ try {
     assert.equal(await evaluate(`${root}.getElementById('chat-entries').children.length`),afterChats.value.length);
   });
   const backgroundChat=afterChats.value.find(chat=>!beforeChats.value.some(old=>old.id===chat.id));
-  await browser('tab','1');
+  await browser('tab',controllerPage);
   const currentId=beforeChats.value[0].id;
   const engine = async (method,args=[],chatId,name) => evaluate(`chrome.runtime.sendMessage(${JSON.stringify({target:'engine',site:'127.0.0.1',method,args,chatId,name})})`);
   const configuration = await engine('agent',[{api:'openai-completions',baseUrl:url+'v1',apiKey:'test-only',model:'test-model',reasoning:false,thinking:'off',input:['text','image']}],currentId,'configure');
@@ -628,7 +629,7 @@ try {
   await evaluate(`void chrome.runtime.sendMessage(${JSON.stringify({target:'engine',site:'127.0.0.1',method:'agent',chatId:currentId,name:'prompt',args:['Pending task']})});true`);
   await browser('wait','--fn',`(async()=>{const r=await chrome.runtime.sendMessage({target:'engine',site:'127.0.0.1',method:'listChats'});return r.value.some(c=>c.id===${currentId}&&c.busy)})()`);
   await check('real background run stays visible when opening and reopening the conversation menu',async()=>{
-    await browser('tab','0');
+    await browser('tab',sourcePage);
     const indicator=`${root}.querySelector('[data-chat-id="${currentId}"] .chat-running')`;
     await browser('wait','--fn',`${indicator} && !${indicator}.hidden`);
     assert.equal(await evaluate(`getComputedStyle(${indicator}).display`),'flex');
@@ -639,10 +640,10 @@ try {
     await click('chat-switch');
     await browser('wait','--fn',`${indicator} && !${indicator}.hidden`);
     await browser('screenshot',join(directory,'conversation-running.png'));
-    await browser('tab','1');
+    await browser('tab',controllerPage);
   });
   await check('switching language during a real run preserves history, attachments and busy state',async()=>{
-    await browser('tab','0');
+    await browser('tab',sourcePage);
     await click('chat-switch');
     await attachFiles(false,true);
     await evaluate(`${root}.getElementById('message-input').value='Pending draft 中文'`);
@@ -659,34 +660,34 @@ try {
     await click('preferences-back');
     await evaluate(`${root}.getElementById('message-input').value='';${root}.querySelector('#attachments button').click()`);
     await click('chat-switch');
-    await browser('tab','1');
+    await browser('tab',controllerPage);
   });
   await check('Durable snapshot with a live run preserves the running indicator',async()=>{
     await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});await chrome.tabs.sendMessage(tab.id,{type:'engine-event',event:{type:'snapshot',conversationId:${currentId},run:{inputs:[1]}}});})()`);
-    await browser('tab','0');
+    await browser('tab',sourcePage);
     assert.equal(await evaluate(`${root}.querySelector('[data-chat-id="${currentId}"] .chat-running').hidden`),false);
-    await browser('tab','1');
+    await browser('tab',controllerPage);
   });
   await check('agent queue and delayed completion preserve a live run and its output',async()=>{
     const deliver=event=>evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});await chrome.tabs.sendMessage(tab.id,{type:'engine-event',event:${JSON.stringify({...event,conversationId:currentId})}});})()`);
     await deliver({type:'message_start',message:{role:'assistant',content:[{type:'text',text:'Before'}]}});
-    await browser('tab','0');
+    await browser('tab',sourcePage);
     try {
       await browser('wait','--fn',`${root}.querySelector('.streaming .bubble')?.textContent==='Before'`);
-      await browser('tab','1');
+      await browser('tab',controllerPage);
       await deliver({type:'agent_task_queued'});
       await deliver({type:'message_update',changes:[{type:'text_delta',contentIndex:0,delta:' after'}]});
       await deliver({type:'agent_task_done'});
-      await browser('tab','0');
+      await browser('tab',sourcePage);
       await browser('wait','--fn',`${root}.querySelector('.streaming .bubble')?.textContent==='Before after'`);
       assert.equal(await evaluate(`${root}.querySelectorAll('.streaming').length`),1);
       assert.equal(await evaluate(`${root}.getElementById('shell').dataset.busy`),'true');
       assert.equal(await evaluate(`${root}.getElementById('abort').hidden`),false);
       assert.equal(await evaluate(`${root}.querySelector('#busy-text,.ai .speaker')===null`),true);
-    } finally { await browser('tab','1'); }
+    } finally { await browser('tab',controllerPage); }
   });
   await check('queued attachment editing keeps image and file contents',async()=>{
-    await browser('tab','0');
+    await browser('tab',sourcePage);
     await click('chat-switch');
     await attachFiles();
     await browser('wait','--fn',`${root}.getElementById('attachments').children.length===2`);
@@ -707,7 +708,7 @@ try {
     assert.equal(await evaluate(`${root}.querySelector('.queue-edit').value`),'Queued files');
     assert.equal(await evaluate(`${root}.querySelector('.queue-menu:popover-open')`),null);
     await evaluate(`${root}.querySelector('.queue-edit-actions button').click()`);
-    await browser('tab','1');
+    await browser('tab',controllerPage);
     const queued=await engine('agent',[],currentId,'queuedMessages');
     assert.equal(queued.value.length,1);
     const item=queued.value[0];
@@ -725,7 +726,7 @@ try {
   });
   await engine('agent',[],currentId,'abort');
   holdModel=false;
-  await browser('tab','0');
+  await browser('tab',sourcePage);
   await check('real run completion clears the conversation indicator',async()=>{
     if(await evaluate(`${root}.getElementById('chat-list').dataset.open!=='true'`))await click('chat-switch');
     await browser('wait','--fn',`${root}.querySelector('[data-chat-id="${currentId}"] .chat-running')?.hidden===true`);
@@ -741,14 +742,14 @@ try {
   await browser('screenshot',join(directory,'delete-confirm.png'));
   await evaluate(`${root}.querySelector(${JSON.stringify(removeSelector)}).click()`);
   await browser('wait','--fn',`!${root}.querySelector(${JSON.stringify(removeSelector)})`);
-  await browser('tab','1');
+  await browser('tab',controllerPage);
   await check('deletion preserves other conversations and model profiles',async()=>{
     const chats=await engine('listChats');assert.equal(chats.value.length,1);assert.equal(chats.value[0].id,currentId);
     assert.deepEqual((await engine('listModels')).value,keptModels.value);
     assert.ok((await engine('agent',[],currentId,'history')).value.entries.length>=keptHistory.value.entries.length);
     assert.equal((await engine('receiveFromTab',['hello','test'],backgroundChat.id)).ok,false);
   });
-  await browser('tab','0');
+  await browser('tab',sourcePage);
   await browser('wait','--fn',`document.querySelectorAll('[data-pi-overlay]')[1].shadowRoot.getElementById('chat-messages').textContent.includes('Test reply')`);
   await check('other window viewing deleted conversation selects the remaining one',async()=>{
     assert.ok(await evaluate(`document.querySelectorAll('[data-pi-overlay]')[1].shadowRoot.getElementById('chat-messages').textContent.includes('Test reply')`));
@@ -758,7 +759,7 @@ try {
     await evaluate(`document.querySelectorAll('[data-pi-overlay]')[1].shadowRoot.getElementById('close').click()`);
     assert.deepEqual(await evaluate(`JSON.parse(sessionStorage.getItem('pi-tab-open-chats'))`),[currentId]);
   });
-  await browser('tab','1');
+  await browser('tab',controllerPage);
   await check('deleting the last conversation creates a blank one with the same model',async()=>{
     const removed=await engine('deleteChat',[currentId]);assert.equal(removed.ok,true,removed.error);
     const chats=(await engine('listChats')).value;assert.equal(chats.length,1);assert.notEqual(chats[0].id,currentId);
@@ -767,7 +768,7 @@ try {
   });
   // Restart the offscreen runtime, not only the UI, to exercise persisted data.
   await evaluate('chrome.offscreen.closeDocument()');
-  await browser('tab','0');
+  await browser('tab',sourcePage);
   await browser('reload');
   await activate();
   await click('chat-switch');
@@ -777,9 +778,9 @@ try {
     assert.equal(await evaluate(`document.querySelectorAll('[data-pi-overlay]').length`),1);
   });
   await check('long conversation list scrolls over titles and contains boundary scrolling',async()=>{
-    await browser('tab','1');
+    await browser('tab',controllerPage);
     for(let i=0;i<16;i++)assert.equal((await engine('createChat')).ok,true);
-    await browser('tab','0');
+    await browser('tab',sourcePage);
     await click('chat-switch');await click('chat-switch');
     try { await browser('wait','--fn',`${root}.querySelectorAll('.chat-row').length===17`); }
     catch(error) { console.error('Menu state',await evaluate(`(()=>{const r=${root};return {rows:r.querySelectorAll('.chat-row').length,open:r.getElementById('chat-list').dataset.open,status:r.getElementById('status').textContent,error:r.getElementById('setup-error').textContent,windows:document.querySelectorAll('[data-pi-overlay]').length}})()`)); console.error('Browser errors',await browser('errors'));throw error; }
@@ -827,26 +828,26 @@ try {
   });
   await check('extension language preference is shared with another website',async()=>{
     const destination=url.replace('127.0.0.1','localhost');
-    await browser('tab','new',destination);
-    await browser('tab','1');
+    const destinationPage=(await browser('tab','new',destination)).targetId;
+    await browser('tab',controllerPage);
     const result=await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(destination+'*')}});await chrome.storage.session.set({['active:'+tab.id]:true});return chrome.tabs.sendMessage(tab.id,{type:'activate',openWindow:true})})()`);
     assert.equal(result.ok,true,result.error);
-    await browser('tab','2');
+    await browser('tab',destinationPage);
     await browser('wait','[data-pi-overlay]');
     await browser('wait','--fn',`${root}.getElementById('api').options.length>0`);
     assert.equal(await evaluate(`document.querySelector('[data-pi-overlay]').lang`),language);
     assert.equal(await evaluate(`${root}.getElementById('message-input').placeholder`),en?'Message':'输入消息');
-    await browser('tab','close');await browser('tab','0');
+    await browser('tab','close');await browser('tab',sourcePage);
   });
   if(process.env.PI_TAB_TEST_LIVE==='1') {
     for(const page of ['https://github.com/aitimos/pi-tab','https://www.bilibili.com/']) {
-      await browser('tab','0');
+      await browser('tab',sourcePage);
       await browser('open',page);
       currentPage=await evaluate('location.href');
-      await browser('tab','1');
+      await browser('tab',controllerPage);
       const activation=await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(new URL(page).origin+'/*')}});return chrome.tabs.sendMessage(tab.id,{type:'activate'});})()`);
       assert.equal(activation.ok,true,activation.error);
-      await browser('tab','0');
+      await browser('tab',sourcePage);
       await browser('wait','[data-pi-overlay]');
       await browser('wait','--fn',`${root}.getElementById('api').options.length>0`);
       await browser('wait','--fn',`${root}.getElementById('message-input').getClientRects().length>0`);

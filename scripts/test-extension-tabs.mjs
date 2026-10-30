@@ -1,4 +1,5 @@
 // Real extension + Durable tool execution, with a deterministic local model server.
+import {agentBrowser} from './browser-cli.mjs';
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {createHash,generateKeyPairSync} from 'node:crypto';
@@ -42,7 +43,7 @@ const server=createServer((request,response)=>{
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const url=`http://127.0.0.1:${server.address().port}/source`;
 async function browser(...args){
-  const {stdout}=await run('agent-browser',['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox','--extension',extension,'--session',session,'--json',...args],{maxBuffer:4*1024*1024});
+  const {stdout}=await run(agentBrowser,['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox','--extension',extension,'--session',session,'--json',...args],{maxBuffer:4*1024*1024});
   const reply=JSON.parse(stdout);assert.equal(reply.success,true,JSON.stringify(reply.error));return reply.data;
 }
 const evaluate=async code=>(await browser('eval','-b',Buffer.from(code).toString('base64'))).result;
@@ -55,10 +56,10 @@ try{
   const manifest=JSON.parse(await readFile(join(extension,'manifest.json'),'utf8'));manifest.key=key.toString('base64');
   await writeFile(join(extension,'manifest.json'),JSON.stringify(manifest));
   await browser('open',url);
-  await browser('tab','new',`chrome-extension://${id}/test-controller.html`);
+  const controllerPage=(await browser('tab','new',`chrome-extension://${id}/test-controller.html`)).targetId;
   const sourceTab=await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url)}});await chrome.storage.session.set({['active:'+tab.id]:true});const r=await chrome.tabs.sendMessage(tab.id,{type:'activate'});if(!r.ok)throw new Error(r.error);return tab.id})()`);
   const engine=async(method,args=[],chatId,name,site='127.0.0.1',tabId=sourceTab)=>{
-    await browser('tab','1');
+    await browser('tab',controllerPage);
     const result=await evaluate(`chrome.runtime.sendMessage(${JSON.stringify({target:'engine',site,tabId,method,args,chatId,name})})`);
     assert.equal(result.ok,true,result.error);return result.value;
   };
@@ -74,7 +75,7 @@ try{
   for(const host of ['localhost','127.0.0.1']){
     const targetUrl=new URL('/target-'+host,url);targetUrl.hostname=host;
     const opened=await call('tab_open',{url:targetUrl.href});
-    await browser('tab','1');
+    await browser('tab',controllerPage);
     await browser('wait','--fn',`(async()=>{const tab=await chrome.tabs.get(${opened.tabId});return tab.status==='complete'})()`);
     const tabs=await call('tab_list');
     const target=tabs.find(tab=>tab.tabId===opened.tabId);

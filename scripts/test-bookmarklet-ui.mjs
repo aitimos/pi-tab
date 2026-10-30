@@ -1,4 +1,5 @@
 // Exercise the actual javascript: bookmark in an isolated browser, without an extension.
+import {agentBrowser} from './browser-cli.mjs';
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {readFile, mkdtemp} from 'node:fs/promises';
@@ -48,7 +49,7 @@ const url=`http://127.0.0.1:${server.address().port}/`;
 const installer=url.replace('127.0.0.1','localhost')+'install';
 const otherUrl=`http://127.0.0.1:${otherSite.address().port}/`;
 async function browser(...args){
-  const {stdout}=await run('agent-browser',['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox,--no-proxy-server,--host-resolver-rules=MAP pi-tab-http.test 127.0.0.1','--session',session,'--json',...args],{maxBuffer:4*1024*1024});
+  const {stdout}=await run(agentBrowser,['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox,--no-proxy-server,--host-resolver-rules=MAP pi-tab-http.test 127.0.0.1','--session',session,'--json',...args],{maxBuffer:4*1024*1024});
   const reply=JSON.parse(stdout);
   if(!reply.success)throw new Error(JSON.stringify(reply.error));
   return reply.data;
@@ -72,7 +73,7 @@ async function send(text){
   await browser('press','Enter');
 }
 try{
-  await browser('open',installer);
+  const primaryPage=(await browser('open',installer)).targetId;
   await browser('set','viewport','1440','1000');
   await browser('wait','--fn',`${root}?.getElementById('api')?.options.length>0 && document.getElementById('pi-bookmarklet').hasAttribute('href')`);
   await evaluate(`(()=>{const r=${root};r.getElementById('base-url').value=${JSON.stringify(url+'v1')};r.getElementById('api-key').value='test-only';r.getElementById('discover-models').click()})()`);
@@ -259,7 +260,7 @@ try{
   // Keep the original runtime open: the next tab must use a separate conversation
   // database while sharing the origin's model, provider and instruction settings.
   const originalStorage=await evaluate("sessionStorage.getItem('pi-tab-storage-name')");
-  await browser('tab','new',url+'another-path?source=second-tab');await launch();
+  const peerPage=(await browser('tab','new',url+'another-path?source=second-tab')).targetId;await launch();
   assert.notEqual(await evaluate("sessionStorage.getItem('pi-tab-storage-name')"),originalStorage);
   assert.equal(await evaluate(`pi.agent(${selected}).config.model`),'site-model');
   assert.equal((await evaluate('pi.listModels()')).length,4);
@@ -270,23 +271,23 @@ try{
     await click(`[data-language="${locale}"]`);
     await evaluate(`(()=>{const r=${root};r.getElementById('setting-prompt').value='Site instructions ${locale}';r.getElementById('setting-retries').value='2';r.getElementById('setting-compact').checked=false;r.getElementById('preferences').requestSubmit()})()`);
     await browser('wait','--fn',`pi.getPreferences().then(p=>p.systemPrompt==='Site instructions ${locale}' && p.maxRetries===2 && p.autoCompact===false)`);
-    await browser('tab','0');
+    await browser('tab',primaryPage);
     await browser('wait','--fn',`pi.getPreferences().then(p=>p.systemPrompt==='Site instructions ${locale}')`);
     await send('Check shared instructions '+locale);
     await browser('wait','--fn',`!pi.busyFor(${selected}) && ${root}.getElementById('chat-messages').textContent.includes('Bookmark test reply')`);
     assert.ok(modelInputs.some(input=>input.messages.some(message=>JSON.stringify(message.content).includes('Site instructions '+locale))));
-    await browser('tab','1');
+    await browser('tab',peerPage);
   }
   await evaluate(`pi.agent(${selected}).configure({apiKey:'shared-site-key'})`);
-  await browser('tab','0');
+  await browser('tab',primaryPage);
   await send('Use updated site key');
   await browser('wait','--fn',`!pi.busyFor(${selected})`);
   assert.equal(authorizations.at(-1),'Bearer shared-site-key');
   assert.equal(await evaluate(`pi.agent(${selected}).config.profileId`),peerProfile);
-  await browser('tab','1');await browser('reload');await launch();
+  await browser('tab',peerPage);await browser('reload');await launch();
   assert.equal((await evaluate('pi.getPreferences()')).systemPrompt,'Site instructions en');
   assert.equal(await evaluate(`pi.agent(${selected}).savedConfig().then(c=>c.apiKey)`),'shared-site-key');
-  await browser('tab','close');await browser('tab','0');
+  await browser('tab','close');await browser('tab',primaryPage);
   console.log('PASS independent same-origin tabs share settings, models, credentials and providers; live prompt updates and reload persist in both languages');
 
   await browser('open',otherUrl);await launch();

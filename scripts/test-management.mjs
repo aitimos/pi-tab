@@ -1,5 +1,6 @@
 // Linux CI only. Exercises the shipped bookmark and extension with Pi's real
 // configuration UI; only model HTTP responses are fixtures.
+import {agentBrowser} from './browser-cli.mjs';
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {createHash,generateKeyPairSync} from 'node:crypto';
@@ -53,7 +54,7 @@ try{
 
   }
   const browser=async(...args)=>{
-    const {stdout}=await run('agent-browser',['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox',...(mode==='extension'?['--extension',extension]:[]),'--session',session,'--json',...args],{maxBuffer:5*1024*1024});
+    const {stdout}=await run(agentBrowser,['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox',...(mode==='extension'?['--extension',extension]:[]),'--session',session,'--json',...args],{maxBuffer:5*1024*1024});
     const result=JSON.parse(stdout);assert.ok(result.success,JSON.stringify(result.error));return result.data;
   };
   const evaluate=async code=>(await browser('eval','-b',Buffer.from(code).toString('base64'))).result;
@@ -63,25 +64,26 @@ try{
     const point=await evaluate(`(()=>{const e=${root}.querySelector(${JSON.stringify(selector)});e.scrollIntoView({block:'nearest'});const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);
     await browser('mouse','move',String(Math.round(point.x)),String(Math.round(point.y)));await browser('mouse','down','left');await browser('mouse','up','left');
   };
+  let sourcePage,controllerPage;
   const call=async(method,args=[])=>{
     if(mode==='bookmarklet')return evaluate(`window.pi[${JSON.stringify(method)}](...${JSON.stringify(args)})`);
-    await browser('tab','t2');
+    await browser('tab',controllerPage);
     const result=await evaluate(`chrome.runtime.sendMessage(${JSON.stringify({target:'engine',site:'127.0.0.1',tabId,method,args})})`);
-    await browser('tab','t1');assert.ok(result.ok,result.error);return result.value;
+    await browser('tab',sourcePage);assert.ok(result.ok,result.error);return result.value;
   };
   try{
-    await browser('open',base+'/'+mode+language);await browser('set','viewport','1280','1000');
+    sourcePage=(await browser('open',base+'/'+mode+language)).targetId;await browser('set','viewport','1280','1000');
     await evaluate(`localStorage.setItem('pi-tab-language',${JSON.stringify(language)})`);
     if(mode==='bookmarklet')await browser('click','#launch');
     else{
-      await browser('tab','new',`chrome-extension://${extensionId}/test-controller.html`);
+      controllerPage=(await browser('tab','new',`chrome-extension://${extensionId}/test-controller.html`)).targetId;
       await evaluate(`chrome.storage.local.set({'pi-tab-language':${JSON.stringify(language)},profiles:[${JSON.stringify(profile)}],providers:[]})`);
       tabId=await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(base+'/'+mode+language)}});await chrome.storage.session.set({['active:'+tab.id]:true});const r=await chrome.tabs.sendMessage(tab.id,{type:'activate'});if(!r.ok)throw Error(r.error);return tab.id})()`);
-      await browser('tab','t1');
+      await browser('tab',sourcePage);
     }
     await wait(`${root}?.getElementById('chat')?.style.display==='flex'`);
     const otherSite=async method=>{
-      await browser('tab','t2');const result=await evaluate(`chrome.runtime.sendMessage({target:'engine',site:'localhost',tabId:${tabId},method:${JSON.stringify(method)},args:[]})`);await browser('tab','t1');assert.ok(result.ok,result.error);return result.value;
+      await browser('tab',controllerPage);const result=await evaluate(`chrome.runtime.sendMessage({target:'engine',site:'localhost',tabId:${tabId},method:${JSON.stringify(method)},args:[]})`);await browser('tab',sourcePage);assert.ok(result.ok,result.error);return result.value;
     };
     if(mode==='extension')await otherSite('initialize');
     const fill=async(id,value)=>evaluate(`(()=>{const e=${root}.getElementById(${JSON.stringify(id)});e.value=${JSON.stringify(value)};e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
@@ -119,10 +121,10 @@ try{
     assert.equal((await call('listModels')).length,0,'deleted defaults do not return on reload');assert.equal((await call('listProviders')).length,0);
     if(mode==='bookmarklet'){await browser('click','#launch');await wait(`${root}.getElementById('setup').style.display==='flex'`);assert.equal((await call('listModels')).length,0,'repeated activation cannot restore a deleted profile');}
     if(mode==='extension'){
-      await browser('tab','t2');
+      await browser('tab',controllerPage);
       const remote=await evaluate(`chrome.runtime.sendMessage({target:'engine',site:'localhost',tabId:${tabId},method:'initialize',args:[]})`);assert.ok(remote.ok,remote.error);
       const models=await evaluate(`chrome.runtime.sendMessage({target:'engine',site:'localhost',method:'listModels',args:[]})`);assert.deepEqual(models.value,[]);
-      await browser('tab','t1');
+      await browser('tab',sourcePage);
     }
     console.log(`PASS ${mode} ${language}: edit provider/model, send updated credentials, cancel/delete, busy guard, reload/import persistence`);
   }finally{await browser('close');}

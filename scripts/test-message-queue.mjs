@@ -1,4 +1,5 @@
 // Real Pi Durable and browser UI; model responses are controlled at each boundary.
+import {agentBrowser} from './browser-cli.mjs';
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {createHash,generateKeyPairSync} from 'node:crypto';
@@ -58,7 +59,7 @@ try{
       await writeFile(join(extension,'test-controller.html'),'<!doctype html><title>Queue controller</title>');
     }
     const browser=async(...args)=>{
-      const {stdout}=await run('agent-browser',['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox',...(mode==='extension'?['--extension',extension]:[]),'--session',session,'--json',...args],{maxBuffer:5*1024*1024});
+      const {stdout}=await run(agentBrowser,['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox',...(mode==='extension'?['--extension',extension]:[]),'--session',session,'--json',...args],{maxBuffer:5*1024*1024});
       const reply=JSON.parse(stdout);assert.ok(reply.success,JSON.stringify(reply.error));return reply.data;
     };
     const evaluate=async code=>(await browser('eval','-b',Buffer.from(code).toString('base64'))).result;
@@ -75,11 +76,11 @@ try{
       await evaluate(`${root}.getElementById(${JSON.stringify(steer?'send-steer':'send')}).click()`);
     }
     try{
-      await browser('open',base);
+      const sourcePage=(await browser('open',base)).targetId;
       if(mode==='extension'){
         await browser('tab','new',`chrome-extension://${extensionId}/test-controller.html`);
         await evaluate(`(async()=>{await chrome.storage.local.set({'pi-tab-language':'zh-CN'});const [tab]=await chrome.tabs.query({url:${JSON.stringify(base+'/')}});await chrome.storage.session.set({['active:'+tab.id]:true});const active=await chrome.tabs.sendMessage(tab.id,{type:'activate'});if(!active.ok)throw Error(active.error);const init=await chrome.runtime.sendMessage({target:'engine',site:'127.0.0.1',tabId:tab.id,method:'initialize'});const result=await chrome.runtime.sendMessage({target:'engine',site:'127.0.0.1',tabId:tab.id,method:'agent',chatId:init.value.activeId,name:'configure',args:[${JSON.stringify(profile)}]});if(!result.ok)throw Error(result.error);})()`);
-        await browser('tab','0');await browser('reload');
+        await browser('tab',sourcePage);await browser('reload');
       }else await browser('click','#launch');
       await wait(`${root}?.getElementById('chat')?.style.display==='flex'`);
       await send('START');

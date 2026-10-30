@@ -1,4 +1,5 @@
 // Installer localization and live switching in a separate browser session.
+import {agentBrowser} from './browser-cli.mjs';
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {readFile,mkdtemp} from 'node:fs/promises';
@@ -25,7 +26,7 @@ const server=createServer((request,response)=>{
 });
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
 const url=`http://127.0.0.1:${server.address().port}/`;
-async function browser(...args){const {stdout}=await run('agent-browser',['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox','--session',session,'--json',...args],{maxBuffer:5*1024*1024});const r=JSON.parse(stdout);if(!r.success)throw new Error(JSON.stringify(r.error));return r.data;}
+async function browser(...args){const {stdout}=await run(agentBrowser,['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox','--session',session,'--json',...args],{maxBuffer:5*1024*1024});const r=JSON.parse(stdout);if(!r.success)throw new Error(JSON.stringify(r.error));return r.data;}
 const evaluate=async code=>(await browser('eval','-b',Buffer.from(code).toString('base64'))).result;
 const root=`document.querySelector('[data-pi-overlay]').shadowRoot`;
 const click=async id=>evaluate(`${root}.getElementById(${JSON.stringify(id)}).click()`);
