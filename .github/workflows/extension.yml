@@ -4,7 +4,6 @@ on:
   pull_request:
   push:
     branches: [main]
-    tags: ['v*']
   workflow_dispatch:
 
 permissions:
@@ -20,20 +19,8 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - name: Check release version
-        if: startsWith(github.ref, 'refs/tags/')
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          node --input-type=module <<'JS'
-          import {readFileSync} from 'node:fs';
-          import assert from 'node:assert/strict';
-          const pkg = JSON.parse(readFileSync('package.json'));
-          const manifest = JSON.parse(readFileSync('extension/manifest.json'));
-          assert.equal(process.env.RELEASE_TAG, `v${pkg.version}`);
-          assert.equal(manifest.version, pkg.version);
-          JS
       - run: npm run build
+      - run: node scripts/release.mjs verify
       - run: npm test
       - uses: actions/upload-artifact@v4
         with:
@@ -87,39 +74,37 @@ jobs:
           retention-days: 7
 
   release:
-    if: startsWith(github.ref, 'refs/tags/')
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: [build, browser-tests]
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    outputs:
+      sha: ${{ steps.publish.outputs.sha }}
+      tag: ${{ steps.publish.outputs.tag }}
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/download-artifact@v4
         with:
-          name: pi-tab-extension
-          path: release-assets
-      - name: Extract release notes
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          python3 - <<'PY'
-          import os
-          from pathlib import Path
-          tag = os.environ['RELEASE_TAG']
-          sections = Path('CHANGELOG.md').read_text().split('\n## ')
-          section = next((s for s in sections[1:] if s.splitlines()[0].split(' — ')[0] == tag), None)
-          if section is None:
-              raise SystemExit(f'Missing changelog for {tag}')
-          Path('release-notes.md').write_text(section.split('\n', 1)[1].strip() + '\n')
-          PY
-      - name: Publish extension
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Prepare and publish release
+        id: publish
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release edit "$RELEASE_TAG" --title "Pi Tab $RELEASE_TAG" --notes-file release-notes.md
-            gh release upload "$RELEASE_TAG" release-assets/dist/pi-tab-extension.zip release-assets/pi-bookmarklet-chat-install.html --clobber
-          else
-            gh release create "$RELEASE_TAG" release-assets/dist/pi-tab-extension.zip release-assets/pi-bookmarklet-chat-install.html --verify-tag --title "Pi Tab $RELEASE_TAG" --notes-file release-notes.md
-          fi
+        run: node scripts/release.mjs publish
+
+  release-pages:
+    needs: release
+    if: needs.release.outputs.sha != ''
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/pages.yml
+    with:
+      ref: ${{ needs.release.outputs.sha }}

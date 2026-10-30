@@ -8,6 +8,12 @@ on:
       - oauth/**
       - .github/workflows/pages.yml
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        description: Release commit to deploy
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -26,6 +32,8 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.sha }}
       - uses: actions/configure-pages@v5
       - name: Prepare installer
         run: |

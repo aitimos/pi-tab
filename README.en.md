@@ -76,6 +76,10 @@ There is no interactive terminal, host directory mount or command mount in this 
 
 Use Node.js 24 for development and tests (`nvm use`), then run `npm ci`. Browser tests invoke the project's pinned `agent-browser`, never a global installation. Run `npx playwright install chromium`, then set `PI_TAB_TEST_CHROME` to the path printed by `node --input-type=module -e "import {chromium} from 'playwright'; console.log(chromium.executablePath())"`. Commands such as `npm run test:bookmarklet` and `npm run test:extension` then use the same tool and browser versions as CI.
 
+After the build, unit tests and all browser regressions pass on `main`, Actions automatically publishes a release. `fix:` / `perf:` increment the patch, `feat:` increments the minor, and `type!:` or a `BREAKING CHANGE:` footer increments the major. The highest level since the previous release wins; documentation, test and CI changes alone do not release. Numbers do not roll over at ten: `1.0.99` becomes `1.0.100` for a patch, `1.1.0` for a feature, or `2.0.0` for a breaking change. Preserve these markers in the final commit message when squash merging.
+
+The release job commits version files, generated assets and `CHANGELOG.md`, creates the tag, uploads the extension and bookmark installer, and deploys that release commit to Pages. Do not bump versions or push release tags manually. `node scripts/release.mjs preview` computes the next version from local committed history without writing files (full history and tags required); `node scripts/release.mjs verify` checks version files against the built archive. Release tests require `zip` and `unzip`. Rerun a failed workflow, or manually run “Build and release extension” on `main`, to complete the same release. Outdated runs skip publication. Actions must be allowed to write to `main`; the script does not bypass branch protection.
+
 ## Before you start
 
 - Inference uses your configured service. Page content and attachments needed for a task are sent to that API. Bookmarks may contain API keys; do not share bookmarks containing credentials.

@@ -74,6 +74,10 @@ Pi Tab 基于 Pi Durable，把 Agent 带进你正在浏览的网页。点击书�
 
 开发和测试使用 Node.js 24（可运行 `nvm use`），先执行 `npm ci`。浏览器测试直接使用项目锁定的 `agent-browser`，不使用全局安装版本。运行 `npx playwright install chromium` 后，将 `PI_TAB_TEST_CHROME` 设置为 `node --input-type=module -e "import {chromium} from 'playwright'; console.log(chromium.executablePath())"` 输出的路径，即可运行 `npm run test:bookmarklet`、`npm run test:extension` 等回归，与 CI 使用相同的工具和浏览器版本。
 
+`main` 的构建、单元测试和全部浏览器回归通过后，Actions 自动计算版本并发布 Release：`fix:` / `perf:` 升补丁，`feat:` 升次版本，`类型!:` 或正文中的 `BREAKING CHANGE:` 升主版本；同批提交取最高级别，只有文档、测试或 CI 等修改时不发版。例如 `1.0.99` 的下一个补丁是 `1.0.100`，新增功能则变为 `1.1.0`，不兼容变更变为 `2.0.0`。使用 squash 合并时，请在合并提交标题和正文中保留这些标记。
+
+版本文件、构建产物和 `CHANGELOG.md` 由发布任务提交，随后自动创建标签、上传扩展和书签附件，并将同一发布提交部署到 Pages，无需手动改版本或推送标签。`node scripts/release.mjs preview` 只预览本地已提交内容的下一个版本（需要完整历史和标签）；`node scripts/release.mjs verify` 检查现有构建包和版本文件是否一致。发布测试需要系统提供 `zip` 和 `unzip`。失败后可重跑工作流，或在 `main` 上手动运行 “Build and release extension” 补发同一版本。若有更新的提交，旧任务会跳过发布；仓库须允许 Actions 写入 `main`，脚本不会绕过分支保护。
+
 ## 使用前了解
 
 - 模型推理使用你配置的服务，任务所需的页面内容和附件会发送到该接口。书签可能包含 API Key，请勿分享含密钥的书签。
