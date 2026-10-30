@@ -27,6 +27,7 @@ Pi Tab 基于 Pi Durable，把 Agent 带进你正在浏览的网页。点击书�
 | 侧边收起 | 窗口吸附左右边缘后，移开鼠标收成窄条，移入展开；编辑中的内容保持展开 |
 | 会话管理 | 自动生成标题、显示运行状态、切换和删除会话，也可在新窗口继续另一项任务 |
 | 多 Agent 协作 | 同页 Agent 互发消息；扩展还可打开其他标签页、发送任务并读取结果 |
+| Linux 工具（仅扩展） | 每个会话独立运行 Linux，使用 `bash/read/grep/edit` 执行命令、读取、搜索和修改文件 |
 | 中英双语 | 默认跟随浏览器语言，也可在设置中切换；切换不影响会话和正在执行的任务 |
 | 界面与偏好 | 跟随网页或系统主题，也可选浅色、深色；支持拖动、缩放、最小化和贴边放置 |
 
@@ -61,6 +62,16 @@ Pi Tab 基于 Pi Durable，把 Agent 带进你正在浏览的网页。点击书�
 
 两种模式的会话记录独立。跨标签页能力需要从扩展图标启动，安装扩展不会改变书签模式的能力。
 
+### 扩展内的 Linux
+
+首次调用文件或命令工具时启动，默认目录为 `/workspace`。`bash` 工具运行 BusyBox `/bin/sh`，支持管道和重定向，不支持 GNU Bash 专属语法。`read` 支持分页和图片，`edit` 使用 `{path, edits:[{oldText,newText}]}` 并返回修改差异。`grep` 支持扩展正则、字面量、文件 glob 和上下文，默认最多 100 条匹配、50 KiB，不读取 `.gitignore`。
+
+文件只存在于当前会话的 Linux 内存中，子 agent 有自己的文件系统。刷新网页或关闭标签页保留文件；删除或重置会话、扩展重载、后台页面重建及退出浏览器会清空文件。未完成的 Linux 工具调用不会自动重放。内核和初始文件系统随扩展打包，启动 Linux 不需要联网；模型调用仍需要模型服务。
+
+当前不提供交互式终端、本机目录挂载或命令挂载。后续将 JS tool 接入 Linux 命令的约定见[命令挂载设计](docs/linux-command-mounts.md)，其中 `curl → fetch` 仅作设计说明。
+
+普通 `npm run build` 校验并复制已构建的 Linux 资源；重编译使用 `npm run build:linux`，需要 Docker。固定版本、补丁、源码导出和验证命令见 [Linux 构建说明](linux/README.md)。
+
 ## 使用前了解
 
 - 模型推理使用你配置的服务，任务所需的页面内容和附件会发送到该接口。书签可能包含 API Key，请勿分享含密钥的书签。
@@ -82,4 +93,4 @@ Pi Tab 基于 Pi Durable，把 Agent 带进你正在浏览的网页。点击书�
 
 感谢 [LINUX DO](https://linux.do/) 社区提供交流与分享的空间。
 
-本项目采用 [Apache License 2.0](LICENSE)。
+本项目代码采用 [Apache License 2.0](LICENSE)；随扩展分发的 Linux、BusyBox 和 linux-wasm 运行代码保留各自许可证，详见 [NOTICE](NOTICE) 和 [Linux 构建说明](linux/README.md)。

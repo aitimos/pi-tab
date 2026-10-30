@@ -1,3 +1,6 @@
+import {createLinuxEnvironments} from './linux-env.js';
+import {createLinuxTools} from './linux-tools.js';
+
 // One durable Pi runtime owns each site's conversations. Page scripts only render
 // the UI and execute page tools, so a navigation cannot close an active run.
 const engines = new Map();
@@ -11,7 +14,9 @@ async function background(request) {
 
 async function engineFor(site) {
   if (!engines.has(site)) engines.set(site, (async () => {
+    const linux=createLinuxEnvironments(site);
     const pi = PiConsolePlugin.install({
+      executionEnv:linux.get, nativeTools:createLinuxTools(),
       globalName: `__pi_site_${btoa(site).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'')}`,
       storageName: `pi-tab-site-${site}`,
       deferResume: true,
@@ -65,6 +70,8 @@ async function engineFor(site) {
         return background({type:'tabs-read',tabId,chatId,limit});
       } });
     pi.onEvent(event => {
+      if(event.type==='chat_deleted'||event.type==='chat_reset')linux.delete(event.conversationId);
+      if(event.type==='disposed')linux.dispose();
       if (event.type === 'chat_created' && targets.has(event.conversationId)) {
         targets.set(event.chatId, targets.get(event.conversationId));
       }
@@ -130,6 +137,8 @@ chrome.runtime.onMessage.addListener((message, _sender, respond) => {
       if (message.name === 'selectModel') return agent.selectModel(args[0]);
       if (message.name === 'sendToAgent') return agent.sendToAgent(...args);
       if (message.name === 'abort') return agent.abort();
+      if (message.name === 'reset') return agent.reset();
+      if (message.name === 'runTool') return agent.runTool(...args);
       if (['prompt','steer','followUp'].includes(message.name)) return agent[message.name](args[0]);
       throw new Error('未知 agent 操作。');
     }

@@ -2,3 +2,15 @@ Pi Tab
 Copyright 2026 d4rw1nz and Pi Tab contributors
 
 Licensed under the Apache License, Version 2.0.
+
+The Chrome extension also bundles third-party Linux components:
+- linux-wasm runtime by Joel Severin: GPL-2.0-only (linux/vendor/LICENSE).
+- Linux kernel: GPL-2.0, with the syscall note in linux/assets/KERNEL-COPYING.
+- BusyBox: GPL-2.0 (linux/assets/BUSYBOX-LICENSE and GPL-2.0).
+- musl: see linux/assets/MUSL-COPYRIGHT.
+- Pi Tab's guest bridge (linux/bridge.c): GPL-2.0-only.
+
+Pinned source revisions, local patches, and rebuild instructions are in linux/.
+Export corresponding sources with scripts/export-linux-sources.sh and distribute
+linux/sources/ alongside extension binaries. These components are not relicensed
+under Apache-2.0. In the extension package, component licenses are in linux/.

@@ -35,7 +35,7 @@ async function engineFixture() {
       return {ok:true,value:{tabs:[]}};
     },
   }};
-  vm.runInNewContext(await readFile('src/extension-engine.js','utf8'),{PiConsolePlugin:{install:()=>pi,createId},chrome,Map,Set,crypto:globalThis.crypto,AbortController,btoa:value=>Buffer.from(value).toString('base64')});
+  vm.runInNewContext((await readFile('src/extension-engine.js','utf8')).replace(/^import .*;$/gm,''),{createLinuxEnvironments:()=>({get(){},delete(){},dispose(){}}),createLinuxTools:()=>[],PiConsolePlugin:{install:()=>pi,createId},chrome,Map,Set,crypto:globalThis.crypto,AbortController,btoa:value=>Buffer.from(value).toString('base64')});
   const send=(method,chatId,tabId,args=[],name)=>new Promise(resolve=>messageHandler({target:'engine',site:'example.com',method,chatId,tabId,args,name},{},resolve));
   await send('initialize',undefined,10);
   return {send,tools,requests,emit,running,stopped,close:tabId=>new Promise(resolve=>messageHandler({type:'tab-closed',tabId},{},resolve)),setFailure:message=>{failure=message;}};

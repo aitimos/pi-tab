@@ -58,7 +58,7 @@ try{
   await browser('tab','new',`chrome-extension://${id}/test-controller.html`);
   const sourceTab=await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url)}});await chrome.storage.session.set({['active:'+tab.id]:true});const r=await chrome.tabs.sendMessage(tab.id,{type:'activate'});if(!r.ok)throw new Error(r.error);return tab.id})()`);
   const engine=async(method,args=[],chatId,name,site='127.0.0.1',tabId=sourceTab)=>{
-    await browser('tab','t2');
+    await browser('tab','1');
     const result=await evaluate(`chrome.runtime.sendMessage(${JSON.stringify({target:'engine',site,tabId,method,args,chatId,name})})`);
     assert.equal(result.ok,true,result.error);return result.value;
   };
@@ -74,7 +74,7 @@ try{
   for(const host of ['localhost','127.0.0.1']){
     const targetUrl=new URL('/target-'+host,url);targetUrl.hostname=host;
     const opened=await call('tab_open',{url:targetUrl.href});
-    await browser('tab','t2');
+    await browser('tab','1');
     await browser('wait','--fn',`(async()=>{const tab=await chrome.tabs.get(${opened.tabId});return tab.status==='complete'})()`);
     const tabs=await call('tab_list');
     const target=tabs.find(tab=>tab.tabId===opened.tabId);

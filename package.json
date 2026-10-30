@@ -15,13 +15,17 @@
     "test:i18n": "node scripts/test-i18n-ui.mjs",
     "test:stop": "node scripts/test-stop-markdown.mjs",
     "test:oauth": "node scripts/test-oauth.mjs",
-    "test:management": "node scripts/test-management.mjs"
+    "test:management": "node scripts/test-management.mjs",
+    "build:linux": "bash scripts/build-linux.sh",
+    "test:linux": "node scripts/test-linux-runtime.mjs",
+    "test:linux-tools": "node scripts/test-extension-linux.mjs"
   },
   "dependencies": {
     "@earendil-works/chord": "1.4.0",
     "@earendil-works/pi-ai": "1.4.0",
     "@earendil-works/pi-durable": "1.4.0",
     "marked": "18.1.2",
+    "picomatch": "4.0.7",
     "sval": "0.6.12",
     "typebox": "1.3.27"
   },

@@ -270,23 +270,23 @@ try{
     await click(`[data-language="${locale}"]`);
     await evaluate(`(()=>{const r=${root};r.getElementById('setting-prompt').value='Site instructions ${locale}';r.getElementById('setting-retries').value='2';r.getElementById('setting-compact').checked=false;r.getElementById('preferences').requestSubmit()})()`);
     await browser('wait','--fn',`pi.getPreferences().then(p=>p.systemPrompt==='Site instructions ${locale}' && p.maxRetries===2 && p.autoCompact===false)`);
-    await browser('tab','t1');
+    await browser('tab','0');
     await browser('wait','--fn',`pi.getPreferences().then(p=>p.systemPrompt==='Site instructions ${locale}')`);
     await send('Check shared instructions '+locale);
     await browser('wait','--fn',`!pi.busyFor(${selected}) && ${root}.getElementById('chat-messages').textContent.includes('Bookmark test reply')`);
     assert.ok(modelInputs.some(input=>input.messages.some(message=>JSON.stringify(message.content).includes('Site instructions '+locale))));
-    await browser('tab','t2');
+    await browser('tab','1');
   }
   await evaluate(`pi.agent(${selected}).configure({apiKey:'shared-site-key'})`);
-  await browser('tab','t1');
+  await browser('tab','0');
   await send('Use updated site key');
   await browser('wait','--fn',`!pi.busyFor(${selected})`);
   assert.equal(authorizations.at(-1),'Bearer shared-site-key');
   assert.equal(await evaluate(`pi.agent(${selected}).config.profileId`),peerProfile);
-  await browser('tab','t2');await browser('reload');await launch();
+  await browser('tab','1');await browser('reload');await launch();
   assert.equal((await evaluate('pi.getPreferences()')).systemPrompt,'Site instructions en');
   assert.equal(await evaluate(`pi.agent(${selected}).savedConfig().then(c=>c.apiKey)`),'shared-site-key');
-  await browser('tab','close');await browser('tab','t1');
+  await browser('tab','close');await browser('tab','0');
   console.log('PASS independent same-origin tabs share settings, models, credentials and providers; live prompt updates and reload persist in both languages');
 
   await browser('open',otherUrl);await launch();
@@ -319,7 +319,7 @@ try{
   await send('Send from an insecure HTTP page');
   await browser('wait','--fn',`${root}.getElementById('chat-messages').textContent.includes('Bookmark test reply') && !pi.busyFor(${selected})`);
   assert.equal(authorizations.at(-1),'Bearer http-test-key');
-  assert.deepEqual(await evaluate("pi.runTool('js_eval',{code:'return 1+1'})"),{output:[{type:'text',text:'2'}]});
+  assert.deepEqual(await evaluate("pi.runTool('js_eval',{code:'return 1+1'})"),{output:[{type:'text',text:'2'}],diagnostics:[]});
   await browser('reload');await launch();
   assert.equal(await evaluate(`pi.agent(${selected}).savedConfig().then(c=>c.apiKey)`),'http-test-key');
   assert.ok((await evaluate('pi.listChats()')).some(chat=>chat.id===insecureId));

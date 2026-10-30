@@ -1,7 +1,7 @@
 import {createHash} from 'node:crypto';
 import { build, transform } from 'esbuild';
 import { minify } from 'terser';
-import { mkdir, readFile, rm, writeFile, cp } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile, cp, readdir } from 'node:fs/promises';
 import { builtinProviders } from '@earendil-works/pi-ai/providers/all';
 import { makeBookmarklet } from './make-bookmarklet.mjs';
 import { deflateSync, gzipSync } from 'node:zlib';
@@ -141,7 +141,19 @@ const oauthUIBuild=await build({entryPoints:['src/oauth-ui.js'],bundle:true,form
 const oauthUISource=oauthUIBuild.outputFiles[0].text;
 const extensionBootstrap = await readFile('src/extension-content.js', 'utf8');
 await writeFile('dist/extension/content.js', `if (!globalThis.__piTabExtensionLoaded) {\nglobalThis.__piTabExtensionLoaded = true;\n(() => {\nglobalThis.__piTabDeferredInstall = true;\n${source}\n${oauthUISource}\n${chatSource}\n${extensionBootstrap}\n})();\n}`);
-const engineBootstrap = await readFile('src/extension-engine.js', 'utf8');
+const linuxResources=JSON.parse(await readFile('linux/resources.json','utf8'));
+for(const [file,checksum] of Object.entries(linuxResources.sha256)) {
+  if(createHash('sha256').update(await readFile(`linux/${file}`)).digest('hex')!==checksum)throw new Error(`Linux 资源校验失败：${file}；请运行 npm run build:linux。`);
+}
+await cp('linux/assets','dist/extension/linux',{recursive:true});
+await cp('linux/vendor/linux-worker.js','dist/extension/linux/linux-worker.js');
+await cp('linux/resources.json','dist/extension/linux/resources.json');
+await cp('linux/README.md','dist/extension/linux/README.md');
+await cp('linux/vendor/LICENSE','dist/extension/linux/LINUX-WASM-LICENSE');
+await mkdir('dist/extension/docs',{recursive:true});
+await cp('docs/linux-command-mounts.md','dist/extension/docs/linux-command-mounts.md');
+const engineBuild=await build({entryPoints:['src/extension-engine.js'],bundle:true,format:'iife',platform:'browser',target:'chrome110',minify:true,write:false});
+const engineBootstrap=engineBuild.outputFiles[0].text;
 await writeFile('dist/extension/oauth.js',oauthSource);
 await writeFile('dist/extension/engine.js', `globalThis.__piTabDeferredInstall = true;\n${source}\n${engineBootstrap}`);
 await writeFile('dist/extension/engine.html', '<!doctype html><html><head><meta charset="utf-8"></head><body><script src="oauth.js"></script><script src="engine.js"></script></body></html>');
@@ -178,7 +190,7 @@ await writeFile('dist/extension/icon.png', Buffer.concat([
   Buffer.from('89504e470d0a1a0a', 'hex'), pngChunk('IHDR', header), pngChunk('IDAT', deflateSync(rows)), pngChunk('IEND', Buffer.alloc(0)),
 ]));
 
-const extensionFiles = ['LICENSE', 'NOTICE', 'manifest.json', 'worker.js', 'content.js', 'engine.html', 'engine.js', 'oauth.js', 'icon.png', '_locales/en/messages.json', '_locales/zh_CN/messages.json'];
+const extensionFiles=(await readdir('dist/extension',{recursive:true,withFileTypes:true})).filter(entry=>entry.isFile()).map(entry=>`${entry.parentPath}/${entry.name}`.slice('dist/extension/'.length)).sort();
 const localParts = [], centralParts = [];
 let offset = 0;
 for (const filename of extensionFiles) {

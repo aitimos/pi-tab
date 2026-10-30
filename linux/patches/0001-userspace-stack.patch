@@ -1,0 +1,15 @@
+diff --git a/fs/binfmt_wasm.c b/fs/binfmt_wasm.c
+index ccc48e9d3..175f99daf 100644
+--- a/fs/binfmt_wasm.c
++++ b/fs/binfmt_wasm.c
+@@ -20,7 +20,9 @@
+ #include <linux/uaccess.h>
+ #include <linux/vmalloc.h>
+ 
+-#define WASM_STACK_SIZE		(2UL * PAGE_SIZE)
++/* BusyBox seq uses 8,512 bytes in musl printf, exceeding the upstream 8 KiB.
++ * NOMMU has no guard page, so reserve enough stack to avoid corrupting RAM. */
++#define WASM_STACK_SIZE		(256UL * 1024)
+ 
+ /*
+  * Userland expects the stack to be page aligned as of now, which allows it to

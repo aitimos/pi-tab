@@ -1,0 +1,177 @@
+--- a/runtime/linux.js
++++ b/runtime/linux.js
+@@ -1,7 +1,9 @@
+ // SPDX-License-Identifier: GPL-2.0-only
+ 
+ /// Create a Linux machine and run it.
+-const linux = async (worker_url, variant, vmlinux, boot_cmdline, initrd, log, console_write) => {
++export const linux = async (worker_url, variant, vmlinux, boot_cmdline, initrd, log, console_write, bridge, onBridge, onFailure) => {
++  const workers = new Set();
++  let stopped = false;
+   const arch_bits = variant.startsWith("wasm32_") ? 32 : 64;
+   const Ulong = (arch_bits == 32) ? Number : BigInt;
+ 
+@@ -29,6 +31,11 @@
+ 
+   /// Callbacks from Web Workers (each one representing one task).
+   const message_callbacks = {
++    bridge: message => {
++      try { onBridge(message); }
++      finally { Atomics.store(message.ack, 0, 1); Atomics.notify(message.ack, 0); }
++    },
++    crash: message => onFailure(new Error(message.message)),
+     start_primary: (message) => {
+       // CPU 0 has init_task which sits in static storage. After booting it becomes CPU 0's idle task. The runner will
+       // in this special case tell us where it is so that we can register it.
+@@ -48,16 +55,14 @@
+     stop_secondary: (message) => {
+       if (message.cpu <= 0) {
+         // If you arrive here, you probably got panic():ed with a broken stack.
+-        if (!confirm("Trying to stop secondary cpu with ID 0.\n\n" +
+-          "You probably got panic():ed with a broken stack. Continue?\n\n" +
+-          " (Say ok if you know what you are doing and want to catch the panic, otherwise cancel.)")) {
+-          throw new Error("Trying to stop secondary cpu with ID 0");
+-        }
++        onFailure(new Error('Linux CPU 0 stopped unexpectedly'));
++        return;
+       }
+ 
+       if (cpus[message.cpu]) {
+         log("[Main]: Stopping CPU " + message.cpu);
+         cpus[message.cpu].worker.terminate();
++        workers.delete(cpus[message.cpu].worker);
+         delete cpus[message.cpu];
+       } else {
+         log("[Main]: Tried to stop CPU " + message.cpu + " but it was already stopped (broken system)!");
+@@ -182,6 +187,7 @@
+       // Case 2: current task reaped another task => we know that the reaped task is not running. (kill == false).
+       // Case 3: we get here from Case 1 as it eventually scheduled out, calling serialize_me(). (kill == true).
+       task.worker.terminate();
++      workers.delete(task.worker);
+       delete tasks[dead_task];
+     }
+   };
+@@ -189,7 +195,9 @@
+   /// Create a runner for vmlinux. It will run in a Web Worker and execute some specified code.
+   const make_vmlinux_runner = (name, options) => {
+     // Note: SharedWorker does not seem to allow WebAssembly Module or Memory instances posted.
++    if (stopped) throw new Error("Linux instance has stopped");
+     const worker = new Worker(worker_url, { name: name });
++    workers.add(worker);
+ 
+     let locks = {
+       serialize: 0,
+@@ -201,22 +209,23 @@
+     const last_task = new Uint32Array(new SharedArrayBuffer(4));
+ 
+     worker.onerror = (error) => {
+-      throw error;
++      onFailure(new Error(error.message || "Linux worker failed"));
+     };
+ 
+     worker.onmessage = (message_event) => {
+       const data = message_event.data;
+-      message_callbacks[data.method](data, worker);
++      if (!stopped) message_callbacks[data.method](data, worker);
+     };
+ 
+     worker.onmessageerror = (error) => {
+-      throw error;
++      onFailure(new Error(error.message || "Linux worker failed"));
+     };
+ 
+     worker.postMessage({
+       ...options,
+       method: "init",
+       variant: variant,
++      bridge: bridge,
+       vmlinux: vmlinux,
+       memory: memory,
+       locks: locks,
+@@ -237,12 +246,15 @@
+   make_cpu(0);
+ 
+   return {
++    dispose: () => { stopped = true; for (const worker of workers) worker.terminate(); workers.clear(); },
+     key_input: (data) => {
+       const key_buffer = text_encoder.encode(data);  // Possibly UTF-8 (up to 16 bits).
+ 
+       // Append key_buffer to the end of input_buffer.
+       const old_size = input_buffer.byteLength;
+-      input_buffer = input_buffer.transfer(old_size + key_buffer.byteLength);
++      const next = new Uint8Array(old_size + key_buffer.byteLength);
++      next.set(new Uint8Array(input_buffer));
++      input_buffer = next.buffer;
+       (new Uint8Array(input_buffer)).set(key_buffer, old_size);
+     }
+   };
+--- a/runtime/linux-worker.js
++++ b/runtime/linux-worker.js
+@@ -3,6 +3,8 @@
+ (function (console) {
+   let port = self;
+   let variant;
++  let bridge_control, bridge_data;
++  const bridge_ack = new Int32Array(new SharedArrayBuffer(4));
+   let arch_bits;
+   let Ulong;
+   let memory = null;  // Note: memory.buffer has to be re-accessed after growing the memory!
+@@ -76,6 +78,21 @@
+ 
+   /// Callbacks from within Linux/Wasm out to our host code (cpu is not neccessarily ours).
+   const host_callbacks = {
++    pi_receive: (buffer, capacity) => {
++      const size = Atomics.load(bridge_control, 0);
++      if (!size) return 0;
++      if (size > capacity) throw new Error("Linux bridge packet exceeds capacity");
++      new Uint8Array(memory.buffer).set(bridge_data.subarray(0, size), buffer);
++      Atomics.store(bridge_control, 0, 0);
++      return size;
++    },
++    pi_cancelled: id => Atomics.load(bridge_control, 1) === id ? 1 : 0,
++    pi_reply: (id, kind, buffer, length, status) => {
++      const data = new Uint8Array(memory.buffer).slice(buffer, buffer + length);
++      Atomics.store(bridge_ack, 0, 0);
++      port.postMessage({ method: "bridge", id, kind, data, status, ack: bridge_ack }, [data.buffer]);
++      Atomics.wait(bridge_ack, 0, 0);
++    },
+     /// Start secondary CPU.
+     wasm_start_cpu: (cpu, idle_task) => {
+       // New web workers cannot be spawned from within a Worker in most browsers. It can currently not be spawned from
+@@ -134,6 +151,7 @@
+     /// Kernel panic. We can't proceed.
+     wasm_panic: (msg) => {
+       const message = "Kernel panic: " + get_cstring(memory, msg);
++      port.postMessage({method: "crash", message});
+       console.error(message);
+       log(message);
+ 
+@@ -268,6 +286,8 @@
+   /// Callbacks from the main thread.
+   const message_callbacks = {
+     init: (message) => {
++      bridge_control = new Int32Array(message.bridge, 0, 2);
++      bridge_data = new Uint8Array(message.bridge, 8);
+       variant = message.variant;
+       arch_bits = variant.startsWith("wasm32_") ? 32 : 64;
+       Ulong = (arch_bits == 32) ? Number : BigInt;
+@@ -308,7 +328,8 @@
+ 
+       // This is a global error handler that is used when calling Wasm code.
+       const wasm_error = (error) => {
+-        log("Wasm crash: " + error.toString());
++        port.postMessage({method: "crash", message: "Wasm crash: " + error.stack});
++        log("Wasm crash: " + error.stack);
+         console.error(error);
+ 
+         if (vmlinux_instance) {
+@@ -402,6 +423,9 @@
+         user_executable_imports = {
+           env: {
+             memory: memory,
++            pi_receive: host_callbacks.pi_receive,
++            pi_reply: host_callbacks.pi_reply,
++            pi_cancelled: host_callbacks.pi_cancelled,
+             __memory_base: new WebAssembly.Global({ value: 'i' + arch_bits, mutable: false }, Ulong(user_executable_params.data_start)),
+             __stack_pointer: new WebAssembly.Global({ value: 'i' + arch_bits, mutable: true }, stack_pointer),
+             __indirect_function_table: new WebAssembly.Table({ initial: 4096, element: "anyfunc" }), // TODO: fix this!

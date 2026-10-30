@@ -567,7 +567,7 @@ async function openChat(initialConfig, options = {}) {
         <button id="tool-result-tab" role="tab" aria-controls="tool-result-panel" aria-selected="false" tabindex="-1">结果</button>
       </div>
       <div class="tool-panel" id="tool-call-panel" role="tabpanel" aria-labelledby="tool-call-tab" tabindex="0"><pre id="tool-call-data"></pre></div>
-      <div class="tool-panel" id="tool-result-panel" role="tabpanel" aria-labelledby="tool-result-tab" tabindex="0" hidden><pre id="tool-result-data"></pre></div>
+      <div class="tool-panel" id="tool-result-panel" role="tabpanel" aria-labelledby="tool-result-tab" tabindex="0" hidden><pre id="tool-result-data"></pre><div id="tool-result-images"></div></div>
     </dialog>
     <button id="resize-handle" type="button" aria-label="拖动调整窗口大小" title="拖动调整窗口大小"></button>
   `);
@@ -1449,6 +1449,14 @@ async function openChat(initialConfig, options = {}) {
     i18n.text(byId('tool-dialog-title'), () => t("{0} 工具详情", row._call.name));
     i18n.text(byId('tool-call-data'), readable(row._call));
     i18n.text(byId('tool-result-data'), () => row._result ?? t("等待结果…"));
+    const images=byId('tool-result-images');
+    images.replaceChildren();
+    for(const item of row._images||[]) {
+      const image=document.createElement('img');
+      image.src=`data:${item.mimeType};base64,${item.data}`;
+      image.alt=t("图片结果");image.style.maxWidth='100%';image.style.display='block';
+      images.append(image);
+    }
   }
   function openToolDialog(row) {
     state.selectedTool = row;
@@ -1497,7 +1505,9 @@ async function openChat(initialConfig, options = {}) {
         row.dataset.state = result ? (result.isError ? 'error' : 'done') : 'interrupted';
         i18n.text(row.querySelector('.tool-state'), () => result ? (result.isError ? t("失败") : t("已完成")) : t("已结束"));
         const content = result?.content?.map(item => item.text || (item.type === 'image' ? t("图片结果") : item.type)).join('\n');
-        row._result = result ? readable(content) : t("未收到执行结果。");
+        const diff=result?.details?.diff;
+        row._result = result ? readable(content)+(diff?`\n\n${diff}`:'') : t("未收到执行结果。");
+        row._images=result?.content?.filter(item=>item.type==='image')||[];
         const preview = row.querySelector('.tool-preview');
         i18n.text(preview, () => result ? toolPreview(content) : t("未收到结果"));
         preview.title = preview.textContent;
@@ -1668,14 +1678,23 @@ async function openChat(initialConfig, options = {}) {
     const followEnd = list.scrollHeight-list.clientHeight-scrollTop < 64;
     const restoreScroll = preserveMarkdownScroll(list);
     list.replaceChildren();
+    state.tools.clear();state.trace=null;state.traces=[];state.stream=null;
     for (let index = 0; index < history.entries.length; index++) {
       const entry = history.entries[index];
+      if(entry.kind==='pi.tool-result') {
+        const result=entry.model?.find(item=>item.role==='toolResult');
+        if(result)updateToolCall({type:'tool_execution_end',toolCallId:result.toolCallId,toolName:result.toolName,entry});
+        continue;
+      }
       if (entry.kind === 'pi-tab.agent-message') {
         message('agent', entry.data?.text || '', false);
         continue;
       }
       if (entry.kind !== 'pi.user' && entry.kind !== 'pi.assistant') continue;
       const model = entry.model?.find(item => item.role === (entry.kind === 'pi.user' ? 'user' : 'assistant'));
+      if(entry.kind==='pi.assistant' && Array.isArray(model?.content))for(const call of model.content.filter(item=>item.type==='toolCall')) {
+        updateToolCall({type:'tool_execution_start',toolCallId:call.id,toolName:call.name,args:call.arguments});
+      }
       if (entry.kind === 'pi.assistant' && model?.stopReason === 'aborted') {
         const next = history.entries.slice(index + 1).find(item => ['pi.user', 'pi.assistant', 'pi-tab.agent-message'].includes(item.kind));
         if (next?.kind === 'pi.assistant' && next.model?.some(item => item.role === 'assistant' && item.stopReason !== 'aborted')) continue;

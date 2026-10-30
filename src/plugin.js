@@ -22,7 +22,7 @@ import { googleVertexApi } from '@earendil-works/pi-ai/api/google-vertex.lazy';
 import { mistralConversationsApi } from '@earendil-works/pi-ai/api/mistral-conversations.lazy';
 import { openAICodexResponsesApi } from '@earendil-works/pi-ai/api/openai-codex-responses.lazy';
 import { piMessagesApi } from '@earendil-works/pi-ai/api/pi-messages.lazy';
-import { validateToolArguments } from '@earendil-works/pi-ai/utils/validation';
+import {callTool} from './tool-call.js';
 import { AssistantEntry, createRegistry, defineDoc, defineExtension, defineTool, Harness, InboxDoc, section, watchEvents } from '@earendil-works/pi-durable';
 import { IndexedDbStorage } from '@earendil-works/pi-durable/storage/indexeddb';
 import { Type } from 'typebox';
@@ -107,7 +107,7 @@ function describe(el) {
 export { createModelConfig } from './model-config.js';
 export { default as loadModelCatalog } from '#model-catalog';
 
-export function install({ globalName = 'pi', log = true, storageName, storageFactory, deferResume = false, toolOnly = false, pageContext = () => ({ url: location.href, title: document.title }) } = {}) {
+export function install({ globalName = 'pi', log = true, storageName, storageFactory, executionEnv, nativeTools = [], deferResume = false, toolOnly = false, pageContext = () => ({ url: location.href, title: document.title }) } = {}) {
   if (window[globalName]?.__piConsolePlugin) return window[globalName];
   if (globalName in window) throw new Error(`window.${globalName} 已被网页占用。请用 PiConsolePlugin.install({ globalName: 'piAgent' })。`);
 
@@ -276,6 +276,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
   window.fetch = observedFetch;
   const onPageHide = () => {
     if (!harness || disposed) return;
+    emit({type:'disposed'});
     void harness.close(ctx).then(() => releaseStorageLock?.(), error => {
       releaseStorageLock?.();
       nativeConsole.warn('[pi] 关闭存储失败', error);
@@ -296,21 +297,24 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     }));
   }
 
-  function registerTool(definition) {
+  function registerNativeTool(definition) {
     if (disposed) throw new Error('pi 已关闭，请重新粘贴安装代码。');
     if (!/^[a-zA-Z][a-zA-Z0-9_-]*$/.test(definition.name ?? '') || !definition.description || !definition.parameters || typeof definition.execute !== 'function') {
       throw new TypeError('工具需要 name、description、parameters（JSON Schema）和 execute(args)。');
     }
-    const tool = defineTool({
-      name: definition.name, description: definition.description, parameters: definition.parameters,
-      replay: definition.replay ?? 'unsafe', executionMode: 'sequential',
-      execute: async (args, api, context) => {
-        const output = await definition.execute(args, api, context);
-        return output && Array.isArray(output.output) ? output : result(output);
-      },
-    });
+    const tool = defineTool({...definition, replay:definition.replay ?? 'unsafe'});
     toolMap.set(tool.name, tool); refreshTools();
     return { name: tool.name, registered: true };
+  }
+
+  function registerTool(definition) {
+    if(typeof definition.execute!=='function')throw new TypeError('工具需要 execute(args)。');
+    return registerNativeTool({...definition, executionMode:'sequential',
+      execute:async(args,api,context)=>{
+        const output=await definition.execute(args,api,context);
+        return output && Array.isArray(output.output)?output:result(output);
+      },
+    });
   }
 
   registerTool({ name: 'page_snapshot', description: '读取当前页面的 URL、标题、可见文字和交互元素，先用它了解页面。', replay: 'safe',
@@ -543,7 +547,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
   const pi = {
     __piConsolePlugin: true, version: '1.1.0', durableVersion: '1.4.0', Type,
     get defaultPrompt() { return DEFAULT_PROMPT; },
-    ready: null, configure, prompt, registerTool, listChats, selectChat, newChat, createChat,
+    ready: null, configure, prompt, registerTool, registerNativeTool, listChats, selectChat, newChat, createChat,
     get i18n() { return getI18n(); },
     async deleteChat(id) {
       await pi.ready; ensureOpen();
@@ -716,6 +720,8 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
           emit({ type: 'queue_changed', conversationId: chatId });
         },
         abort: () => stopConversation(chatId),
+        reset: () => pi.reset(chatId),
+        runTool: (name,args,options) => pi.runTool(name,args,{...options,conversationId:chatId}),
         newChat: async () => { chatId = await createChat({ inheritFrom: chatId }); return pi.listChats(); },
         selectChat: async id => {
           const chats = await pi.listChats();
@@ -748,16 +754,18 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     tools: () => [...toolMap.values()].map(({ name, description, parameters }) => ({ name, description, parameters })),
     unregisterTool(name) { ensureOpen(); const removed = toolMap.delete(name); refreshTools(); return removed; },
     onEvent(listener) { if (typeof listener !== 'function') throw new TypeError('listener 必须是函数。'); listeners.add(listener); return () => listeners.delete(listener); },
-    async runTool(name, args = {}, {signal} = {}) {
+    async runTool(name, args = {}, {signal, onOutput, conversationId=conversation?.id} = {}) {
       await pi.ready; ensureOpen();
-      const tool = toolMap.get(name); if (!tool) throw new Error(`未知工具: ${name}`);
-      const validated = validateToolArguments(tool, { type: 'toolCall', id: createId(), name, arguments: args });
-      signal?.throwIfAborted();
-      const output = await tool.execute(validated, { models, output: text => nativeConsole.info('[pi tool]', text), details: async () => {}, diagnostic: () => {} }, withAbortSignal(signal ?? new AbortController().signal, ctx));
-      return output;
+      const tool=toolMap.get(name); if(!tool)throw new Error(`未知工具: ${name}`);
+      const context=withAbortSignal(signal ?? new AbortController().signal,ctx);
+      const target=conversationId===undefined?undefined:await harness.conversation(conversationId,context);
+      const agent=target?await target.agent(context):undefined;
+      const env=target?await executionEnv?.({conversationId,cwd:agent.cwd,read:harness},context):undefined;
+      return callTool(tool,args,{models,env,conversationId,agent:context=>target.agent(context),
+        output:onOutput??(text=>nativeConsole.info('[pi tool]',text))},context);
     },
     async abort() { await pi.ready; return stopConversation(conversation.id); },
-    async reset() { await pi.abort(); await conversation.reset(undefined, ctx); events.length = 0; return 'conversation reset'; },
+    async reset(id=conversation.id) { await pi.ready; await stopConversation(id); await (await harness.conversation(id,ctx)).reset(undefined,ctx); events.length=0; emit({type:'chat_reset',conversationId:id}); return 'conversation reset'; },
     async history() { await pi.ready; ensureOpen(); return conversation.context(ctx); },
     async usage() { await pi.ready; ensureOpen(); return harness.usage(ctx); },
     async dispose() {
@@ -771,6 +779,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
       window.removeEventListener('error', onError); window.removeEventListener('unhandledrejection', onError);
       window.removeEventListener('pagehide', onPageHide);
       window.removeEventListener('storage', onSiteSettings);
+      emit({type:'disposed'});
       listeners.clear(); toolMap.clear(); configuration = null; models.clearProviders();
       if (window[globalName] === pi) delete window[globalName];
       nativeConsole.info('[pi] 已关闭。');
@@ -780,6 +789,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
       nativeConsole.info(guide); return guide;
     },
   };
+  for(const tool of nativeTools)registerNativeTool(tool);
   window[globalName] = pi;
   if (toolOnly) {
     pi.ready = Promise.resolve(pi);
@@ -787,7 +797,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
   }
   pi.ready = (async () => {
     modelConfig = createModelConfig(await loadModelCatalog());
-    const openHarness = async name => Harness.open(await (storageFactory ? storageFactory(name) : IndexedDbStorage.open(name)), { models, registry, settings: () => ({
+    const openHarness = async name => Harness.open(await (storageFactory ? storageFactory(name) : IndexedDbStorage.open(name)), { models, registry, env:executionEnv, settings: () => ({
       toolExecution: preferences.toolExecution ?? 'sequential',
       retry: { maxRetries: preferences.maxRetries ?? 0 },
       compaction: { enabled: preferences.autoCompact ?? true },

@@ -27,6 +27,7 @@ Built on Pi Durable, Pi Tab brings an agent into the webpage you are browsing. O
 | Edge sidebar | Dock to either edge to collapse on mouse leave and expand on hover; active drafts stay open |
 | Conversation management | Generate titles automatically, see running status, switch or delete conversations, and open another task in a new window |
 | Agent collaboration | Exchange messages between agents on the same page; the extension can also open tabs, send tasks, and read results |
+| Linux tools (extension only) | Each conversation gets its own Linux for `bash/read/grep/edit` command execution and file operations |
 | Chinese and English | Follow your browser language or switch in settings without interrupting conversations or tasks |
 | Appearance and preferences | Follow the page or system theme, or choose light or dark; drag, resize, minimize, and dock windows at the edge |
 
@@ -63,6 +64,16 @@ Stop cancels the current conversation and its queued messages. In extension mode
 
 The two modes keep separate conversation records. Start from the extension icon for cross-tab tools; installing the extension does not add those tools to bookmark sessions.
 
+### Linux in the extension
+
+Linux starts on the first file or command operation, with `/workspace` as the default directory. The `bash` tool runs BusyBox `/bin/sh`, including pipes and redirection; GNU Bash extensions are not supported. `read` supports pagination and images. `edit` accepts `{path, edits:[{oldText,newText}]}` and returns a diff. `grep` supports extended regular expressions, literal search, file globs and context, defaults to 100 matches and 50 KiB, and does not apply `.gitignore`.
+
+Files live in the conversation’s Linux memory. Child agents have independent filesystems. Page reloads and tab closure preserve files; conversation deletion/reset, extension reload, background page recreation and browser exit discard them. Unfinished Linux tool calls are not replayed automatically. The kernel and initial filesystem are bundled, so Linux can start offline; model calls still need a model service.
+
+There is no interactive terminal, host directory mount or command mount in this version. The [future command mounting contract](docs/linux-command-mounts.md) describes `curl → fetch` as a design example only.
+
+`npm run build` verifies and copies existing Linux assets. Use `npm run build:linux` with Docker to rebuild them. See the [Linux build guide](linux/README.md) for pinned versions, patches, source export and verification commands.
+
 ## Before you start
 
 - Inference uses your configured service. Page content and attachments needed for a task are sent to that API. Bookmarks may contain API keys; do not share bookmarks containing credentials.
@@ -77,7 +88,7 @@ Report problems through [Issues](https://github.com/aitimos/pi-tab/issues) or se
 
 Thanks to the [LINUX DO](https://linux.do/) community for providing a space to exchange ideas and share projects.
 
-Licensed under the [Apache License 2.0](LICENSE).
+Project code is licensed under the [Apache License 2.0](LICENSE). Bundled Linux, BusyBox and linux-wasm runtime code retain their own licenses; see [NOTICE](NOTICE) and the [Linux build guide](linux/README.md).
 
 ## Account sign-in
 
