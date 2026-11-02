@@ -12,18 +12,19 @@
     "assets/GPL-2.0": "8780e78a1a737e127f25a65f6d95269bffd36158dc261114de7859b490bfc5aa",
     "assets/KERNEL-COPYING": "fb5a425bd3b3cd6071a3a9aff9909a859e7c1158d54d32e07658398cd67eb6a0",
     "assets/MUSL-COPYRIGHT": "f9bc4423732350eb0b3f7ed7e91d530298476f8fec0c6c427a1c04ade22655af",
-    "assets/initramfs.cpio.gz": "e871fbfa29182b7d63ed167b1f41dc070bbc7b5d3b88a36ce6804d324626a83f",
+    "assets/initramfs.cpio.gz": "8a55be323f5c682df068b3a4c2d37ae854bf4984a28b4c4ad43d7e0cf4abcc30",
     "assets/vmlinux.wasm": "fa7001a9165346f3f04da185d0eec0ee1b97036e979477b3fb9c7866eee3ae13",
     "vendor/LICENSE": "00354f4583626be5e1fd499effd365201f8b74f581293d0f8ba77344355173d6",
-    "vendor/linux-worker.js": "38a0a2d4520acd84a7c60fcc7866d0c07650c2f8d06df687ecb6acaeed9d3c66",
-    "vendor/linux.js": "0b9ed2720159325bcc91e8aabd64e210c048330aef6fb8666f5963a427f08e8d",
+    "vendor/linux-worker.js": "f50e9fc4afed3d9d8400216b9c6a9c3964284fb9ed56328c73ad4a80dd46e202",
+    "vendor/linux.js": "afd87c216049d26820a6d715aec54369aecddf564edb7bdc170ad0e384427111",
     "patches/0001-userspace-stack.patch": "414344b1155add5cf45a7dcffc6e74756048fa84d7bff936c28dc426a3046166",
-    "bridge.c": "3213d84220a2e44210bf8273966669525d7fe5563c370eb81407f09beb4aee7a",
-    "init": "ed7f1a61b7f5aa257f3178bdeefcce994662983cbd402ef9fbfb27d677b5c8ed",
+    "bridge.c": "d416e2f03b5938f1d6cbd2d00955957df218ddd1f07c04375a60e0d94337078b",
+    "command.c": "9783ac20de92dd856b1713411a2942b9f5ada4166d4a0af4a10e9c51e34660dd",
+    "init": "ccf820d02f8f4eab3625ecc1b5c6e85218ae29621b34a8e8eace4df40f58b060",
     "versions.env": "f4a2cfdfe63f4cbc31b140ed7e6c81906978b99992223662f11c1f84a8161269",
     "Dockerfile": "ecda0db7a574a0c0efc4281f6a2baf7cc2d54331bcad411cf53ac889750e7755",
     "build-system.sh": "0604f8f4700fa8663f17b2bbbc9afc00c54b155fb543b106ab329730a196883b",
-    "build-resources.sh": "a90b50b14e1ef9a6d12a83655376891726b256f9a6e3e8f1daaf8343f8b26ef9",
-    "runtime.patch": "a087a4fbfd011d07cd931949e3dde4646112bea556f90aa18ea3bba1c6ac1170"
+    "build-resources.sh": "927dba3f034e753ccd2340ef8945cf2d2b3b401804ea0b8ed21c9f9acbe265e5",
+    "runtime.patch": "361d5c672de014b7fcdb2e952605c636914e34ed15333ea4896851122b3848de"
   }
 }

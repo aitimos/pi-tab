@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
 /// Create a Linux machine and run it.
-export const linux = async (worker_url, variant, vmlinux, boot_cmdline, initrd, log, console_write, bridge, onBridge, onFailure) => {
+export const linux = async (worker_url, variant, vmlinux, boot_cmdline, initrd, log, console_write, bridge, onBridge, onFailure, onCommand) => {
   const workers = new Set();
   let stopped = false;
   const arch_bits = variant.startsWith("wasm32_") ? 32 : 64;
@@ -31,6 +31,7 @@ export const linux = async (worker_url, variant, vmlinux, boot_cmdline, initrd, 
 
   /// Callbacks from Web Workers (each one representing one task).
   const message_callbacks = {
+    command: (message, worker) => onCommand(message, worker),
     bridge: message => {
       try { onBridge(message); }
       finally { Atomics.store(message.ack, 0, 1); Atomics.notify(message.ack, 0); }
@@ -176,6 +177,7 @@ export const linux = async (worker_url, variant, vmlinux, boot_cmdline, initrd, 
 
   const kill_task = (dead_task) => {
     const task = tasks[dead_task];
+    onCommand({kind: "closed"}, task.worker);
     if (task.running) {
       // Case 1: current task is killing itself => we know that the reaped task is currently running (probably kthread).
       //

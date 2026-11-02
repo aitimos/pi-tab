@@ -75,6 +75,11 @@ try{
     assert.equal(result.toolName,name);return result;
   };
   const text=result=>result.content.filter(p=>p.type==='text').map(p=>p.text).join('\n');
+  let fetched=await call('bash',{command:`curl -fsS '${new URL('/curl-model',url).href}' > fetched.html; cat fetched.html`});
+  assert.equal(fetched.isError,false);assert.match(text(fetched),/<h1>\/curl-model<\/h1>/);
+  fetched=await call('read',{path:'fetched.html'});assert.match(text(fetched),/curl-model/);
+  fetched=await call('bash',{command:'curl --unsupported-option https://example.test'});assert.equal(fetched.isError,true);assert.match(text(fetched),/unsupported option/);
+  console.log('PASS model bash invokes real Linux curl → extension fetch, persists downloaded file for read, and records unsupported-option errors');
   const path="/workspace/a ' quoted.txt",quote=value=>"'"+value.replaceAll("'","'\"'\"'")+"'";
   let result=await call('bash',{command:`printf 'one\\r\\n中文 needle\\r\\nthree\\r\\nneedle end\\r\\n' > ${quote(path)}; printf 'stream-first\\n'; sleep 0.3; printf 'stream-last\\n'`});
   assert.equal(result.isError,false);assert.match(text(result),/stream-first[\s\S]*stream-last/);

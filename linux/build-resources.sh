@@ -3,9 +3,11 @@ set -euo pipefail
 export REAL_LLVM=/build/workspace/install/llvm/bin
 sysroot=/build/workspace/install/musl-wasm32_nommu
 compiler=/build/upstream/tools/fake-llvm/clang
-mkdir -p /build/overlay/sbin /project/linux/assets
+mkdir -p /build/overlay/sbin /build/overlay/mnt/tools/bin /project/linux/assets
 "$compiler" --target=wasm-linux-musl -march=wasm32 -fPIC -O2 -Wframe-larger-than=2048 -Werror=frame-larger-than --sysroot="$sysroot" \
   /project/linux/bridge.c -o /build/overlay/sbin/pi-bridge -Wl,-shared -lc --rtlib=compiler-rt
+"$compiler" --target=wasm-linux-musl -march=wasm32 -fPIC -O2 -Wframe-larger-than=2048 -Werror=frame-larger-than --sysroot="$sysroot" \
+  /project/linux/command.c -o /build/overlay/mnt/tools/bin/curl -Wl,-shared -lc --rtlib=compiler-rt
 cp /project/linux/init /build/overlay/init
 chmod +x /build/overlay/init /build/overlay/sbin/pi-bridge
 gzip -dc /build/workspace/install/initramfs-wasm32_nommu/initramfs.cpio.gz > /build/pi-tab-initramfs.cpio
@@ -23,7 +25,7 @@ from pathlib import Path
 root=Path('/project/linux')
 files={str(path.relative_to(root)):hashlib.sha256(path.read_bytes()).hexdigest()
        for folder in ['assets','vendor','patches'] for path in sorted((root/folder).glob('*')) if path.is_file()}
-for name in ['bridge.c','init','versions.env','Dockerfile','build-system.sh','build-resources.sh','runtime.patch']:
+for name in ['bridge.c','command.c','init','versions.env','Dockerfile','build-system.sh','build-resources.sh','runtime.patch']:
     files[name]=hashlib.sha256((root/name).read_bytes()).hexdigest()
 versions=dict(line.split('=',1) for line in (root/'versions.env').read_text().splitlines() if '=' in line)
 (root/'resources.json').write_text(json.dumps({'variant':'wasm32_nommu','versions':versions,'sha256':files},indent=2)+'\n')

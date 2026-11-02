@@ -27,7 +27,7 @@ __attribute__((import_module("env"), import_name("pi_cancelled")))
 extern int pi_cancelled(int id);
 
 enum { EXEC=1, OPEN, READ, CLOSE, STAT, FSTAT, WRITE, MKDIR, LIST, REMOVE, REALPATH, RENAME, TRUNCATE, FLUSH };
-enum { READY=0, STDOUT=1, STDERR=2, DONE=3, ERROR=4, DATA=5 };
+enum { READY=0, STDOUT=1, STDERR=2, DONE=3, ERROR=4, DATA=5, PROCESS_GROUP=6 };
 static unsigned char packet[1024*1024], bytes[64*1024];
 // The upstream loader gives userspace only 8 KiB of stack. Keep the
 // 4096-entry request argument table in static storage, like the packet.
@@ -118,6 +118,7 @@ static void execute(int id, char **args, int count) {
     if(output_fd>=0) { close(output_fd); unlink(output_path); }
     errno=spawn_errno; failure(id); return;
   }
+  pi_reply(id,PROCESS_GROUP,NULL,0,child);
   fcntl(out[0], F_SETFL, O_NONBLOCK); fcntl(err[0], F_SETFL, O_NONBLOCK);
   struct pollfd streams[2]={{out[0], POLLIN, 0}, {err[0], POLLIN, 0}};
   long long cancelled_at=0;
@@ -141,7 +142,9 @@ static void execute(int id, char **args, int count) {
         pi_reply(id, i==0?STDOUT:STDERR, bytes, length, 0);
       }
     }
-    pid_t waited=waitpid(child, &status, WNOHANG);
+    // PID 1 also owns descendants orphaned when their shell is stopped.
+    pid_t waited;
+    do { waited=waitpid(-1, &status, WNOHANG); } while(waited>0 && waited!=child);
     if(waited==child) {
       // Drain bytes already in the pipes before finishing; don't wait for a
       // background descendant that inherited an output handle to close it.
@@ -176,7 +179,7 @@ int main(int argc, char **argv) {
   pi_reply(0, READY, NULL, 0, 0);
   while(1) {
     int length=pi_receive(packet, sizeof(packet));
-    if(length==0) { usleep(10000); continue; }
+    if(length==0) { while(waitpid(-1,NULL,WNOHANG)>0) {} usleep(10000); continue; }
     if(length<16) continue;
     uint32_t *header=(uint32_t *)packet;
     int id=header[0], operation=header[1], count=header[2], data_length=header[3];

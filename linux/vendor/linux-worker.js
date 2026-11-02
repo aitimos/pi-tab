@@ -5,6 +5,7 @@
   let variant;
   let bridge_control, bridge_data;
   const bridge_ack = new Int32Array(new SharedArrayBuffer(4));
+  let command_control, command_data;
   let arch_bits;
   let Ulong;
   let memory = null;  // Note: memory.buffer has to be re-accessed after growing the memory!
@@ -78,6 +79,28 @@
 
   /// Callbacks from within Linux/Wasm out to our host code (cpu is not neccessarily ours).
   const host_callbacks = {
+    pi_command_start: (buffer, length, argc, group) => {
+      const mailbox = new SharedArrayBuffer(65536 + 16);
+      command_control = new Int32Array(mailbox, 0, 4);
+      command_data = new Uint8Array(mailbox, 16);
+      const data = new Uint8Array(memory.buffer).slice(buffer, buffer + length);
+      port.postMessage({method: "command", kind: "start", mailbox, data, argc, group}, [data.buffer]);
+    },
+    pi_command_receive: (buffer, capacity, operation, fd) => {
+      if (!Atomics.load(command_control, 0)) return 0;
+      const length = command_control[3];
+      if (length < 0 || length > capacity) throw new Error("Command IO exceeds capacity");
+      const view = new DataView(memory.buffer);
+      view.setInt32(operation, command_control[1], true);
+      view.setInt32(fd, command_control[2], true);
+      new Uint8Array(memory.buffer).set(command_data.subarray(0, length), buffer);
+      Atomics.store(command_control, 0, 0);
+      return length + 1;
+    },
+    pi_command_reply: (buffer, length, status) => {
+      const data = new Uint8Array(memory.buffer).slice(buffer, buffer + length);
+      port.postMessage({method: "command", kind: "reply", data, status}, [data.buffer]);
+    },
     pi_receive: (buffer, capacity) => {
       const size = Atomics.load(bridge_control, 0);
       if (!size) return 0;
@@ -426,6 +449,9 @@
             pi_receive: host_callbacks.pi_receive,
             pi_reply: host_callbacks.pi_reply,
             pi_cancelled: host_callbacks.pi_cancelled,
+            pi_command_start: host_callbacks.pi_command_start,
+            pi_command_receive: host_callbacks.pi_command_receive,
+            pi_command_reply: host_callbacks.pi_command_reply,
             __memory_base: new WebAssembly.Global({ value: 'i' + arch_bits, mutable: false }, Ulong(user_executable_params.data_start)),
             __stack_pointer: new WebAssembly.Global({ value: 'i' + arch_bits, mutable: true }, stack_pointer),
             __indirect_function_table: new WebAssembly.Table({ initial: 4096, element: "anyfunc" }), // TODO: fix this!

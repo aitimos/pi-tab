@@ -1,4 +1,6 @@
 import {linux} from '../linux/vendor/linux.js';
+import {LinuxCommand} from './linux-command.js';
+import {runCurl} from './linux-curl.js';
 
 export const operations = Object.freeze({exec:1,open:2,read:3,close:4,stat:5,fstat:6,write:7,mkdir:8,list:9,remove:10,realpath:11,rename:12,truncate:13,flush:14});
 const encoder = new TextEncoder();
@@ -6,8 +8,10 @@ let assets;
 
 /** One Linux kernel, RAM filesystem and process tree. No page or Pi dependencies. */
 export class LinuxMachine {
-  constructor({assetUrl = name => chrome.runtime.getURL(`linux/${name}`)} = {}) {
+  constructor({assetUrl = name => chrome.runtime.getURL(`linux/${name}`),site,conversationId} = {}) {
     this.assetUrl = assetUrl;
+    this.identity={site,conversationId};
+    this.commands=new Map();
     this.mailbox = new SharedArrayBuffer(1024 * 1024 + 8);
     this.control = new Int32Array(this.mailbox, 0, 2);
     this.input = new Uint8Array(this.mailbox, 8);
@@ -35,16 +39,39 @@ export class LinuxMachine {
         'maxcpus=3 nohz_full=0,2-63 rcu_nocbs=0,2-63 root=/dev/ram0 rootfstype=ramfs init=/init console=hvc',
         initrd, text => { logs.push(text); if(logs.length>30) logs.shift(); },
         text => { logs.push(text); if(logs.length>30) logs.shift(); }, this.mailbox,
-        message => this.receive(message), error => this.dispose(new Error(`${error.message}\nLinux 已停止，临时文件已丢失；下次调用会重新启动。`)));
+        message => this.receive(message), error => this.dispose(new Error(`${error.message}\nLinux 已停止，临时文件已丢失；下次调用会重新启动。`)),
+        (message,worker)=>this.command(message,worker));
       try { await ready; } finally { clearTimeout(timer); }
     })().catch(error => { this.dispose(error); throw error; });
     await this.starting;
+  }
+
+  command(message,worker) {
+    if(message.kind==='start') {
+      const call=new LinuxCommand(message,this.identity);
+      this.commands.set(worker,call);
+      if(call.group===this.cancelledGroup)call.close();
+      void runCurl(call).then(({exitCode})=>call.io(6,exitCode)).catch(()=>{
+        // The process may have been killed (including SIGPIPE from `head`).
+        if(!call.signal.aborted)void call.io(6,2).catch(()=>{});
+      });
+    } else if(message.kind==='reply')this.commands.get(worker)?.receive(message);
+    else if(message.kind==='closed') {
+      this.commands.get(worker)?.close();
+      this.commands.delete(worker);
+    }
   }
 
   receive({id,kind,data,status}) {
     if (kind===0) { this.readyResolve(); return; }
     const pending=this.pending;
     if (!pending || id!==pending.id) return;
+    if(kind===6) {
+      pending.group=status;
+      if(this.cancelledGroup===status)this.cancelledGroup=undefined;
+      if(pending.cancelled)pending.cancel(pending.cancelled);
+      return;
+    }
     if (kind===1 || kind===2) {
       const text=pending.decoders[kind-1].decode(data,{stream:true});
       if(text) {
@@ -87,7 +114,14 @@ export class LinuxMachine {
         return await new Promise((resolve,reject)=>{
           const pending={id,resolve,reject,onOutput,chunks:[],decoders:[new TextDecoder(),new TextDecoder()]};
           this.pending=pending;
-          const cancel=reason=>{ pending.cancelled=reason; Atomics.store(this.control,1,id); };
+          const cancel=reason=>{
+            pending.cancelled=reason; Atomics.store(this.control,1,id);
+            if(pending.group!==undefined) {
+              this.cancelledGroup=pending.group;
+              for(const call of this.commands.values())if(call.group===pending.group)call.close();
+            }
+          };
+          pending.cancel=cancel;
           abort=()=>cancel('aborted');
           signal?.addEventListener('abort',abort,{once:true});
           if(timeout!==undefined) timer=setTimeout(()=>cancel('timeout'),timeout*1000);
@@ -109,6 +143,8 @@ export class LinuxMachine {
   dispose(error=new Error('Linux 已关闭，临时文件已丢失。')) {
     if(this.dead) return;
     this.dead=true;
+    for(const call of this.commands.values())call.close();
+    this.commands.clear();
     this.os?.dispose();
     this.readyReject?.(error);
     this.pending?.reject(error);

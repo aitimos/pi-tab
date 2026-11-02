@@ -186,7 +186,7 @@ export function createLinuxEnvironments(site) {
   const environments=new Map();
   return {
     get:({conversationId})=>{
-      if(!environments.has(conversationId))environments.set(conversationId,new LinuxEnv(`linux:${site}:${conversationId}`));
+      if(!environments.has(conversationId))environments.set(conversationId,new LinuxEnv(`linux:${site}:${conversationId}`,{machineFactory:()=>new LinuxMachine({site,conversationId})}));
       return environments.get(conversationId);
     },
     delete:conversationId=>{environments.get(conversationId)?.dispose();environments.delete(conversationId);},

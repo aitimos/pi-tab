@@ -7,7 +7,7 @@ import picomatch from 'picomatch';
 export function createLinuxTools() {
   const bash=createBashTool();
   return [
-    {...bash,description:bash.description.replace('Execute a bash command','Execute a BusyBox /bin/sh command (not GNU Bash)')+' Files exist only in this conversation’s temporary Linux; cwd is /workspace for every call.'},
+    {...bash,description:bash.description.replace('Execute a bash command','Execute a BusyBox /bin/sh command (not GNU Bash)')+' Files exist only in this conversation’s temporary Linux; cwd is /workspace for every call. curl sends HTTP(S) through browser fetch; run curl --help for supported options (use -L for redirects; no proxies, -k or browser cookies).'},
     createReadTool(),
     {...createEditTool(),prepareArguments:undefined},
     defineTool({

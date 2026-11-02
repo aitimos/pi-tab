@@ -68,7 +68,7 @@ Pi Tab 基于 Pi Durable，把 Agent 带进你正在浏览的网页。点击书�
 
 文件只存在于当前会话的 Linux 内存中，子 agent 有自己的文件系统。刷新网页或关闭标签页保留文件；删除或重置会话、扩展重载、后台页面重建及退出浏览器会清空文件。未完成的 Linux 工具调用不会自动重放。内核和初始文件系统随扩展打包，启动 Linux 不需要联网；模型调用仍需要模型服务。
 
-当前不提供交互式终端、本机目录挂载或命令挂载。后续将 JS tool 接入 Linux 命令的约定见[命令挂载设计](docs/linux-command-mounts.md)，其中 `curl → fetch` 仅作设计说明。
+内置 `curl` 通过扩展后台的 JS fetch 发出 HTTP(S) 请求，不需要服务端。支持管道、重定向、JSON、文件上传下载和取消，例如 `curl -fsSL https://example.com/data > result.txt`。参数范围见 `curl --help` 和[curl 使用说明](docs/linux-command-mounts.md)；不支持代理、`-k` 或浏览器 Cookie。当前不提供交互式终端、本机目录挂载或通用命令挂载。
 
 普通 `npm run build` 校验并复制已构建的 Linux 资源；重编译使用 `npm run build:linux`，需要 Docker。固定版本、补丁、源码导出和验证命令见 [Linux 构建说明](linux/README.md)。
 

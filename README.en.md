@@ -70,7 +70,7 @@ Linux starts on the first file or command operation, with `/workspace` as the de
 
 Files live in the conversation’s Linux memory. Child agents have independent filesystems. Page reloads and tab closure preserve files; conversation deletion/reset, extension reload, background page recreation and browser exit discard them. Unfinished Linux tool calls are not replayed automatically. The kernel and initial filesystem are bundled, so Linux can start offline; model calls still need a model service.
 
-There is no interactive terminal, host directory mount or command mount in this version. The [future command mounting contract](docs/linux-command-mounts.md) describes `curl → fetch` as a design example only.
+Built-in `curl` sends HTTP(S) requests through JavaScript fetch in the extension background, without a server. It supports pipes, redirection, JSON, file uploads/downloads and cancellation, for example `curl -fsSL https://example.com/data > result.txt`. See `curl --help` and the [curl guide](docs/linux-command-mounts.md) for supported options; proxies, `-k` and browser cookies are unsupported. There is no interactive terminal, host directory mount or general command registry.
 
 `npm run build` verifies and copies existing Linux assets. Use `npm run build:linux` with Docker to rebuild them. See the [Linux build guide](linux/README.md) for pinned versions, patches, source export and verification commands.
 
