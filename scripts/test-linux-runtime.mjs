@@ -83,19 +83,22 @@ await build({stdin:{resolveDir:process.cwd(),contents:`
     return true;
   });
 `},bundle:true,format:'iife',platform:'browser',outfile:join(directory,'test.js')});
-async function browser(...args){
-  const {stdout}=await run(agentBrowser,['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox','--extension',directory,'--session',session,'--json',...args],{maxBuffer:4*1024*1024,timeout:120000});
+async function browser(args,input){
+  const command=run(agentBrowser,['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox','--extension',directory,'--session',session,'--json',...args],{maxBuffer:4*1024*1024,timeout:120000});
+  command.child.stdin.end(input);
+  const {stdout}=await command;
   const reply=JSON.parse(stdout);assert.equal(reply.success,true,JSON.stringify(reply.error));return reply.data;
 }
-const evaluate=async code=>(await browser('eval','-b',Buffer.from(code).toString('base64'))).result;
+// Large file fixtures exceed Linux's per-argument limit; send scripts over stdin.
+const evaluate=async code=>(await browser(['eval','--stdin'],code)).result;
 async function call(name,args={},machine='a'){
   const reply=await evaluate(`chrome.runtime.sendMessage(${JSON.stringify({type:'linux-test',name,id:machine,...args})})`);
   assert.equal(reply.ok,true,reply.error);return reply.value;
 }
 try{
-  await browser('open',`chrome-extension://${id}/controller.html`);
+  await browser(['open',`chrome-extension://${id}/controller.html`]);
   assert.equal(await evaluate('crossOriginIsolated'),true);
-  await browser('set','offline','true');
+  await browser(['set','offline','true']);
   await evaluate(`chrome.offscreen.createDocument({url:'offscreen.html',reasons:['WORKERS'],justification:'Test real Linux kernel'})`);
   assert.equal((await call('exec',{command:'printf "hello 世界\\n" | grep hello > test.txt; cat test.txt'})).output,'hello 世界\n');
   assert.equal((await call('exec',{command:'exit 7'})).status,7);
@@ -129,12 +132,12 @@ try{
     assert.equal(wc.output,'20000\n108894\n19998\n19999\n20000\n',`spill check, iteration ${iteration}`);
   }
   assert.equal((await call('exec',{command:'test ! -e test.txt'},'b')).status,0);
-  await browser('reload');
+  await browser(['reload']);
   assert.equal((await call('exec',{command:'cat test.txt'})).output,'hello 世界\n');
   await call('dispose');
   assert.equal((await call('exec',{command:'test ! -e test.txt'})).status,0);
   console.log('PASS real Linux: offscreen boot, pipes, UTF-8, byte reads/writes, exit status, cancellation, timeout, spill, isolation, refresh and reset');
-  await browser('set','offline','false');
+  await browser(['set','offline','false']);
   assert.match((await call('exec',{command:'curl --version'})).output,/fetch adapter/);
   let result=await call('exec',{command:`curl -fsS ${httpUrl}/hello | grep 中文 > fetched.txt; cat fetched.txt`});
   assert.equal(result.status,0);assert.equal(result.output,'hello 中文\n');
@@ -189,7 +192,7 @@ try{
   assert.ok(closedStreams.has('/stream-dispose'));
   console.log('PASS real curl/fetch: GET, JSON, stdin, binary files, quoted paths/cwd, pipes, HEAD, redirects, HTTP/IO errors, timeout, abort, SIGPIPE and isolation');
 }finally{
-  await browser('close').catch(()=>{});
+  await browser(['close']).catch(()=>{});
   server.closeAllConnections();await new Promise(resolve=>server.close(resolve));
   await rm(directory,{recursive:true,force:true});
 }

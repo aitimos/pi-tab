@@ -68,9 +68,12 @@ async function click(selector){
   await browser('mouse','up','left');
 }
 async function send(text){
+  const replies=await evaluate(`${root}.querySelectorAll('.message.ai').length`);
   await click('#message-input');
   await browser('keyboard','inserttext',text);
   await browser('press','Enter');
+  // A previous reply and an idle runtime can still be visible while submission starts.
+  if(!hold)await browser('wait','--fn',`${root}.querySelectorAll('.message.ai').length>${replies} && ${root}.getElementById('shell').dataset.busy==='false'`);
 }
 try{
   const primaryPage=(await browser('open',installer)).targetId;
@@ -140,6 +143,7 @@ try{
   assert.equal(await evaluate(`pi.agent(${selected}).config.model`),'test-model');
   await browser('wait','--fn',"document.getElementById('pi-bookmarklet').hasAttribute('href')");
   bookmark=await evaluate("document.getElementById('pi-bookmarklet').getAttribute('href')");
+  assert.deepEqual((await evaluate('pi.listModels()')).map(item=>item.model).sort(),['other-model','provider-model','test-model'],'installer saved models');
   console.log('PASS installer exports three saved models and providers, including an unused provider');
 
   await browser('open',url);
@@ -150,7 +154,7 @@ try{
   assert.equal((await evaluate('pi.listChats()')).length,1);
   await send('Completed conversation');
   await browser('wait','--fn',`${root}.getElementById('chat-messages').textContent.includes('Bookmark test reply') && !pi.busyFor(${first})`);
-  assert.equal((await evaluate('pi.listModels()')).length,3);
+  assert.deepEqual((await evaluate('pi.listModels()')).map(item=>item.model).sort(),['other-model','provider-model','test-model'],'models imported by the bookmark');
   assert.equal((await evaluate('pi.listProviders()')).length,3);
   assert.ok(await evaluate("pi.listProviders().then(items=>items.some(item=>item.providerName==='Unused provider'&&item.apiKey==='test-unused'))"));
   console.log('PASS first launch includes all models and providers and sends with the selected default');
