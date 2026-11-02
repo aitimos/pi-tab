@@ -1,6 +1,6 @@
 {
   "name": "pi-tab",
-  "version": "1.0.34",
+  "version": "1.1.0",
   "private": true,
   "engines": {
     "node": ">=24.0.0"
