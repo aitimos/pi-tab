@@ -292,7 +292,19 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
         const environment = toolMap.has('tab_list')
           ? '当前是 Chrome 扩展模式。使用 tab_list 查看已启用的标签页，tab_open 打开新标签页并创建独立会话，tab_send 发送任务，tab_read 读取结果；不需要用 window.open 绕行。'
           : '当前是网页书签模式。agent_* 只能在当前页面协作，没有 tab_* 工具，不能列出或控制其他浏览器标签页。跨标签页任务需要从 Chrome 工具栏的 Pi Tab 扩展图标启动。';
-        return `${promptText}\n${environment}${page ? `\n当前页面: ${page.url}\n标题: ${page.title}` : ''}`;
+        const sandbox = executionEnv && toolMap.has('bash') ? `
+<sandbox_environment>
+当前会话可使用扩展内的 Linux Wasm 沙箱，首次文件或命令操作时启动，不需要另启服务端。它只提供有限的文件处理和命令执行能力，不是功能齐全的 Linux 发行版，也不是用户电脑的终端。
+- bash、read、grep、edit 操作当前会话的 Linux 文件。默认目录是 /workspace；每次 bash 调用都从这里开始，cd 和 export 仅影响本次调用，文件修改会保留。路径含空格或引号时正确引用。
+- bash 是工具名称，实际运行 BusyBox /bin/sh，不是 GNU Bash。只用基础 sh 语法和简单命令，支持管道、重定向和退出码；不要使用 Bash 数组、进程替换等专有语法，也不要假定 BusyBox 支持 GNU 工具的全部参数。不确定时先查看命令的 --help 或用 command -v 检查是否存在。
+- 没有预装 Python、Node.js、npm、Git 或常规包管理器。不要按 Ubuntu 等发行版尝试安装依赖，也不要下载普通桌面或服务器的 Linux 二进制来运行。没有交互式终端、本机目录挂载或服务端口公开入口；优先完成小规模、非交互的文件和文本处理。
+- 读取文件优先用 read，搜索用 grep，修改已有文本用 edit；按各工具的参数定义调用。grep 使用 BusyBox 扩展正则或字面量匹配，不支持 ripgrep 专属语法，也不自动遵守 .gitignore。大文件分页读取；输出被截断时按工具返回的临时文件路径继续读取，不假定已看完全文。
+- 部分命令由 JavaScript 函数对接，只实现部分功能，不能因名称相同就按完整原生命令使用。当前 curl 由扩展后台的 fetch 发出 HTTP(S) 请求，每次只接受一个 URL。优先用基础 GET、-L 跟随重定向、-o 保存文件、-H 设置普通请求头、-d 或 --json 提交数据；例如 curl -L -o result.txt 'https://example.com/data'。需要其他参数时先看 curl --help；不支持的参数应改为已支持的基础用法，不要反复尝试同一参数。
+- curl 不自动携带网页登录 Cookie，不支持 -k、代理、Cookie 文件或 FTP；不能自行设置 Cookie、Host、User-Agent 等由浏览器控制的请求头。TLS 和响应解压由浏览器处理。curl 可接管道和读写沙箱文件，但这不表示 Linux 有完整网络能力；也不能把 js_eval 或其他 JS 工具直接当作 shell 命令调用。
+- 沙箱不能直接读取当前网页的 DOM、JavaScript 变量或用户电脑文件；网页操作使用页面工具。每个会话独立，子 agent 不继承父会话文件。网页刷新保留文件，但浏览器退出、扩展重载、后台重建、会话删除或重置会丢失文件；会话记录不能恢复这些文件。
+- 命令报错时根据错误调整，不把缺失工具或不支持参数当成暂时网络故障反复重试。若 Linux 崩溃或重建，明确告知用户临时文件已丢失；下次操作会启动新实例，不自动重跑失败的修改操作。
+</sandbox_environment>` : '';
+        return `${promptText}\n${environment}${sandbox}${page ? `\n当前页面: ${page.url}\n标题: ${page.title}` : ''}`;
       }, { tag: false })],
     }));
   }
