@@ -1,5 +1,17 @@
 # 更新记录
 
+## v1.2.0 — 2026-11-02
+
+### 新增功能
+
+- feat(linux): 接入基于 fetch 的 curl 命令 (37eb196)
+
+### 修复与性能改进
+
+- fix(prompt): 补充 Linux Wasm 沙箱能力与限制说明 (f516df4)
+- fix: fix github actions error (72d3369)
+
+
 ## v1.1.0 — 2026-10-30
 
 ### 新增功能
