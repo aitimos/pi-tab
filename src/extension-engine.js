@@ -30,6 +30,8 @@ async function engineFor(site) {
     const saved = await background({type:'shared-config',operation:'get'});
     pi.replaceModelSettings({profiles:saved.profiles || [],providers:saved.providers || []});
     if (!pi.config && saved.profiles?.length) await pi.configure({ ...saved.profiles[0], profileId:saved.profiles[0].id });
+    // MCP configuration is shared by every site; connecting happens in the background.
+    if (saved.mcp) void pi.setMcpConfig(saved.mcp, {persist:false}).catch(error => console.error('[Pi Tab]', error));
 
     for (const tool of pi.tools().filter(item => pageToolNames.has(item.name))) {
       pi.unregisterTool(tool.name);
@@ -103,6 +105,7 @@ chrome.runtime.onMessage.addListener((message, _sender, respond) => {
     Promise.all([...engines.values()].map(async engine=>{
       const {pi}=await engine;
       pi.replaceModelSettings({profiles:message.profiles,providers:message.providers});
+      if (message.mcp) void pi.setMcpConfig(message.mcp, {persist:false}).catch(error=>console.error('[Pi Tab]',error));
     })).then(()=>respond({ok:true}),error=>respond({ok:false,error:error.message}));
     return true;
   }
@@ -147,6 +150,13 @@ chrome.runtime.onMessage.addListener((message, _sender, respond) => {
       await pi.manageModels(args[0],busy);
       await background({type:'shared-config',operation:'replace',profiles:await pi.savedProfiles(),providers:await pi.listProviders()});
       return true;
+    }
+    if (method === 'mcpConfig') return pi.mcpConfig();
+    if (method === 'refreshMcp') return pi.refreshMcp();
+    if (method === 'setMcpConfig') {
+      const summary = await pi.setMcpConfig(args[0], {persist:false});
+      await background({type:'shared-config',operation:'mcp-set',mcp:summary.raw});
+      return summary;
     }
     if (method === 'auth') return pi.auth(...args);
     if (method === 'getPreferences') return pi.getPreferences();

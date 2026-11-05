@@ -157,6 +157,12 @@ async function openChat(initialConfig, options = {}) {
     .setting-row>input[type=checkbox] { width:16px; height:16px; margin:0; accent-color:var(--accent); }
     #preferences .field-heading { margin:0 0 8px; }
     #preferences .field-heading label { margin:0; }
+    #setting-mcp { min-height:150px; resize:vertical; font:12px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace; }
+    .mcp-hint { margin:0 0 10px; color:var(--muted); font-size:12px; line-height:1.7; }
+    #mcp-status { display:flex; flex-direction:column; gap:8px; margin-top:4px; }
+    .mcp-server { display:flex; flex-direction:column; gap:2px; padding:8px 10px; border:.5px solid var(--line); border-radius:8px; font-size:12px; overflow-wrap:anywhere; }
+    .mcp-server strong { font-weight:600; }
+    .mcp-server .mcp-state, .mcp-server .mcp-url { color:var(--muted); }
     label { display:block; color:#d6e1ff; font-size:12px; margin-bottom:14px; }
     label span { display:block; margin-bottom:6px; }
     input,select,textarea { width:100%; min-width:0; background:var(--surface); border:.5px solid var(--line); border-radius:10px; padding:10px 12px; color:var(--text); outline:none; font:inherit; }
@@ -511,6 +517,7 @@ async function openChat(initialConfig, options = {}) {
           <button id="settings-general-tab" type="button" role="tab" aria-selected="true" aria-controls="settings-general">常规</button>
           <button id="settings-instructions-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-instructions" tabindex="-1">指令</button>
           <button id="settings-execution-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-execution" tabindex="-1">执行</button>
+          <button id="settings-mcp-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-mcp" tabindex="-1">MCP</button>
         </div>
         <div class="form-body settings-body">
           <section id="settings-general" role="tabpanel" aria-labelledby="settings-general-tab">
@@ -529,6 +536,14 @@ async function openChat(initialConfig, options = {}) {
               <label><span>优先发送</span><select id="setting-steer"><option value="one-at-a-time">逐条处理</option><option value="all">一起处理</option></select></label>
               <label><span>排队发送</span><select id="setting-follow-up"><option value="one-at-a-time">逐条处理</option><option value="all">一起处理</option></select></label>
             </div><label class="setting-row"><span>任务失败后</span><select id="setting-failed"><option value="keep">保留消息</option><option value="continue">继续处理</option><option value="withdraw">取消消息</option></select></label></fieldset>
+          </section>
+          <section id="settings-mcp" role="tabpanel" aria-labelledby="settings-mcp-tab" hidden>
+            <p class="mcp-hint">支持 Pi 的 mcpServers 配置。浏览器只能连接远程 HTTP 服务器；在本机进程里运行的 stdio 服务器无法启动，会显示为不支持。</p>
+            <div class="field-heading"><label for="setting-mcp">MCP 服务器</label><button id="mcp-import" class="text-button" type="button">导入 mcp.json</button></div>
+            <textarea id="setting-mcp" spellcheck="false" aria-label="MCP 服务器配置" placeholder='{"mcpServers": {}}'></textarea>
+            <input id="mcp-file" type="file" accept=".json,application/json" hidden />
+            <div class="field-heading"><span>连接状态</span><button id="mcp-reconnect" class="text-button" type="button">重新连接</button></div>
+            <div id="mcp-status" role="status" aria-live="polite"></div>
           </section>
         </div>
         <div class="form-footer"><p id="preferences-error" class="error" role="alert" hidden></p><button class="primary" type="submit">保存设置</button></div>
@@ -2230,7 +2245,55 @@ async function openChat(initialConfig, options = {}) {
       byId('preferences').style.display = 'flex';
       byId('settings-general-tab').click();
       byId('settings-general-tab').focus();
+      void loadMcpSettings();
     });
+  });
+  async function loadMcpSettings() {
+    try { renderMcpStatus(await runtimePi.mcpConfig()); }
+    catch (error) { i18n.text(byId('preferences-error'), () => t(error.message || String(error))); byId('preferences-error').hidden = false; }
+  }
+  function renderMcpStatus(summary) {
+    if (!summary) return;
+    byId('setting-mcp').value = summary.text || '';
+    const list = byId('mcp-status');
+    list.replaceChildren();
+    const rows = [];
+    for (const server of summary.servers || []) {
+      const row = document.createElement('div'); row.className = 'mcp-server';
+      const name = document.createElement('strong'); name.textContent = server.name;
+      row.append(name);
+      if (server.url) { const url = document.createElement('span'); url.className = 'mcp-url'; url.textContent = server.url; row.append(url); }
+      const state = document.createElement('span'); state.className = 'mcp-state';
+      if (server.status === 'connected') i18n.text(state, () => t('已连接（{0} 个工具）', server.toolCount));
+      else if (server.status === 'connecting') i18n.text(state, () => t('连接中…'));
+      else if (server.status === 'disabled') i18n.text(state, () => t('已停用'));
+      else if (server.status === 'unsupported') i18n.text(state, () => t('不支持：{0}', server.reason));
+      else if (server.status === 'error') i18n.text(state, () => t('连接失败：{0}', server.error));
+      else i18n.text(state, () => t('等待连接'));
+      row.append(state);
+      rows.push(row);
+    }
+    for (const problem of summary.problems || []) {
+      const row = document.createElement('div'); row.className = 'mcp-server';
+      const name = document.createElement('strong'); name.textContent = problem.name || '';
+      const detail = document.createElement('span'); detail.className = 'mcp-state'; detail.textContent = problem.message;
+      row.append(name, detail); rows.push(row);
+    }
+    if (!rows.length) { const empty = document.createElement('p'); empty.className = 'hint'; i18n.text(empty, () => t('还没有配置 MCP 服务器。')); rows.push(empty); }
+    list.append(...rows);
+  }
+  byId('mcp-import').addEventListener('click', () => byId('mcp-file').click());
+  byId('mcp-file').addEventListener('change', async () => {
+    const file = byId('mcp-file').files?.[0];
+    byId('mcp-file').value = '';
+    if (!file) return;
+    try { byId('setting-mcp').value = await file.text(); }
+    catch (error) { i18n.text(byId('preferences-error'), () => t(error.message || String(error))); byId('preferences-error').hidden = false; }
+  });
+  byId('mcp-reconnect').addEventListener('click', async () => {
+    byId('preferences-error').hidden = true;
+    try { renderMcpStatus(await runtimePi.refreshMcp()); }
+    catch (error) { i18n.text(byId('preferences-error'), () => t(error.message || String(error))); byId('preferences-error').hidden = false; }
   });
   const settingsTabs = [...root.querySelectorAll('.settings-tabs [role=tab]')];
   for (const tab of settingsTabs) {
@@ -2262,6 +2325,7 @@ async function openChat(initialConfig, options = {}) {
     event.preventDefault();
     byId('preferences-error').hidden = true;
     try {
+      if (runtimePi.setMcpConfig) renderMcpStatus(await runtimePi.setMcpConfig(byId('setting-mcp').value));
       await runtimePi.setPreferences({
         systemPrompt: byId('setting-prompt').value === t(runtimePi.defaultPrompt) ? '' : byId('setting-prompt').value.trim(),
         autoCompact: byId('setting-compact').checked,
@@ -2595,8 +2659,8 @@ async function generateBookmark() {
   bookmarkUrl.hidden = true;
   try {
     const runtime = window.pi?.__piConsolePlugin ? window.pi : window.__piTabAgent;
-    const [profiles, providers] = await Promise.all([runtime.savedProfiles(), runtime.listProviders()]);
-    bookmark.href = createBookmarklet(PI_RUNTIME, { openChat, config:savedConfig, profiles, providers });
+    const [profiles, providers, mcp] = await Promise.all([runtime.savedProfiles(), runtime.listProviders(), runtime.mcpConfig?.()]);
+    bookmark.href = createBookmarklet(PI_RUNTIME, { openChat, config:savedConfig, profiles, providers, mcp:mcp?.raw });
     bookmark.removeAttribute('aria-disabled');
     bookmark.draggable = true;
     copyButton.disabled = false;
@@ -2662,7 +2726,7 @@ if (!PI_RUNTIME) {
       },
     });
     const runtime = window.pi?.__piConsolePlugin ? window.pi : window.__piTabAgent;
-    runtime.onEvent(event => { if (['provider_saved','models_changed'].includes(event.type)){void runtime.savedConfigFor(runtime.conversation.id).then(config=>{savedConfig=config;return generateBookmark();});} });
+    runtime.onEvent(event => { if (['provider_saved','models_changed','mcp_changed'].includes(event.type)){void runtime.savedConfigFor(runtime.conversation.id).then(config=>{savedConfig=config;return generateBookmark();});} });
     void runtime.ready.then(async () => {
       const chats = await runtime.listChats();
       const openIds = JSON.parse(sessionStorage.getItem('pi-tab-open-chats') || '[]');

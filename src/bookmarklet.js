@@ -1,4 +1,4 @@
-export function createBookmarklet(source, { openChat, config, profiles = [], providers = [] } = {}) {
+export function createBookmarklet(source, { openChat, config, profiles = [], providers = [], mcp } = {}) {
   const code = `void(async()=>{try{
     let pi=window.pi?.__piConsolePlugin?window.pi:window.__piTabAgent?.__piConsolePlugin?window.__piTabAgent:null;
     if(!pi){
@@ -13,6 +13,7 @@ export function createBookmarklet(source, { openChat, config, profiles = [], pro
     await pi.ready;
     ${profiles.length ? `pi.importProfiles(${JSON.stringify(profiles)});` : ''}
     ${providers.length ? `pi.importProviders(${JSON.stringify(providers)});` : ''}
+    ${mcp && Object.keys(mcp.mcpServers || {}).length ? `pi.importMcpConfig(${JSON.stringify(mcp)});` : ''}
     ${openChat ? `const launch={};
     if(!window.__piQuickChatOverlay){
       const chats=await pi.listChats();
