@@ -77,6 +77,32 @@ Continuing page operations requires an available tab on the target website. Task
 
 Deleting a conversation removes its list entry and resets its active context. Saved models and providers remain. Pi Durable's underlying history log is retained in local storage; this is not a disk data erasure feature.
 
+## MCP servers
+
+Open **Pi settings → MCP**, paste the contents of Pi's `mcp.json`, and press **Save settings**. Entries use Pi's `mcpServers` format; a bare map of servers also works:
+
+```json
+{
+  "mcpServers": {
+    "docs": {
+      "url": "https://example.com/mcp",
+      "headers": {"Authorization": "Bearer ${DOCS_TOKEN}"},
+      "description": "Product documentation search",
+      "timeout": 30
+    }
+  },
+  "env": {"DOCS_TOKEN": "..."}
+}
+```
+
+- Only remote streamable HTTP servers are connected (an entry with `url`). stdio servers defined with `command` and `args` need a local process, which neither the bookmark nor the extension can start, so they are listed as unsupported.
+- Fields follow Pi: `url`, `headers`, `timeout` (seconds, default 60), `enabled`, `description`, `exposure`, `toolExposure`. The legacy `type: "sse"` is rejected; servers that require OAuth sign-in are not supported yet, so use headers such as `Authorization`.
+- `${NAME}` in header values resolves from an `env` object beside `mcpServers`; `!command` values cannot run in the browser.
+- Tool names follow Pi: `mcp__<server>__<tool>`, with any other character replaced by `_`. Tools marked `hidden` in `toolExposure` are not registered and the rest are offered to the model directly; this runtime has no `codemode` or `tool_search`, so `exposure` is accepted for compatibility only.
+- Connection state, tool counts, and errors appear under the field. **Reconnect** drops the current connections and reconnects with the saved configuration; saving changes reconnects and replaces the previous tools.
+- A bookmark stores its configuration for the current site and carries it to other sites when the bookmark is saved; a site that already defines the same server keeps its own entry. Bookmark requests come from the webpage, so the server must allow CORS. The extension stores one configuration for all sites and requests from its background page.
+- Tool results are data, not new instructions; MCP calls go through the same tool pipeline as the built-in page tools.
+
 ## Scope and limitations
 
 - AI works within the current webpage. It can read content and element styles, click, fill out forms, run JavaScript, and inspect Console logs and fetch request summaries recorded after injection.

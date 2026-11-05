@@ -94,6 +94,9 @@ async function initializeExtension() {
     },
     getPreferences:()=>engineCall('getPreferences'),
     setPreferences:settings=>engineCall('setPreferences',[settings]),
+    mcpConfig:()=>engineCall('mcpConfig'),
+    setMcpConfig:input=>engineCall('setMcpConfig',[input]),
+    refreshMcp:()=>engineCall('refreshMcp'),
   };
   window.pi=remotePi;
   window.__piTabAgent=remotePi;
