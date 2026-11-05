@@ -23,6 +23,8 @@ import { mistralConversationsApi } from '@earendil-works/pi-ai/api/mistral-conve
 import { openAICodexResponsesApi } from '@earendil-works/pi-ai/api/openai-codex-responses.lazy';
 import { piMessagesApi } from '@earendil-works/pi-ai/api/pi-messages.lazy';
 import {callTool} from './tool-call.js';
+import {createMcpHttpClient, mcpToolOutput} from './mcp-client.js';
+import {exposesTool, mcpPromptSection, normalizeMcpServers, parseMcpConfig, uniqueToolName} from './mcp.js';
 import { AssistantEntry, createRegistry, defineDoc, defineExtension, defineTool, Harness, InboxDoc, section, watchEvents } from '@earendil-works/pi-durable';
 import { IndexedDbStorage } from '@earendil-works/pi-durable/storage/indexeddb';
 import { Type } from 'typebox';
@@ -137,6 +139,9 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
   const activeRuns = new Map(), eventStreams = new Map(), configurations = new Map(), durableBusy = new Map();
   const titleJobs = new Map();
   let promptText = DEFAULT_PROMPT;
+  // MCP servers are optional and independent of the model configuration. The
+  // raw mcp.json object is kept so an edit never rewrites fields we ignore.
+  let mcpSettings = {mcpServers: {}}, mcpServers = [], mcpProblems = [], mcpClients = new Map(), mcpToolNames = new Set(), mcpJob = null;
   const consoleWrappers = new Map();
   const originalConsole = new Map();
   const MAX_LOGS = 300;
@@ -284,7 +289,10 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
   };
   window.addEventListener('pagehide', onPageHide);
 
+  let toolRefreshSuspended = false;
+
   function refreshTools() {
+    if (toolRefreshSuspended) return;
     registry.install(defineExtension({
       name: 'browser-page', tools: [...toolMap.values()],
       sections: [section('page-debugger', () => {
@@ -304,9 +312,99 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
 - 沙箱不能直接读取当前网页的 DOM、JavaScript 变量或用户电脑文件；网页操作使用页面工具。每个会话独立，子 agent 不继承父会话文件。网页刷新保留文件，但浏览器退出、扩展重载、后台重建、会话删除或重置会丢失文件；会话记录不能恢复这些文件。
 - 命令报错时根据错误调整，不把缺失工具或不支持参数当成暂时网络故障反复重试。若 Linux 崩溃或重建，明确告知用户临时文件已丢失；下次操作会启动新实例，不自动重跑失败的修改操作。
 </sandbox_environment>` : '';
-        return `${promptText}\n${environment}${sandbox}${page ? `\n当前页面: ${page.url}\n标题: ${page.title}` : ''}`;
+        const mcp = mcpPromptSection(mcpServers);
+        return `${promptText}\n${environment}${sandbox}${page ? `\n当前页面: ${page.url}\n标题: ${page.title}` : ''}${mcp ? `\n${mcp}` : ''}`;
       }, { tag: false })],
     }));
+  }
+
+  function mcpSummary() {
+    return {
+      text: JSON.stringify(mcpSettings, null, 2),
+      raw: structuredClone(mcpSettings),
+      servers: mcpServers.map(({headers: _headers, ...server}) => server),
+      problems: mcpProblems,
+    };
+  }
+
+  function dropMcpTools() {
+    for (const name of mcpToolNames) toolMap.delete(name);
+    mcpToolNames.clear();
+  }
+
+  async function closeMcpClients() {
+    const clients = [...mcpClients.values()];
+    mcpClients.clear();
+    await Promise.allSettled(clients.map(client => client.close()));
+  }
+
+  async function callMcpTool(serverName, toolName, args, context) {
+    const client = mcpClients.get(serverName);
+    if (!client) throw new Error(`MCP 服务器 ${serverName} 未连接，请先在设置中重新连接。`);
+    const result = await client.callTool(toolName, args && typeof args === 'object' ? args : {}, context?.abortSignal);
+    return {output: mcpToolOutput(result)};
+  }
+
+  async function connectMcpServer(server, used) {
+    server.status = 'connecting';
+    server.error = '';
+    const client = createMcpHttpClient({url: server.url, headers: server.headers, timeout: server.timeout, server: server.name});
+    try {
+      const info = await client.initialize();
+      const tools = await client.listTools();
+      if (disposed) { await client.close(); return; }
+      mcpClients.set(server.name, client);
+      if (!server.description && typeof info?.instructions === 'string') server.description = info.instructions.split('\n')[0].slice(0, 160);
+      for (const tool of tools) {
+        if (!exposesTool(server, tool.name)) continue;
+        const name = uniqueToolName(server.name, tool.name, used);
+        used.add(name);
+        mcpToolNames.add(name);
+        registerNativeTool({name, replay: 'unsafe',
+          description: (tool.description || `${server.name} 服务器提供的 ${tool.name} 工具`).slice(0, 1024),
+          parameters: Type.Unsafe(tool.inputSchema && typeof tool.inputSchema === 'object' ? tool.inputSchema : {type: 'object', properties: {}}),
+          execute: (args, _api, context) => callMcpTool(server.name, tool.name, args, context)});
+        server.toolNames.push(name);
+      }
+      server.toolCount = server.toolNames.length;
+      server.status = 'connected';
+    } catch (error) {
+      await client.close();
+      server.status = 'error';
+      server.error = error.message || String(error);
+      nativeConsole.warn(`[pi] MCP ${server.name} 连接失败`, server.error);
+    }
+  }
+
+  // Reconnects every enabled server, replacing the tools the previous config added.
+  function syncMcp() {
+    const run = async () => {
+      dropMcpTools();
+      await closeMcpClients();
+      mcpServers = [];
+      mcpProblems = [];
+      if (disposed) return mcpSummary();
+      const {servers, problems} = normalizeMcpServers(mcpSettings);
+      mcpProblems = problems;
+      mcpServers = servers.map(server => ({...server, status: 'idle', error: '', toolNames: [], toolCount: 0}));
+      const used = new Set(toolMap.keys());
+      const targets = [];
+      for (const server of mcpServers) {
+        if (!server.supported) server.status = 'unsupported';
+        else if (!server.enabled) server.status = 'disabled';
+        else targets.push(server);
+      }
+      // Register every tool once and refresh the single extension afterwards.
+      toolRefreshSuspended = true;
+      try { await Promise.all(targets.map(server => connectMcpServer(server, used))); }
+      finally { toolRefreshSuspended = false; }
+      refreshTools();
+      const summary = mcpSummary();
+      emit({type: 'mcp_changed', servers: summary.servers, problems: summary.problems});
+      return summary;
+    };
+    mcpJob = (mcpJob ?? Promise.resolve()).catch(() => {}).then(run);
+    return mcpJob;
   }
 
   function registerNativeTool(definition) {
@@ -560,6 +658,26 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     __piConsolePlugin: true, version: '1.1.0', durableVersion: '1.4.0', Type,
     get defaultPrompt() { return DEFAULT_PROMPT; },
     ready: null, configure, prompt, registerTool, registerNativeTool, listChats, selectChat, newChat, createChat,
+    async setMcpConfig(input, {persist = true} = {}) {
+      await pi.ready; ensureOpen();
+      const {value} = parseMcpConfig(input);
+      if (JSON.stringify(value) === JSON.stringify(mcpSettings)) return mcpSummary();
+      mcpSettings = value;
+      if (persist) siteSettings.update(data => { data.mcp = value; });
+      return syncMcp();
+    },
+    async mcpConfig() { await pi.ready; return mcpSummary(); },
+    async refreshMcp() { await pi.ready; ensureOpen(); return syncMcp(); },
+    importMcpConfig(input) {
+      const {value} = parseMcpConfig(input);
+      const stored = siteSettings.read().mcp ?? {mcpServers: {}};
+      const merged = {...stored, mcpServers: {...(stored.mcpServers ?? {})}, ...(value.env ? {env: {...value.env, ...(stored.env ?? {})}} : {})};
+      for (const [name, entry] of Object.entries(value.mcpServers ?? {})) if (!Object.hasOwn(merged.mcpServers, name)) merged.mcpServers[name] = entry;
+      mcpSettings = merged;
+      siteSettings.update(data => { data.mcp = merged; });
+      void syncMcp();
+      return merged;
+    },
     get i18n() { return getI18n(); },
     async deleteChat(id) {
       await pi.ready; ensureOpen();
@@ -793,6 +911,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
       window.removeEventListener('storage', onSiteSettings);
       emit({type:'disposed'});
       listeners.clear(); toolMap.clear(); configuration = null; models.clearProviders();
+      dropMcpTools(); void closeMcpClients();
       if (window[globalName] === pi) delete window[globalName];
       nativeConsole.info('[pi] 已关闭。');
     },
@@ -846,6 +965,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     }
     const state = await harness.snapshot(TabState, ctx);
     siteSettings.initialize(state);
+    mcpSettings = siteSettings.read().mcp ?? {mcpServers: {}};
     syncPreferences();
     window.addEventListener('storage', onSiteSettings);
     conversation = state?.activeId && await harness.conversation(state.activeId, ctx) || await harness.root(ctx);
@@ -868,6 +988,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     }
     configuration = configurations.get(conversation.id) ?? null;
     if (!deferResume) harness.resume();
+    void syncMcp().catch(error => nativeConsole.warn('[pi] MCP 初始化失败', error.message));
     nativeConsole.info(`[pi] 已注入当前网页，pi-durable 1.4.0。${toolMap.size} 个工具已注册。`);
     return pi;
   })();

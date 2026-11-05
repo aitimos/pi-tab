@@ -68,15 +68,15 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
   if(message.target==='engine'||message.type==='shared-config-updated'||message.type==='tab-closed')return false;
   (async()=>{
     if(message.type==='shared-config'){
-      if(message.operation==='get')return chrome.storage.local.get(['profiles','providers']);
-      const saved=await chrome.storage.local.get(['profiles','providers']);
+      if(message.operation==='get')return chrome.storage.local.get(['profiles','providers','mcp']);
+      const saved=await chrome.storage.local.get(['profiles','providers','mcp']);
       if(message.operation==='profile-save'){
         saved.profiles=[...(saved.profiles||[]).filter(item=>item.id!==message.profile.id),message.profile];
       }else if(message.operation==='provider-save'){
         saved.providers=[...(saved.providers||[]).filter(item=>item.id!==message.provider.id),message.provider];
-      }else if(message.operation==='replace'){saved.profiles=message.profiles;saved.providers=message.providers;}else throw new Error('未知设置操作。');
+      }else if(message.operation==='mcp-set'){saved.mcp=message.mcp;}else if(message.operation==='replace'){saved.profiles=message.profiles;saved.providers=message.providers;}else throw new Error('未知设置操作。');
       await chrome.storage.local.set(saved);
-      await chrome.runtime.sendMessage({type:'shared-config-updated',profiles:saved.profiles||[],providers:saved.providers||[]});
+      await chrome.runtime.sendMessage({type:'shared-config-updated',profiles:saved.profiles||[],providers:saved.providers||[],mcp:saved.mcp||null});
       return true;
     }
     if(message.type==='identity'){

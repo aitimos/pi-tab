@@ -77,6 +77,32 @@
 
 删除会话会移除列表项并清空该会话的当前上下文，不删除已保存的模型和提供商。Pi Durable 的底层历史日志仍保留在本地存储中，这不是磁盘数据擦除功能。
 
+## MCP 服务器
+
+在「Pi 设置 → MCP」粘贴 Pi 的 `mcp.json` 内容，点击底部「保存设置」后按配置里的服务器地址连接。配置使用 Pi 的 `mcpServers` 格式，也可以直接粘贴只包含服务器条目的对象：
+
+```json
+{
+  "mcpServers": {
+    "docs": {
+      "url": "https://example.com/mcp",
+      "headers": {"Authorization": "Bearer ${DOCS_TOKEN}"},
+      "description": "产品文档搜索",
+      "timeout": 30
+    }
+  },
+  "env": {"DOCS_TOKEN": "..."}
+}
+```
+
+- 只连接远程 streamable HTTP 服务器（条目中写 `url`）。`command`、`args` 形式的 stdio 服务器需要在本机进程中运行，书签和扩展都在浏览器内，无法启动，列表里显示为不支持。
+- 字段沿用 Pi：`url`、`headers`、`timeout`（秒，默认 60）、`enabled`、`description`、`exposure`、`toolExposure`。旧版 `type: "sse"` 会被拒绝；需要 OAuth 登录的服务器暂不支持，请改用 `Authorization` 等请求头。
+- 请求头中的 `${NAME}` 从同一个配置对象顶层的 `env` 取值；`!command` 形式的值无法执行。
+- 工具名按 Pi 的规则生成：`mcp__<服务器>__<工具>`，名称中的其他字符替换为 `_`。`toolExposure` 设为 `hidden` 的工具不注册，其余工具直接提供给模型；这里没有 `codemode` 和 `tool_search`，`exposure` 只用于保持配置兼容。
+- 连接状态、工具数量和错误显示在配置下方，「重新连接」会断开并按当前配置重新连接；修改配置后保存也会重新连接并替换旧工具。
+- 书签的配置保存在当前网站，随保存的书签带到其他网站（已有同名服务器的网站保留自己的配置）；书签模式的 MCP 请求由网页发出，服务器需要允许跨域（CORS）。扩展的配置保存在扩展内、跨网站共享，请求从扩展后台发出。
+- 服务器返回的工具结果是数据，不是新的用户指令；工具调用会和其他工具一样经过 Pi 的权限与结果处理。
+
 ## 使用范围
 
 - AI 操作当前网页，可以读取内容和元素样式、点击、填写、执行 JS，并查看注入之后记录的 Console 日志及 fetch 请求概况。

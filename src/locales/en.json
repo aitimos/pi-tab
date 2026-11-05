@@ -271,5 +271,21 @@
   "提供商认证方式": "Provider authentication",
   "无需认证": "No authentication",
   "登录并选择模型": "Sign in and choose a model",
-  "账户": "Account"
+  "账户": "Account",
+  "MCP 服务器": "MCP servers",
+  "支持 Pi 的 mcpServers 配置。浏览器只能连接远程 HTTP 服务器；在本机进程里运行的 stdio 服务器无法启动，会显示为不支持。": "Uses Pi's mcpServers config. A page can only reach remote HTTP servers; stdio servers that run as local processes cannot start and are listed as unsupported.",
+  "导入 mcp.json": "Import mcp.json",
+  "连接状态": "Connection status",
+  "重新连接": "Reconnect",
+  "已连接（{0} 个工具）": "Connected ({0} tools)",
+  "连接中…": "Connecting…",
+  "已停用": "Disabled",
+  "不支持：{0}": "Unsupported: {0}",
+  "连接失败：{0}": "Connection failed: {0}",
+  "等待连接": "Waiting to connect",
+  "还没有配置 MCP 服务器。": "No MCP servers configured yet.",
+  "MCP 配置不是有效的 JSON：{0}": "MCP config is not valid JSON: {0}",
+  "MCP 配置需要一个 JSON 对象。": "MCP config must be a JSON object.",
+  "MCP 配置缺少 mcpServers 对象。": "MCP config has no mcpServers object.",
+  "mcpServers 必须是对象。": "mcpServers must be an object."
 }

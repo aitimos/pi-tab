@@ -19,6 +19,7 @@
     "test:stop": "node scripts/test-stop-markdown.mjs",
     "test:queue": "node scripts/test-message-queue.mjs",
     "test:oauth": "node scripts/test-oauth.mjs",
+    "test:mcp": "node scripts/test-mcp-ui.mjs",
     "test:management": "node scripts/test-management.mjs",
     "build:linux": "bash scripts/build-linux.sh",
     "test:linux": "node scripts/test-linux-runtime.mjs",
