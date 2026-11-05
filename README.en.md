@@ -6,7 +6,7 @@
 
 Built on Pi Durable, Pi Tab brings an agent into the webpage you are browsing. Open it with a bookmark or Chrome extension to read the page, interact with elements, run JavaScript, and save conversations, without setting up a separate automation environment.
 
-[Get started](https://aitimos.github.io/pi-tab/) | [Download extension](https://github.com/aitimos/pi-tab/releases/latest/download/pi-tab-extension.zip) | [Changelog](CHANGELOG.md)
+[Get started](https://aitimos.si/pi-tab/) | [Download extension](https://github.com/aitimos/pi-tab/releases/latest/download/pi-tab-extension.zip) | [Changelog](CHANGELOG.md)
 
 ## Highlights
 
@@ -41,7 +41,7 @@ Choose an API type, then a supported authentication method: API key, no authenti
 
 ### Bookmark
 
-1. Open the [installer](https://aitimos.github.io/pi-tab/), configure your model, and try it out.
+1. Open the [installer](https://aitimos.si/pi-tab/), configure your model, and try it out.
 2. Drag the **Pi Tab** button to your bookmarks bar.
 3. Open a webpage, click the bookmark, and enter a task.
 

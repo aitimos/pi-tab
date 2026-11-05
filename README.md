@@ -6,7 +6,7 @@
 
 Pi Tab 基于 Pi Durable，把 Agent 带进你正在浏览的网页。点击书签或 Chrome 扩展，就能让它阅读页面、操作元素、执行 JavaScript，并保存会话，无需另外搭建自动化环境。
 
-[开始使用](https://aitimos.github.io/pi-tab/) | [下载扩展](https://github.com/aitimos/pi-tab/releases/latest/download/pi-tab-extension.zip) | [更新记录](CHANGELOG.md)
+[开始使用](https://aitimos.si/pi-tab/) | [下载扩展](https://github.com/aitimos/pi-tab/releases/latest/download/pi-tab-extension.zip) | [更新记录](CHANGELOG.md)
 
 ## 亮点
 
@@ -41,7 +41,7 @@ Pi Tab 基于 Pi Durable，把 Agent 带进你正在浏览的网页。点击书�
 
 ### 书签
 
-1. 打开[安装页](https://aitimos.github.io/pi-tab/)，配置模型并试用。
+1. 打开[安装页](https://aitimos.si/pi-tab/)，配置模型并试用。
 2. 将 **Pi Tab** 按钮拖到浏览器书签栏。
 3. 打开目标网页，点击书签，输入任务。
 
