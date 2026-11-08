@@ -56,7 +56,7 @@ try{
     const url=`http://${host}:${port}/target-${host}`,b=await browser.newPage();await activate(b,url);
     await view(b).locator('#choose-history').click();const picker=b.frameLocator('iframe[title="历史对话"]');
     await b.screenshot({path:join(output,`picker-${host}.png`)});
-    await picker.getByRole('button',{name:/Continuation fixture.*127\.0\.0\.1/}).first().click();
+    await picker.locator('button[data-ref="'+encodeURIComponent(JSON.stringify(['127.0.0.1',1]))+'"]').click();
     await view(b).locator('#continuation-summary').filter({hasText:'Continuation fixture · 127.0.0.1'}).waitFor();
     const before=requests.length;await view(b).locator('#message-input').fill('TOOL_PAGE');await view(b).locator('#send').click();assert.equal(requests.length,before,'viewing must not submit');
     await view(b).locator('#continue-here').click();await view(b).locator('#send').click();
@@ -76,7 +76,7 @@ try{
   const cold=await browser.newPage();await activate(cold,`http://localhost:${port}/cold`);
   const beforeCold=requests.length;await view(cold).locator('#choose-history').click();
   const picker=cold.frameLocator('iframe[title="历史对话"]');
-  await picker.getByRole('button',{name:/Continuation fixture.*127\.0\.0\.1/}).first().click();
+  await picker.locator('button[data-ref="'+encodeURIComponent(JSON.stringify(['127.0.0.1',1]))+'"]').click();
   await view(cold).locator('#continuation-summary').filter({hasText:'Continuation fixture · 127.0.0.1'}).waitFor();
   assert.equal(requests.length,beforeCold);await view(cold).locator('#continue-here').click();await send(cold,'TOOL_PAGE');
   await cold.waitForFunction(()=>document.querySelector('[data-pi-overlay]')?.shadowRoot?.getElementById('chat-messages').textContent.includes('/cold'));

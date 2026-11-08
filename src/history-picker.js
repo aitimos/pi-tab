@@ -1,3 +1,4 @@
+import {refKey} from './conversation-ref.js';
 import {createI18n} from './i18n.js';
 const saved=await chrome.storage.local.get('pi-tab-language');
 const locale=createI18n({mode:saved['pi-tab-language']||'auto',languages:await chrome.i18n.getAcceptLanguages()}),t=(...args)=>locale.t(...args);
@@ -17,7 +18,7 @@ function render(){
   byId('rows').replaceChildren();
   for(const row of rows.filter(item=>(item.title+' '+item.ref.ownerSite).toLowerCase().includes(search))){
     const li=document.createElement('li'),button=document.createElement('button'),small=document.createElement('small');
-    button.type='button';button.textContent=row.title;small.textContent=row.ref.ownerSite;button.append(small);
+    button.type='button';button.dataset.ref=encodeURIComponent(refKey(row.ref));button.textContent=row.title;small.textContent=row.ref.ownerSite+' · '+t('对话 {0}',row.ref.conversationId);button.append(small);
     button.onclick=event=>{if(event.isTrusted)void choose(row.ref);};li.append(button);byId('rows').append(li);
   }
 }
