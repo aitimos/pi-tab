@@ -8,13 +8,14 @@ import {createBookmarklet} from '../src/bookmarklet.js';
 import {join,resolve} from 'node:path';
 const output=resolve(process.env.PI_TAB_EVIDENCE||'../evidence');
 await (await import('node:fs/promises')).mkdir(output,{recursive:true});
-const directory=await mkdtemp(join(tmpdir(),'pi-tab-continuations-')),requests=[];let heldRequests=0;
+const directory=await mkdtemp(join(tmpdir(),'pi-tab-continuations-')),requests=[];let heldRequests=0;const requestWaiters=new Set();
+function observeRequest(predicate){const found=requests.find(predicate);if(found)return Promise.resolve(found);return new Promise((resolve,reject)=>{const timeout=setTimeout(()=>{requestWaiters.delete(listener);reject(Error('Expected model context was not observed'));},15000);const listener=input=>{if(predicate(input)){clearTimeout(timeout);requestWaiters.delete(listener);resolve(input);}};requestWaiters.add(listener);});}
 let bookmark;
 const server=createServer((request,response)=>{
   if(!request.url.endsWith('/chat/completions')){response.setHeader('Content-Type','text/html;charset=utf-8');response.end('<title>Continuation fixture</title><h1>'+request.url+'</h1><p id="target">untouched</p>'+(bookmark?'<a id="bookmark" href="'+bookmark.replaceAll('&','&amp;').replaceAll('\"','&quot;')+'">Pi Tab</a>':''));return;}
   let body='';request.on('data',chunk=>body+=chunk);request.on('end',()=>{
     const input=JSON.parse(body),title=input.messages.some(m=>['system','developer'].includes(m.role)&&JSON.stringify(m.content).includes('你是会话标题生成器'));
-    if(!title)requests.push(input);
+    if(!title){requests.push(input);for(const listener of requestWaiters)listener(input);}
     const last=input.messages.at(-1),content=typeof last.content==='string'?last.content:JSON.stringify(last.content);
     if(!title&&last.role==='user'&&content.includes('HOLD_RECOVERY')){heldRequests++;return;}
     const command=content.includes('PI_TAB_TOOL ')?JSON.parse(content.slice(content.indexOf('PI_TAB_TOOL ')+12)):null;
@@ -44,7 +45,7 @@ try{
   const sourceTab=await worker.evaluate(async url=>(await chrome.tabs.query({url}))[0].id,base+'/source');
   const call=async(name,args={})=>{const response=await worker.evaluate(extensionTestRpc,{site:'127.0.0.1',tabId:sourceTab,method:'agent',chatId:1,name:'prompt',args:['PI_TAB_TOOL '+JSON.stringify({name,args})]});assert.ok(response.ok,response.error);try{return JSON.parse(response.value);}catch{throw Error(response.value);}};
   const independent=await call('tab_open',{url:`http://localhost:${port}/independent`});
-  const independentPage=browser.pages().find(page=>page.url().includes('/independent'));if(independentPage)await independentPage.waitForLoadState();
+  await call('tab_list');
   const sent=await call('tab_send',{tabId:independent.tabId,chatId:independent.chatId,message:'TOOL_PAGE'});assert.equal(sent.to,independent.chatId);
   console.log('PASS tab_open independent agent and legacy tab_send');
   for(const host of ['127.0.0.1','sub.localhost','localhost']){
@@ -55,7 +56,8 @@ try{
     const before=requests.length;await view(b).locator('#message-input').fill('TOOL_PAGE');await view(b).locator('#send').click();assert.equal(requests.length,before,'viewing must not submit');
     await view(b).locator('#continue-here').click();await view(b).locator('#send').click();
     await b.waitForFunction(url=>document.querySelector('[data-pi-overlay]')?.shadowRoot?.getElementById('chat-messages').textContent.includes(url),url);
-    assert.ok(JSON.stringify(requests.at(-1).messages).includes('ORIGINAL_TASK_CONTEXT'));assert.ok(JSON.stringify(requests.at(-1).messages).includes(url));
+    const observed=await observeRequest(input=>JSON.stringify(input.messages).includes('ORIGINAL_TASK_CONTEXT')&&JSON.stringify(input.messages).includes(url));
+    assert.ok(observed.messages.some(message=>message.role==='tool'&&JSON.stringify(message.content).includes(url)));
     await b.screenshot({path:join(output,`continue-${host}.png`)});
     // Same-URL reload must revoke the old authorization, while history remains readable.
     await b.reload();await view(b).locator('#continue-here').waitFor();

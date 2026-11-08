@@ -66,7 +66,7 @@ try{
   };
   const source=(await engine('listChats'))[0].id;
   await engine('agent',[{api:'openai-completions',baseUrl:new URL('/v1',url).href,apiKey:'test-only',model:'test-model',thinking:'off',reasoning:false}],source,'configure');
-  const call=async(name,args={})=>JSON.parse(await engine('agent',[command(name,args)],source,'prompt'));
+  const call=async(name,args={})=>{const answer=await engine('agent',[command(name,args)],source,'prompt');try{return JSON.parse(answer);}catch{throw Error('Tool '+name+' returned: '+answer);}};
   const page=()=>command('js_eval',{code:'return {url:location.href,title:document.title}'});
   const sourcePage=JSON.parse(await engine('agent',[page()],source,'prompt'));
   assert.equal(sourcePage.url,url);

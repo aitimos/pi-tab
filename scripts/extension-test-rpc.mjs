@@ -2,6 +2,7 @@
 // world; no test bridge or controller is included in the extension package.
 export async function extensionTestRpc({tabId,site,method,args=[],chatId,name}) {
   try {
+    if(['listChats','listModels','listProviders'].includes(method))return chrome.runtime.sendMessage({target:'engine',site,tabId,method,args,chatId,name});
     if(method==='createChat'){
       await chrome.storage.session.set({['active:'+tabId]:true});
       for(let i=0;i<50;i++){
