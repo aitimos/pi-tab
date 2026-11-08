@@ -6,7 +6,7 @@ import {mkdtemp,cp,writeFile,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {createBookmarklet} from '../src/bookmarklet.js';
 import {join,resolve} from 'node:path';
-const output=resolve(process.env.PI_TAB_EVIDENCE||'../evidence');
+const output=process.env.PI_TAB_EVIDENCE?resolve(process.env.PI_TAB_EVIDENCE):await mkdtemp(join(tmpdir(),'pi-tab-continuations-evidence-'));console.log('Evidence:',output);
 await (await import('node:fs/promises')).mkdir(output,{recursive:true});
 const directory=await mkdtemp(join(tmpdir(),'pi-tab-continuations-')),requests=[];let heldRequests=0;const requestWaiters=new Set();
 function observeRequest(predicate){const found=requests.find(predicate);if(found)return Promise.resolve(found);return new Promise((resolve,reject)=>{const timeout=setTimeout(()=>{requestWaiters.delete(listener);reject(Error('Expected model context was not observed'));},15000);const listener=input=>{if(predicate(input)){clearTimeout(timeout);requestWaiters.delete(listener);resolve(input);}};requestWaiters.add(listener);});}
@@ -77,7 +77,7 @@ try{
   const beforeCold=requests.length;await view(cold).locator('#choose-history').click();
   const picker=cold.frameLocator('iframe[title="历史对话"]');
   await picker.locator('button[data-ref="'+encodeURIComponent(JSON.stringify(['127.0.0.1',1]))+'"]').click();
-  await view(cold).locator('#continuation-summary').filter({hasText:'Continuation fixture · 127.0.0.1'}).waitFor();
+  await Promise.race([view(cold).locator('#continuation-summary').filter({hasText:'Continuation fixture · 127.0.0.1'}).waitFor(),picker.locator('#error').filter({hasText:/\S/}).waitFor().then(async()=>{throw Error('Cold picker: '+await picker.locator('#error').innerText());}),view(cold).locator('#continuation-error').filter({hasText:/\S/}).waitFor().then(async()=>{throw Error('Cold view: '+await view(cold).locator('#continuation-error').innerText());})]);
   assert.equal(requests.length,beforeCold);await view(cold).locator('#continue-here').click();await send(cold,'TOOL_PAGE');
   await cold.waitForFunction(()=>document.querySelector('[data-pi-overlay]')?.shadowRoot?.getElementById('chat-messages').textContent.includes('/cold'));
   await cold.screenshot({path:join(output,'cold-history.png')});console.log('PASS cold history with source tab closed');
@@ -122,4 +122,4 @@ try{
   await unsupported.getByRole('alert').waitFor();assert.ok((await unsupported.getByRole('alert').innerText()).includes('独占锁'));
   await unsupported.getByRole('button',{name:'新建独立对话'}).click();await unsupported.waitForFunction(()=>window.pi?.__piConsolePlugin);await unsupported.evaluate(()=>pi.ready);await unsupported.close();console.log('PASS no-Web-Locks explicit independent storage');
   assert.deepEqual(errors,[]);await writeFile(join(output,'continuations.json'),JSON.stringify({browser:browser.browser()?.version(),requests,errors},null,2));
-}catch(error){for(const [i,page]of browser.pages().entries()){await page.screenshot({path:join(output,'failure-'+i+'.png')}).catch(()=>{});console.log((await page.locator('[data-pi-overlay]').last().innerText().catch(()=>'')));}throw error;}finally{await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r));await rm(directory,{recursive:true,force:true});}
+}catch(error){for(const [i,page]of browser.pages().entries()){await page.screenshot({path:join(output,'failure-'+i+'.png')}).catch(()=>{});console.log(JSON.stringify({url:page.url(),views:await page.locator('[data-pi-overlay]').evaluateAll(hosts=>hosts.map(host=>Object.fromEntries(['continuation-summary','continuation-error','status','setup-error'].map(id=>[id,host.shadowRoot?.getElementById(id)?.textContent])))).catch(()=>[]),frames:await Promise.all(page.frames().map(async frame=>({url:frame.url(),error:await frame.locator('#error').innerText({timeout:250}).catch(()=>null)})))}));}throw error;}finally{await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r));await rm(directory,{recursive:true,force:true});}
