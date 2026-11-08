@@ -1,3 +1,4 @@
+import {extensionTestRpc} from './extension-test-rpc.mjs';
 // Run against the built extension in a separate Chrome for Testing session.
 // Requires agent-browser and PI_TAB_TEST_CHROME pointing to Chrome for Testing.
 import {agentBrowser} from './browser-cli.mjs';
@@ -99,6 +100,7 @@ async function check(name, action) {
 }
 const root = `document.querySelector('[data-pi-overlay]').shadowRoot`;
 async function click(id) {
+  if(id==='send'){await evaluate(`(()=>{const r=${root};const button=r.getElementById('continue-here');if(button&&!button.disabled)button.click();})()`);await browser('wait','--fn',`${root}.getElementById('continuation-panel').dataset.authorized==='true'`);}
   const point = await evaluate(`(()=>{const r=${root}.getElementById(${JSON.stringify(id)}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
   await browser('mouse','move',String(Math.round(point.x)),String(Math.round(point.y)));
   await browser('mouse','down','left');
@@ -618,7 +620,7 @@ try {
   const backgroundChat=afterChats.value.find(chat=>!beforeChats.value.some(old=>old.id===chat.id));
   await browser('tab',controllerPage);
   const currentId=beforeChats.value[0].id;
-  const engine = async (method,args=[],chatId,name) => evaluate(`chrome.runtime.sendMessage(${JSON.stringify({target:'engine',site:'127.0.0.1',method,args,chatId,name})})`);
+  const engine = async (method,args=[],chatId,name) => evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});return (${extensionTestRpc.toString()})({...${JSON.stringify({site:'127.0.0.1',method,args,chatId,name})},tabId:tab.id});})()`);
   const configuration = await engine('agent',[{api:'openai-completions',baseUrl:url+'v1',apiKey:'test-only',model:'test-model',reasoning:false,thinking:'off',input:['text','image']}],currentId,'configure');
   assert.equal(configuration.ok,true,configuration.error);
   const reply=await engine('agent',['Keep this conversation'],currentId,'prompt');
@@ -626,7 +628,7 @@ try {
   const keptHistory=await engine('agent',[],currentId,'history');
   const keptModels=await engine('listModels');
   holdModel=true;
-  await evaluate(`void chrome.runtime.sendMessage(${JSON.stringify({target:'engine',site:'127.0.0.1',method:'agent',chatId:currentId,name:'prompt',args:['Pending task']})});true`);
+  await evaluate(`void(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});return (${extensionTestRpc.toString()})({...${JSON.stringify({site:'127.0.0.1',method:'agent',chatId:currentId,name:'prompt',args:['Pending task']})},tabId:tab.id});})();true`);
   await browser('wait','--fn',`(async()=>{const r=await chrome.runtime.sendMessage({target:'engine',site:'127.0.0.1',method:'listChats'});return r.value.some(c=>c.id===${currentId}&&c.busy)})()`);
   await check('real background run stays visible when opening and reopening the conversation menu',async()=>{
     await browser('tab',sourcePage);
@@ -663,13 +665,13 @@ try {
     await browser('tab',controllerPage);
   });
   await check('Durable snapshot with a live run preserves the running indicator',async()=>{
-    await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});await chrome.tabs.sendMessage(tab.id,{type:'engine-event',event:{type:'snapshot',conversationId:${currentId},run:{inputs:[1]}}});})()`);
+    await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});await chrome.tabs.sendMessage(tab.id,{type:'engine-event',ref:{ownerSite:'127.0.0.1',conversationId:${currentId}},event:{type:'snapshot',conversationId:${currentId},run:{inputs:[1]}}});})()`);
     await browser('tab',sourcePage);
     assert.equal(await evaluate(`${root}.querySelector('[data-chat-id="${currentId}"] .chat-running').hidden`),false);
     await browser('tab',controllerPage);
   });
   await check('agent queue and delayed completion preserve a live run and its output',async()=>{
-    const deliver=event=>evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});await chrome.tabs.sendMessage(tab.id,{type:'engine-event',event:${JSON.stringify({...event,conversationId:currentId})}});})()`);
+    const deliver=event=>evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});await chrome.tabs.sendMessage(tab.id,{type:'engine-event',ref:{ownerSite:'127.0.0.1',conversationId:${currentId}},event:${JSON.stringify({...event,conversationId:currentId})}});})()`);
     await deliver({type:'message_start',message:{role:'assistant',content:[{type:'text',text:'Before'}]}});
     await browser('tab',sourcePage);
     try {

@@ -240,6 +240,7 @@ async function openChat(initialConfig, options = {}) {
     #chat-tools>span:last-child { flex:none; }
     #page-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
     .context-dot { width:5px; height:5px; border-radius:50%; background:#b4b4b4; flex:none; margin-left:auto; }
+    #continuation-panel{padding:10px 20px!important;color:var(--muted);line-height:1.5}#continuation-panel button{border:1px solid var(--line);border-radius:6px;background:transparent;color:inherit;font:inherit;padding:4px 8px;cursor:pointer}#continuation-panel button:hover:not(:disabled){background:var(--hover)}#continuation-panel button:disabled{opacity:.5;cursor:default}#continuation-error{color:var(--error);margin-top:4px}
     #chat-messages { flex:1; min-height:0; overflow:auto; padding:8px 20px 20px; display:flex; flex-direction:column; gap:22px; scrollbar-width:thin; scrollbar-color:var(--line) transparent; }
     #welcome { margin:auto 0; padding:18px 0 8px; }
     .welcome-mark { width:46px; height:46px; font-size:32px; border-radius:14px; margin-bottom:18px; }
@@ -493,6 +494,7 @@ async function openChat(initialConfig, options = {}) {
       <p id="chat-menu-error" role="status" hidden></p>
     </div>
     <div id="content">
+        <div id="continuation-panel" hidden style="padding:8px 20px;border-bottom:1px solid var(--line);font-size:12px"><div id="continuation-summary" role="status"></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px"><button id="choose-history" type="button">历史对话</button><button id="continue-here" type="button">在当前页继续</button><button id="stop-continue" type="button">停止当前任务后在本页继续</button><button id="target-return" type="button">回到执行页</button><button id="recover-source" type="button">停止来源站点的中断任务</button></div><div id="continuation-error" role="alert"></div></div>
       <form id="setup" autocomplete="off">
         <div class="form-body" id="setup-fields">
           <div class="setup-heading"><h2 id="setup-title">设置模型</h2><button id="setup-manage" class="text-button" type="button">管理模型</button></div>
@@ -518,6 +520,7 @@ async function openChat(initialConfig, options = {}) {
       </form>
       <section id="chat" aria-label="对话">
         <div id="chat-tools">${icon('page')}<span id="page-title"></span><span class="context-dot" aria-hidden="true"></span><span>当前网页</span></div>
+
         <div id="chat-messages" role="log" aria-label="对话记录" aria-live="polite"></div>
         <div id="composer">
           <div id="attachments" aria-label="待发送附件"></div><p id="attachment-error" role="status"></p>
@@ -620,7 +623,8 @@ async function openChat(initialConfig, options = {}) {
   function rememberWindow() {
     if (options.mount) return;
     const open = [...new Set([...manager.instances.values()].filter(instance => instance.visible && instance.id != null).map(instance => instance.id))];
-    sessionStorage.setItem('pi-tab-open-chats', JSON.stringify(open));
+    if(runtimePi?.extension)sessionStorage.setItem('pi-tab-open-chats-v2',JSON.stringify(open.map(runtimePi.parseConversationRef)));
+    else sessionStorage.setItem('pi-tab-open-chats', JSON.stringify(open));
   }
   // Keep editor events inside the overlay without cancelling typing, IME or shortcuts.
   for (const type of ['keydown','keyup','keypress','beforeinput','input','change','paste','copy','cut']) {
@@ -648,6 +652,24 @@ async function openChat(initialConfig, options = {}) {
   }, { passive:false });
   const state = { busy: false, pending:0, pendingByChat:new Map(), historyVersion:0, connected: false, minimized: false, configuring: false, unsubscribe: null, started: false, bookmarkConfig: null, tools: new Map(), stream: null, runStarted: 0, timer: null, selectedTool: null, trace: null, traces: [], activeConfig:null, profiles:[], providers:[], selectedProviderId:null, candidates:[], candidateProvider:null, selectedModel:null, discovery:null, discoveryTimer:null, discoveryVersion:0 };
 
+  async function renderContinuation(){
+    if(!runtimePi?.extension||!agent)return;
+    const panel=byId('continuation-panel');panel.hidden=false;panel.dataset.authorized=String(agent.authorized);
+    try {
+      const binding=await agent.refreshBinding(),ref=runtimePi.parseConversationRef(agent.id);
+      byId('continuation-summary').textContent=t('当前对话：{0}；执行页面：{1}',ref.ownerSite+' / '+ref.conversationId,binding.target?.url||t('未绑定，请在本页重新接续'));
+      byId('continue-here').disabled=binding.busy||Boolean(binding.recovery)||agent.authorized;
+      byId('stop-continue').hidden=!binding.busy||Boolean(binding.recovery);
+      byId('recover-source').hidden=!binding.recovery;
+      byId('target-return').hidden=!binding.target;
+    }catch(error){byId('continuation-error').textContent=t(error.message);}
+  }
+  async function continuationAction(work){try{byId('continuation-error').textContent='';await work();}catch(error){byId('continuation-error').textContent=t(error.message);}finally{await renderContinuation();}}
+  byId('choose-history').onclick=()=>continuationAction(async()=>{const id=await runtimePi.chooseHistory();if(id)await switchConversation(id);});
+  byId('continue-here').onclick=()=>continuationAction(()=>agent.continueHere());
+  byId('stop-continue').onclick=()=>continuationAction(async()=>{await agent.abort();await agent.refreshBinding();await agent.continueHere();});
+  byId('target-return').onclick=()=>continuationAction(()=>agent.returnToTarget());
+  byId('recover-source').onclick=()=>continuationAction(async()=>{const binding=await agent.refreshBinding();if(window.confirm(t('停止来源站点的 {0} 个中断会话？历史会保留。',binding.recovery.chats.length)))await agent.recoverSource();});
   function sameProvider(a,b) { return Boolean(a && b && a.api === b.api && a.baseUrl?.replace(/\/+$/, '') === b.baseUrl?.replace(/\/+$/, '')); }
   function draftProvider() {
     const config = {nativeProvider:null,api:byId('api').value,baseUrl:byId('base-url').value.trim(),apiKey:byId('api-key').value.trim()};
@@ -1802,13 +1824,15 @@ async function openChat(initialConfig, options = {}) {
     const pi = agent;
     if (!pi || typeof pi.onEvent !== 'function') return;
     state.unsubscribe = runtimePi.onEvent(event => {
+      if(event.type==='binding_state')return;
+      if(['binding_changed','target_invalidated','recovery_complete'].includes(event.type)){void renderContinuation();return;}
       if(event.type==='mcp_changed'){renderMcpStatus(event);return;}
       if(event.type==='mcp_imported'){if(event.skipped?.length)i18n.text(byId('mcp-notice'),()=>t('书签配置中有 {0} 项已保留本站设置。',event.skipped.length));return;}
       if(event.type==='models_changed'){
         void agent.savedConfig().then(config=>{state.activeConfig=config;if(config)syncModelControls(config);if(byId('model-dialog').hidden){if(!config){state.connected=false;if(byId('preferences').style.display!=='flex')showSetup();}else if(state.connected)i18n.text(byId('chat-model'),config.model);}});return;
       }
       if (event.type === 'chat_title_changed') {
-        const row = byId('chat-entries').querySelector(`[data-chat-id="${event.conversationId}"]`);
+        const row = [...byId('chat-entries').children].find(row=>row.dataset.chatId===String(event.conversationId));
         if (row) {
           i18n.text(row.querySelector('.chat-title'), event.title);
           row.querySelector('.chat-select').title=event.title;
@@ -1817,7 +1841,7 @@ async function openChat(initialConfig, options = {}) {
         return;
       }
       if (event.type === 'chat_deleted') {
-        byId('chat-entries').querySelector(`[data-chat-id="${event.conversationId}"]`)?.remove();
+        [...byId('chat-entries').children].find(row=>row.dataset.chatId===String(event.conversationId))?.remove();
         if (pi.id === event.conversationId) void switchConversation(event.replacementId).catch(error => message('system', error.message));
         return;
       }
@@ -1863,6 +1887,7 @@ async function openChat(initialConfig, options = {}) {
     if (attachments.some(file => file.part.type === 'image') && !agent.describeModel(state.activeConfig).input.includes('image')) { i18n.text(byId('attachment-error'), () => t("当前模型不支持图片，请切换模型或移除图片。")); return; }
     const content = attachments.length ? [{type:'text',text:text || t("请查看附件。")},...attachments.map(file => file.part)] : text;
     const pi = agent;
+    if(runtimePi?.extension&&!agent.authorized){byId('continuation-error').textContent=t('请先点击“在当前页继续”，再发送任务。');await renderContinuation();return;}
     const chatId = pi?.id;
     if (!pi?.prompt) { message('system',t("Pi Tab 不可用，请重新点击书签。")); return; }
     input.value = '';
@@ -1905,6 +1930,8 @@ async function openChat(initialConfig, options = {}) {
       await pi.ready;
       const chatId = options.chatId || (options.newAgent ? await pi.createChat({ inheritFrom: options.inheritFrom || pi.conversation.id }) : pi.conversation.id);
       agent = pi.agent(chatId);
+      await agent.ready;
+      await renderContinuation();
       byId('settings').disabled = false;
       rememberWindow();
       state.activeConfig = await agent.savedConfig();
@@ -2070,6 +2097,7 @@ async function openChat(initialConfig, options = {}) {
       await agent.newChat();
       restoreComposerDraft();
       rememberWindow();
+      await renderContinuation();
       state.pending = state.pendingByChat.get(agent.id) || 0;
       state.activeConfig = await agent.savedConfig();
       subscribeEvents();
@@ -2104,6 +2132,7 @@ async function openChat(initialConfig, options = {}) {
     state.activeConfig = await agent.savedConfig();
     if (state.activeConfig) syncModelControls(state.activeConfig);
     subscribeEvents();
+    await renderContinuation();
     closeChatMenu();
     byId('chat-messages').replaceChildren();
     state.tools.clear();

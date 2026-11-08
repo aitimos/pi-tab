@@ -1,3 +1,4 @@
+import {extensionTestRpc} from './extension-test-rpc.mjs';
 // Real extension + Durable tool execution, with a deterministic local model server.
 import {agentBrowser} from './browser-cli.mjs';
 import assert from 'node:assert/strict';
@@ -78,7 +79,7 @@ try{
   const sourceTab=await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url)}});await chrome.storage.session.set({['active:'+tab.id]:true});const r=await chrome.tabs.sendMessage(tab.id,{type:'activate'});if(!r.ok)throw new Error(r.error);return tab.id})()`);
   const engine=async(method,args=[],chatId,name,site='127.0.0.1',tabId=sourceTab)=>{
     await browser('tab',controllerPage);
-    const result=await evaluate(`chrome.runtime.sendMessage(${JSON.stringify({target:'engine',site,tabId,method,args,chatId,name})})`);
+    const result=await evaluate(`(${extensionTestRpc.toString()})(${JSON.stringify({site,tabId,method,args,chatId,name})})`);
     assert.equal(result.ok,true,result.error);return result.value;
   };
   const source=(await engine('listChats'))[0].id;
@@ -86,7 +87,7 @@ try{
   const root=`document.querySelector('[data-pi-overlay]').shadowRoot`;
   async function start(chatId,text,tabId=sourceTab){
     await browser('tab',controllerPage);
-    await evaluate(`void chrome.runtime.sendMessage(${JSON.stringify({target:'engine',site:'127.0.0.1',tabId,method:'agent',args:[text],chatId,name:'prompt'})})`);
+    await evaluate(`void (${extensionTestRpc.toString()})(${JSON.stringify({target:'engine',site:'127.0.0.1',tabId,method:'agent',args:[text],chatId,name:'prompt'})})`);
   }
   async function idle(chatId){for(let i=0;i<30;i++){if(!(await engine('listChats')).find(c=>c.id===chatId)?.busy)return;await new Promise(resolve=>setTimeout(resolve,100));}throw Error('Conversation did not stop');}
   async function waitServer(predicate){for(let i=0;i<100;i++){if(predicate())return;await new Promise(resolve=>setTimeout(resolve,50));}assert.ok(predicate(),'server state reached');}
@@ -98,7 +99,7 @@ try{
   await browser('tab',sourcePage);await browser('reload');await browser('wait','[data-pi-overlay]');
   await start(source,'HOLD_STOP');await waitServer(()=>pending.has('HOLD_STOP'));
   await browser('tab',controllerPage);
-  await evaluate(`void chrome.runtime.sendMessage(${JSON.stringify({target:'engine',site:'127.0.0.1',tabId:sourceTab,method:'agent',args:['QUEUED_MUST_NOT_RUN'],chatId:source,name:'followUp'})})`);
+  await evaluate(`void (${extensionTestRpc.toString()})(${JSON.stringify({target:'engine',site:'127.0.0.1',tabId:sourceTab,method:'agent',args:['QUEUED_MUST_NOT_RUN'],chatId:source,name:'followUp'})})`);
   await stopButton();await idle(source);await waitServer(()=>pending.get('HOLD_STOP').closed);
   assert.equal((await engine('agent',[],source,'queuedMessages')).length,0);
   assert.ok(!requests.some(r=>JSON.stringify(r.messages.at(-1)).includes('QUEUED_MUST_NOT_RUN')));

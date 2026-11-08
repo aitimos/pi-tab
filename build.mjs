@@ -136,6 +136,8 @@ await mkdir('dist/extension', { recursive: true });
 await writeFile('dist/extension/LICENSE', await readFile('LICENSE'));
 await writeFile('dist/extension/NOTICE', await readFile('NOTICE'));
 await writeFile('dist/extension/manifest.json', await readFile('extension/manifest.json'));
+await cp('src/history-picker.html','dist/extension/history-picker.html');
+await build({entryPoints:['src/history-picker.js'],bundle:true,format:'esm',platform:'browser',target:'chrome110',minify:true,outfile:'dist/extension/history-picker.js'});
 await cp('extension/_locales','dist/extension/_locales',{recursive:true});
 await build({entryPoints:['src/extension-worker.js'],bundle:true,format:'esm',platform:'browser',target:'chrome110',minify:true,outfile:'dist/extension/worker.js'});
 const oauthUIBuild=await build({entryPoints:['src/oauth-ui.js'],bundle:true,format:'iife',globalName:'PiTabOAuthUI',platform:'browser',minify:true,write:false});

@@ -1,5 +1,5 @@
 export function createBookmarklet(source, { openChat, config, profiles = [], providers = [], mcp } = {}) {
-  const code = `void(async()=>{try{
+  const code = `void(globalThis.__piTabRetryBookmark=async()=>{try{
     let pi=window.pi?.__piConsolePlugin?window.pi:window.__piTabAgent?.__piConsolePlugin?window.__piTabAgent:null;
     if(!pi){
       const deferred=globalThis.__piTabDeferredInstall;
@@ -8,7 +8,8 @@ export function createBookmarklet(source, { openChat, config, profiles = [], pro
         if(deferred===undefined)delete globalThis.__piTabDeferredInstall;
         else globalThis.__piTabDeferredInstall=deferred;
       }
-      pi=PiConsolePlugin.install({globalName:'pi' in window?'__piTabAgent':'pi'});
+      pi=PiConsolePlugin.install({globalName:'pi' in window?'__piTabAgent':'pi',independentStorage:globalThis.__piTabIndependentStorage===true});
+      delete globalThis.__piTabIndependentStorage;
     }
     await pi.ready;
     ${profiles.length ? `pi.importProfiles(${JSON.stringify(profiles)});` : ''}
@@ -36,6 +37,11 @@ export function createBookmarklet(source, { openChat, config, profiles = [], pro
     const language=localStorage.getItem('pi-tab-language')||'auto';
     const chinese=language==='zh-CN'||(language==='auto'&&(navigator.languages.find(value=>/^(zh|en)(-|$)/i.test(value))||'en').toLowerCase().startsWith('zh'));
     notice.textContent=(chinese?'Pi Tab 无法启动：':'Pi Tab could not start: ')+(locale?locale.t(error?.message||error):String(error?.message||error)).slice(0,240);
+    if(['STORAGE_IN_USE_RETRY','STORAGE_LOCK_UNAVAILABLE'].includes(error.code)){
+      const help=document.createElement('p');help.textContent=chinese?'书签历史仅限当前网站。跨站接续请点击扩展图标。':'Bookmark history belongs to this origin. Use the extension for cross-site continuation.';notice.append(help);
+      const retry=document.createElement('button');retry.textContent=chinese?'重试':'Retry';retry.onclick=()=>{notice.remove();void globalThis.__piTabRetryBookmark();};notice.append(retry);
+      const independent=document.createElement('button');independent.textContent=chinese?'新建独立对话':'New independent conversation';independent.onclick=()=>{globalThis.__piTabIndependentStorage=true;notice.remove();void globalThis.__piTabRetryBookmark();};notice.append(independent);
+    }
     const close=document.createElement('button');
     close.type='button';close.textContent=chinese?'关闭':'Close';close.style.cssText='margin-left:12px;padding:4px 8px;border:.5px solid #484848;border-radius:6px;background:#2a2a2a;color:#eeeeee;cursor:pointer';
     close.onclick=()=>notice.remove();notice.append(close);

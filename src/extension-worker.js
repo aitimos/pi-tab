@@ -1,3 +1,4 @@
+import {conversationRef,refKey} from './conversation-ref.js';
 import {McpConfigStore} from './mcp-store.js';
 import { createI18n } from './i18n.js';
 
@@ -6,6 +7,7 @@ async function actionLocale() {
   return createI18n({mode:saved['pi-tab-language'] || 'auto',languages:await chrome.i18n.getAcceptLanguages()});
 }
 
+const selectedKey=(tabId,origin)=>`selected:${tabId}:${origin}`;
 const activeKey = tabId => `active:${tabId}`;
 const siteOf = url => {
   const parsed = new URL(url);
@@ -14,6 +16,49 @@ const siteOf = url => {
 };
 let openingEngine;
 const pageTools = new Map();
+
+const documents=new Map(), grants=new Map(), subscribers=new Map(), openedAgents=new Map();
+const internal=sender=>!sender.tab && sender.id===chrome.runtime.id;
+async function coordinator(request) {
+  await ensureEngine();
+  const response=await chrome.runtime.sendMessage({...request,target:'continuations',pageTarget:request.target});
+  if(!response?.ok)throw Error(response?.error||'ENGINE_UNAVAILABLE');
+  return response.value;
+}
+async function validTarget(target) {
+  const current=documents.get(target?.tabId);
+  if(!current||JSON.stringify(current)!==JSON.stringify(target))throw Error('TARGET_INVALIDATED');
+  const tab=await chrome.tabs.get(target.tabId);
+  if(tab.url!==target.url)throw Error('TARGET_INVALIDATED');
+  const reply=await chrome.tabs.sendMessage(target.tabId,{type:'verify-target',target},{documentId:target.documentId});
+  if(!reply?.ok)throw Error(reply?.error||'TARGET_PERMISSION_OR_UNSUPPORTED');
+  return true;
+}
+function senderTarget(sender) {
+  if(sender.id!==chrome.runtime.id||sender.frameId!==0||!sender.documentId||!sender.tab?.id)throw Error('INVALID_TOP_DOCUMENT');
+  const target=documents.get(sender.tab.id);
+  if(!target||target.documentId!==sender.documentId||target.url!==sender.url)throw Error('TARGET_INVALIDATED');
+  return target;
+}
+function revoke(tabId) {
+  documents.delete(tabId);
+  for(const [key,grant]of grants)if(grant.target.tabId===tabId)grants.delete(key);
+  for(const [key,views]of subscribers){for(const [id,view]of views)if(view.tabId===tabId)views.delete(id);if(!views.size)subscribers.delete(key);}
+  if(chrome.offscreen)void chrome.offscreen.hasDocument().then(has=>{if(has)return chrome.runtime.sendMessage({type:'target-invalidated',tabId});}).catch(()=>{});
+}
+function subscribe(ref,target,viewId) {
+  const key=refKey(ref);if(!subscribers.has(key))subscribers.set(key,new Map());
+  subscribers.get(key).set(viewId,{tabId:target.tabId,documentId:target.documentId});
+}
+function pickerGrant(message,sender) {
+  const grant=grants.get(message.grant);
+  if(!grant||grant.expires<Date.now()||sender.id!==chrome.runtime.id||sender.tab?.id!==grant.target.tabId||sender.frameId===0||!sender.documentId||!sender.url?.startsWith(chrome.runtime.getURL('history-picker.html')+'#'))throw Error('PICKER_UNAUTHORIZED');
+  if(grant.pickerDocumentId&&grant.pickerDocumentId!==sender.documentId)throw Error('PICKER_UNAUTHORIZED');
+  grant.pickerDocumentId=sender.documentId;
+  const current=documents.get(grant.target.tabId);
+  if(JSON.stringify(current)!==JSON.stringify(grant.target))throw Error('PICKER_EXPIRED');
+  return grant;
+}
 
 async function ensureEngine() {
   if (await chrome.offscreen.hasDocument()) return;
@@ -55,12 +100,14 @@ chrome.action.onClicked.addListener(async tab => {
   }
 });
 chrome.tabs.onRemoved.addListener(async tabId => {
+  revoke(tabId);openedAgents.delete(tabId);
   await chrome.storage.session.remove(activeKey(tabId));
   if (!await chrome.offscreen.hasDocument()) return;
   const response = await chrome.runtime.sendMessage({type:'tab-closed',tabId});
   if (!response?.ok) console.error('[Pi Tab]',response?.error || 'Could not stop closed tab tasks');
 });
 chrome.tabs.onUpdated.addListener((tabId,change) => {
+  if(change.status==='loading'||change.url)revoke(tabId);
   if(change.status!=='complete')return;
   void chrome.storage.session.get(activeKey(tabId)).then(saved=>{if(saved[activeKey(tabId)])return activate(tabId);}).catch(error=>console.error('[Pi Tab]',error));
 });
@@ -84,8 +131,47 @@ const mcpStore=new McpConfigStore({
 });
 
 chrome.runtime.onMessage.addListener((message,sender,respond) => {
-  if(message.target==='engine'||message.type==='shared-config-updated'||message.type==='tab-closed'||message.type==='mcp-update-guard')return false;
+  if(message.target==='engine'||message.type==='shared-config-updated'||message.type==='tab-closed'||message.type==='mcp-update-guard'||message.type==='target-invalidated'||message.target==='continuations')return false;
   (async()=>{
+    if(message.type==='document-hello') {
+      if(sender.id!==chrome.runtime.id||sender.frameId!==0||!sender.documentId||!sender.tab?.id)throw Error('INVALID_TOP_DOCUMENT');
+      siteOf(sender.url);
+      const target={tabId:sender.tab.id,documentId:sender.documentId,origin:new URL(sender.url).origin,url:sender.url,nonce:message.nonce,routeEpoch:message.routeEpoch};
+      if(JSON.stringify(documents.get(target.tabId))!==JSON.stringify(target))revoke(target.tabId);
+      documents.set(target.tabId,target);return target;
+    }
+    if(message.type==='validate-target'){if(!internal(sender))throw Error('INTERNAL_ONLY');return validTarget(message.target);}
+    if(message.type==='picker-open') {
+      const target=senderTarget(sender);await validTarget(target);
+      const grant=crypto.randomUUID();grants.set(grant,{target,viewId:message.viewId,expires:Date.now()+120000});
+      return {url:chrome.runtime.getURL('history-picker.html')+'#'+grant};
+    }
+    if(message.type==='picker-list'||message.type==='picker-select'||message.type==='picker-close') {
+      const grant=pickerGrant(message,sender);await validTarget(grant.target);
+      if(message.type==='picker-list')return coordinator({operation:'list',cursor:message.cursor,refresh:message.refresh,reset:message.reset});
+      grants.delete(message.grant);
+      if(message.type==='picker-select') {
+        const ref=conversationRef(message.ref?.ownerSite,message.ref?.conversationId);
+        await coordinator({operation:'view',ref});subscribe(ref,grant.target,grant.viewId);
+        const key=selectedKey(grant.target.tabId,grant.target.origin),saved=await chrome.storage.session.get(key);
+        await chrome.storage.session.set({[key]:[...new Set([...(saved[key]||[]),refKey(ref)])]});
+        await chrome.tabs.sendMessage(grant.target.tabId,{type:'history-selected',ref,viewId:grant.viewId},{documentId:grant.target.documentId});
+      }else await chrome.tabs.sendMessage(grant.target.tabId,{type:'history-picker-closed',viewId:grant.viewId},{documentId:grant.target.documentId});
+      return true;
+    }
+    if(message.type==='focus-target'){const target=senderTarget(sender);const ref=conversationRef(message.ref?.ownerSite,message.ref?.conversationId);if(!subscribers.get(refKey(ref))?.has(message.viewId))throw Error('CONVERSATION_NOT_SELECTED');const state=await coordinator({operation:'view',ref});if(!state.target)throw Error('TARGET_INVALIDATED');return chrome.tabs.update(state.target.tabId,{active:true});}
+    if(message.type==='continuation-call') {
+      const target=senderTarget(sender), ref=conversationRef(message.ref?.ownerSite,message.ref?.conversationId);
+      // A source becomes accessible only through its native list or a picker selection.
+      const subscription=subscribers.get(refKey(ref))?.get(message.viewId);
+      const selected=await chrome.storage.session.get(selectedKey(target.tabId,target.origin));
+      if(ref.ownerSite!==siteOf(target.url)&&!selected[selectedKey(target.tabId,target.origin)]?.includes(refKey(ref))&&(!subscription||subscription.documentId!==target.documentId))throw Error('CONVERSATION_NOT_SELECTED');
+      subscribe(ref,target,message.viewId);
+      const value=await coordinator({operation:message.operation,ref,args:message.args,name:message.name,expectedVersion:message.expectedVersion,viewId:message.viewId,target,
+        authorization:{target,viewId:message.viewId,leaseToken:message.leaseToken},clientRequestId:message.clientRequestId});
+      if(message.operation==='create')subscribe(value,target,message.viewId);
+      return value;
+    }
     if(message.type==='shared-config'){
       if(message.operation==='get')return chrome.storage.local.get(['profiles','providers','mcp','mcpRevision']);
       if(message.operation==='mcp-preview')return mcpStore.preview(message.input,message.choices);
@@ -109,44 +195,36 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
       return {tabId,site:siteOf(sender.tab.url),active:Boolean(saved[activeKey(tabId)])};
     }
     if(message.type==='engine-call'){
-      const tabId=sender.tab?.id;
-      if(!tabId)throw new Error('无法确定当前标签页。');
+      const target=senderTarget(sender),tabId=target.tabId;
+      if(!['initialize','listChats','manageModels','auth','getPreferences','setPreferences','listModels','listProviders','saveProvider','mcpConfig','getMcpServer','getMcpVariables','refreshMcp','previewMcpImport','changeMcpConfig','setMcpConfig'].includes(message.method))throw Error('USE_CONVERSATION_REF');
       return engineCall(siteOf(sender.tab.url),tabId,message.method,message.args,message.chatId,message.name);
     }
     if(message.type==='cancel-page-tool'){
+      if(!internal(sender))throw Error('INTERNAL_ONLY');
       pageTools.get(message.requestId)?.abort();
-      await chrome.tabs.sendMessage(message.tabId,{type:'cancel-tool',requestId:message.requestId}).catch(()=>{});
+      await chrome.tabs.sendMessage(message.tabId,{type:'cancel-tool',requestId:message.requestId},{documentId:message.documentId}).catch(()=>{});
       return true;
     }
     if(message.type==='page-tool'){
-      const controller=new AbortController();
-      pageTools.set(message.requestId,controller);
+      if(!internal(sender))throw Error('INTERNAL_ONLY');
+      const target=message.target;await validTarget(target);
+      const controller=new AbortController();pageTools.set(message.requestId,controller);
       try {
-        for(let attempt=0;attempt<20;attempt++){
-          controller.signal.throwIfAborted();
-          const tab=await chrome.tabs.get(message.tabId);
-          if(!tab?.url || siteOf(tab.url)!==message.site)throw new Error('目标网页已关闭或离开当前站点，请重新选择目标页面。');
-          controller.signal.throwIfAborted();
-          let response;
-          try{
-            response=await chrome.tabs.sendMessage(tab.id,{type:'execute-tool',requestId:message.requestId,name:message.name,args:message.args});
-          }catch(error){
-            if(attempt===19 || !/Receiving end does not exist|Could not establish connection|message port closed/i.test(error.message))throw error;
-            await new Promise(resolve=>setTimeout(resolve,300));
-            continue;
-          }
-          if(!response?.ok)throw new Error(response?.error||'网页工具执行失败。');
-          return response.value;
-        }
-      } finally { pageTools.delete(message.requestId); }
+        controller.signal.throwIfAborted();
+        const response=await chrome.tabs.sendMessage(target.tabId,{type:'execute-tool',target,requestId:message.requestId,name:message.name,args:message.args},{documentId:target.documentId});
+        if(!response?.ok)throw Error(response?.error||'TARGET_INVALIDATED');
+        return response.value;
+      }finally {pageTools.delete(message.requestId);}
     }
     if(message.type==='engine-event'){
-      const tabs=await chrome.tabs.query({});
-      await Promise.all(tabs.filter(tab=>tab.id&&tab.url&&(()=>{try{return siteOf(tab.url)===message.site;}catch{return false;}})())
-        .map(tab=>chrome.tabs.sendMessage(tab.id,{type:'engine-event',event:message.event}).catch(()=>{})));
+      if(!internal(sender))throw Error('INTERNAL_ONLY');
+      const views=message.ref?subscribers.get(refKey(message.ref)):null;
+      if(views)await Promise.all([...views.values()].map(view=>chrome.tabs.sendMessage(view.tabId,{type:'engine-event',ref:message.ref,event:message.event},{documentId:view.documentId}).catch(()=>{})));
+      if(!message.ref)await Promise.all([...documents.values()].map(target=>chrome.tabs.sendMessage(target.tabId,{type:'engine-event',event:message.event},{documentId:target.documentId}).catch(()=>{})));
       return true;
     }
     if(message.type==='tabs-list'){
+      if(!internal(sender))throw Error('INTERNAL_ONLY');
       const tabs=await chrome.tabs.query({});
       const listed=[];
       for(const tab of tabs){
@@ -154,25 +232,42 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
         let site;try{site=siteOf(tab.url);}catch{continue;}
         const saved=await chrome.storage.session.get(activeKey(tab.id));
         if(!saved[activeKey(tab.id)])continue;
-        listed.push({tabId:tab.id,title:tab.title,url:tab.url,agents:await engineCall(site,tab.id,'listChats')});
+        listed.push({tabId:tab.id,title:tab.title,url:tab.url,agents:(await engineCall(site,tab.id,'listChats')).map(chat=>({...chat,conversationRef:conversationRef(site,chat.id)}))});
       }
       return {tabs:listed};
     }
     if(message.type==='tabs-open'){
+      if(!internal(sender))throw Error('INTERNAL_ONLY');
       const url=new URL(message.url);
       const site=siteOf(url.href);
       const tab=await chrome.tabs.create({url:'about:blank',active:false});
       const chatId=await engineCall(site,tab.id,'createChat',site===message.sourceSite?[message.fromChatId]:[]);
       await chrome.storage.session.set({[activeKey(tab.id)]:true});
       await chrome.tabs.update(tab.id,{url:url.href});
-      return {tabId:tab.id,chatId,url:url.href,loading:true};
+      const ref=conversationRef(site,chatId);openedAgents.set(tab.id,ref);
+      return {tabId:tab.id,chatId,conversationRef:ref,url:url.href,loading:true};
     }
     if(message.type==='tabs-send'||message.type==='tabs-read'){
-      const tab=await chrome.tabs.get(message.tabId);
-      const site=siteOf(tab.url);
+      if(!internal(sender))throw Error('INTERNAL_ONLY');
+      const tab=await chrome.tabs.get(message.tabId);siteOf(tab.url);
       await activate(tab.id);
-      return engineCall(site,tab.id,message.type==='tabs-send'?'receiveFromTab':'readAgent',
-        message.type==='tabs-send'?[message.text,`标签页 ${sender.tab?.id||'其他'} 的 agent ${message.fromChatId}`]:[message.limit],message.chatId);
+      const candidates=[];
+      for(const site of new Set([siteOf(tab.url),...([...subscribers.keys()].map(key=>JSON.parse(key)[0]))])) {
+        const refs=await engineCall(site,tab.id,'tabCandidates');
+        for(const ref of refs)if(ref.conversationId===message.chatId)candidates.push(ref);
+      }
+      const opened=openedAgents.get(tab.id);
+      if(opened?.conversationId===message.chatId&&!candidates.some(ref=>refKey(ref)===refKey(opened)))candidates.push(opened);
+      const matches=candidates.filter(ref=>!message.ownerSite||message.ownerSite===ref.ownerSite);
+      if(matches.length!==1)throw Error(matches.length?'AMBIGUOUS_CONVERSATION_REF':'CONTINUE_HERE_REQUIRED');
+      const ref=matches[0];
+      if(message.type==='tabs-send'&&opened&&refKey(opened)===refKey(ref)) {
+        const target=documents.get(tab.id);await validTarget(target);
+        const state=await coordinator({operation:'view',ref});
+        if(!state.target)await coordinator({operation:'continue',ref,viewId:'tab-agent:'+tab.id,target,expectedVersion:state.version});
+      }
+      return engineCall(ref.ownerSite,tab.id,message.type==='tabs-send'?'receiveFromTab':'readAgent',
+        message.type==='tabs-send'?[message.text,`agent ${message.fromChatId}`]:[message.limit],ref.conversationId);
     }
     throw new Error('未知扩展消息。');
   })().then(value=>respond({ok:true,value}),error=>respond({ok:false,error:error.message||String(error),diagnostics:error.diagnostics}));

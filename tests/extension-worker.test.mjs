@@ -4,121 +4,58 @@ import {test} from 'node:test';
 import vm from 'node:vm';
 import {McpConfigStore} from '../src/mcp-store.js';
 import {createI18n} from '../src/i18n.js';
-
-test('extension shares one site engine across paths and tabs, routes tasks and page tools', async () => {
-  const session=new Map();
-  const tabs=new Map([
-    [10,{id:10,url:'https://www.example.com/a?from=1',title:'One'}],
-    [11,{id:11,url:'https://www.example.com/b?from=2',title:'Two'}],
-    [12,{id:12,url:'https://other.example/',title:'Other'}],
-  ]);
-  const engineCalls=[];
-  const pageCalls=[];
-  const badges=[];
-  const titles=[];
-  const injected=[];
-  let missingReceiver=false;
-  let startupError;
-  let toolError;
-  let onRemoved,onMessage,onClick,engineOpened=false;
-  const chrome={
-    i18n:{getAcceptLanguages:async()=>['zh-CN']},
-    action:{onClicked:{addListener:listener=>{onClick=listener;}},setBadgeText:async value=>badges.push(value),setTitle:async value=>titles.push(value)},
-    scripting:{executeScript:async request=>{injected.push(request);missingReceiver=false;}},
-    tabs:{
-      onRemoved:{addListener:fn=>{onRemoved=fn;}},onUpdated:{addListener(){}},
-      query:async()=>[...tabs.values()],get:async id=>tabs.get(id),
-      create:async({url})=>{const tab={id:13,url,title:'New'};tabs.set(tab.id,tab);return tab;},
-      update:async(id,change)=>{Object.assign(tabs.get(id),change);return tabs.get(id);},
-      sendMessage:async(id,message)=>{
-        pageCalls.push({id,message});
-        if(missingReceiver)throw new Error('Could not establish connection. Receiving end does not exist.');
-        if(startupError&&message.type==='activate')return {ok:false,error:startupError};
-        if(message.type==='execute-tool' && toolError)return {ok:false,error:toolError};
-        if(message.type==='execute-tool')return {ok:true,value:{output:[{type:'text',text:'page result'}]}};
-        return {ok:true,value:{active:true}};
-      },
-    },
-    offscreen:{hasDocument:async()=>engineOpened,createDocument:async()=>{engineOpened=true;}},
-    runtime:{
-      onMessage:{addListener:listener=>{onMessage=listener;}},
-      sendMessage:async message=>{
-        engineCalls.push(message);
-        if(message.method==='createChat')return {ok:true,value:7};
-        if(message.method==='listChats')return {ok:true,value:[{id:1,title:'Shared'}]};
-        if(message.method==='readAgent')return {ok:true,value:[{kind:'pi.assistant',text:'完成'}]};
-        if(message.method==='receiveFromTab')return {ok:true,value:{queued:true}};
-        return {ok:true,value:{activeId:1}};
-      },
-    },
-    storage:{local:{get:async()=>({})},onChanged:{addListener(){}},session:{
-      get:async key=>({[key]:session.get(key)}),
-      set:async values=>{for(const [key,value]of Object.entries(values))session.set(key,value);},
-      remove:async key=>session.delete(key),
-    }},
-  };
-  vm.runInNewContext((await readFile('src/extension-worker.js','utf8')).replace(/^import .*;$/gm,''),{McpConfigStore,createI18n,chrome,URL,AbortController,Promise,setTimeout,console:{error(){}}});
-  const send=(message,from=10)=>new Promise(resolve=>onMessage(message,{tab:tabs.get(from)},resolve));
-
-  assert.equal((await send({type:'identity'})).value.active,false);
-  await onClick(tabs.get(10));
-  assert.equal(pageCalls.at(-1).message.openWindow,true);
-  await onClick(tabs.get(11));
-  await onClick(tabs.get(12));
-  const first=(await send({type:'identity'})).value;
-  const second=(await send({type:'identity'},11)).value;
-  assert.equal(first.site,'www.example.com');
-  assert.equal(second.site,first.site);
-  assert.notEqual(second.tabId,first.tabId);
-  await send({type:'engine-call',method:'initialize'});
-  await send({type:'engine-call',method:'initialize'},11);
-  assert.equal(engineCalls.at(-1).site,engineCalls.at(-2).site);
-  assert.equal(engineCalls.at(-1).tabId,11);
-  assert.equal((await send({type:'tabs-list'})).value.tabs.length,3);
-  const opened=(await send({type:'tabs-open',url:'https://new.example/'})).value;
-  assert.equal(opened.tabId,13);assert.equal(opened.chatId,7);
-  assert.equal(tabs.get(13).url,'https://new.example/');
-  assert.equal(engineCalls.at(-1).method,'createChat');
-  assert.equal(engineCalls.at(-1).tabId,13);
-  assert.equal((await send({type:'tabs-open',url:'javascript:alert(1)'})).ok,false);
-  assert.equal((await send({type:'tabs-send',tabId:11,chatId:1,text:'检查页面',fromChatId:5})).value.queued,true);
-  assert.equal(engineCalls.at(-1).method,'receiveFromTab');
-  assert.equal(engineCalls.at(-1).site,'www.example.com');
-  assert.equal((await send({type:'tabs-read',tabId:11,chatId:1,limit:3})).value[0].text,'完成');
-  assert.equal((await send({type:'page-tool',site:'www.example.com',tabId:11,name:'page_snapshot',args:{}})).value.output[0].text,'page result');
-  assert.equal(pageCalls.at(-1).id,11);
-  // A missing or navigated target must never fall back to another same-site tab.
-  const target=tabs.get(11);
-  tabs.delete(11);
-  const beforeClosed=pageCalls.length;
-  assert.equal((await send({type:'page-tool',site:'www.example.com',tabId:11,name:'click',args:{}})).ok,false);
-  assert.equal(pageCalls.length,beforeClosed);
-  tabs.set(11,{...target,url:'https://other.example/'});
-  assert.equal((await send({type:'page-tool',site:'www.example.com',tabId:11,name:'set_value',args:{}})).ok,false);
-  assert.equal(pageCalls.length,beforeClosed);
-  tabs.set(11,target);
-  toolError='message port closed in application';
-  assert.equal((await send({type:'page-tool',site:'www.example.com',tabId:11,name:'js_eval',args:{}})).ok,false);
-  assert.equal(pageCalls.length,beforeClosed+1,'application errors are not retried as connection errors');
-  toolError=null;
-  missingReceiver=true;
-  await onClick(tabs.get(10));
-  assert.equal(injected.length,1);
-  assert.equal(injected[0].target.tabId,10);
-  assert.equal(injected[0].files[0],'content.js');
-  assert.equal(badges.at(-1).text,'');
-  startupError='模型目录加载失败';
-  await onClick(tabs.get(10));
-  assert.equal(badges.at(-1).text,'!');
-  assert.match(titles.at(-1).title,/模型目录加载失败/);
-  startupError=null;
-  await onClick(tabs.get(10));
-  assert.equal(badges.at(-1).text,'');
-  await onClick({id:99,url:'chrome://extensions/'});
-  assert.match(titles.at(-1).title,/只能在普通网页使用/);
-  assert.equal(session.has('active:99'),false);
-  await onRemoved(10);
-  assert.equal(session.has('active:10'),false);
-  assert.equal(engineCalls.at(-1).type,'tab-closed');
-  assert.equal(engineCalls.at(-1).tabId,10);
+import {conversationRef,refKey} from '../src/conversation-ref.js';
+async function fixture(){
+  const session=new Map(),calls=[],pageCalls=[];
+  const tabs=new Map([[10,{id:10,url:'https://www.example.com/a',title:'A'}],[11,{id:11,url:'https://other.example/b',title:'B'}]]);
+  let onMessage,onUpdated,onRemoved,onClick;
+  const chrome={runtime:{id:'extension',getURL:path=>'chrome-extension://extension/'+path,onMessage:{addListener:f=>onMessage=f},sendMessage:async message=>{
+    calls.push(message);
+    if(message.method==='listChats')return {ok:true,value:[{id:1,title:'History'}]};
+    if(message.operation==='view')return {ok:true,value:{version:{epoch:'e',seq:0},target:null}};
+    if(message.operation==='list')return {ok:true,value:{rows:[{ref:{ownerSite:'www.example.com',conversationId:1},title:'History'}],sourceErrors:[]}};
+    return {ok:true,value:true};
+  }},i18n:{getAcceptLanguages:async()=>['en']},
+  action:{onClicked:{addListener:f=>onClick=f},setBadgeText:async()=>{},setTitle:async()=>{}},
+  offscreen:{hasDocument:async()=>true},scripting:{executeScript:async()=>{}},
+  tabs:{onUpdated:{addListener:f=>onUpdated=f},onRemoved:{addListener:f=>onRemoved=f},query:async()=>[...tabs.values()],get:async id=>tabs.get(id),update:async(id,change)=>Object.assign(tabs.get(id),change),sendMessage:async(id,message,options)=>{pageCalls.push({id,message,options});return {ok:true,value:'result'};}},
+  storage:{onChanged:{addListener(){}},local:{get:async()=>({})},session:{get:async key=>({[key]:session.get(key)}),set:async values=>{for(const [key,value]of Object.entries(values))session.set(key,value);},remove:async key=>session.delete(key)}}};
+  vm.runInNewContext((await readFile('src/extension-worker.js','utf8')).replace(/^import .*;$/gm,''),{chrome,McpConfigStore,conversationRef,refKey,createI18n,crypto:globalThis.crypto,URL,AbortController,setTimeout,console});
+  const sender=id=>({id:'extension',frameId:0,documentId:'doc-'+id,url:tabs.get(id).url,tab:tabs.get(id)});
+  const send=(message,from=10)=>new Promise(resolve=>onMessage(message,typeof from==='number'?sender(from):from,resolve));
+  const internal={id:'extension',url:'chrome-extension://extension/engine.html'};
+  const hello=async id=>(await send({type:'document-hello',nonce:'nonce-'+id,routeEpoch:0},id)).value;
+  return {send,hello,sender,internal,tabs,calls,pageCalls,onClick,onUpdated,onRemoved};
+}
+test('native paths share a source engine; document tools use documentId and never follow navigation',async()=>{
+  const f=await fixture();const target=await f.hello(10);await f.hello(11);
+  await f.onClick(f.tabs.get(10));assert.equal(f.pageCalls.at(-1).message.openWindow,true);
+  await f.send({type:'engine-call',method:'initialize'});assert.equal(f.calls.at(-1).site,'www.example.com');
+  const result=await f.send({type:'page-tool',target,requestId:'tool',name:'click',args:{}},f.internal);assert.equal(result.ok,true);
+  assert.equal(f.pageCalls.at(-1).options.documentId,'doc-10');
+  f.tabs.get(10).url='https://other.example/redirect';const before=f.pageCalls.length;
+  assert.equal((await f.send({type:'page-tool',target,requestId:'tool-2',name:'click'},f.internal)).ok,false);assert.equal(f.pageCalls.length,before);
+  await f.onRemoved(10);assert.equal(f.calls.at(-1).type,'tab-closed');
+});
+test('cross-source continuation requires picker selection and routes the real sender document',async()=>{
+  const f=await fixture();await f.hello(10);await f.hello(11);
+  const ref={ownerSite:'www.example.com',conversationId:1};
+  assert.equal((await f.send({type:'continuation-call',operation:'view',ref,viewId:'v'},11)).ok,false);
+  const opened=await f.send({type:'picker-open',viewId:'v'},11),url=opened.value.url,grant=url.split('#')[1];
+  const picker={...f.sender(11),frameId:1,documentId:'picker',url};
+  assert.equal((await f.send({type:'picker-list',grant},picker)).ok,true);
+  assert.equal((await f.send({type:'picker-list',grant},{...picker,documentId:'other-picker'})).ok,false);
+  assert.equal((await f.send({type:'picker-select',grant,ref},picker)).ok,true);
+  assert.equal((await f.send({type:'picker-list',grant},picker)).ok,false);
+  const continued=await f.send({type:'continuation-call',operation:'continue',ref,viewId:'v',expectedVersion:{epoch:'e',seq:0},tabId:999},11);
+  assert.equal(continued.ok,true);assert.equal(f.calls.at(-1).pageTarget.tabId,11);assert.equal(f.calls.at(-1).pageTarget.documentId,'doc-11');
+  assert.equal(f.calls.at(-1).ref.ownerSite,'www.example.com');assert.equal(f.calls.at(-1).target,'continuations');
+});
+test('host pages and ungranted iframes cannot list history or issue privileged tool calls',async()=>{
+  const f=await fixture();await f.hello(10);
+  for(const message of [{type:'picker-list',grant:'fake'},{type:'page-tool',target:{}},{type:'validate-target',target:{}},{type:'tabs-open',url:'https://example.com'},{type:'engine-call',method:'agent',chatId:1,name:'prompt'}])assert.equal((await f.send(message)).ok,false);
+  const opened=await f.send({type:'picker-open',viewId:'v'}),url=opened.value.url,grant=url.split('#')[1];
+  assert.equal((await f.send({type:'picker-list',grant},{...f.sender(10),frameId:1,url:'https://example.com/'})).ok,false);
+  f.onUpdated(10,{status:'loading'});
+  assert.equal((await f.send({type:'picker-list',grant},{...f.sender(10),frameId:1,documentId:'picker',url})).ok,false);
 });

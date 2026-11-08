@@ -45,5 +45,17 @@
   },
   "cross_origin_opener_policy": {
     "value": "same-origin"
-  }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "history-picker.html",
+        "history-picker.js"
+      ],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ]
+    }
+  ]
 }
