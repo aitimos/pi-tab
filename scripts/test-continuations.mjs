@@ -30,6 +30,18 @@ const worker=browser.serviceWorkers()[0]||await browser.waitForEvent('servicewor
 const view=page=>page.locator('[data-pi-overlay]').last();
 worker.on('console',message=>console.log('WORKER',message.text()));
 const errors=[];
+async function engineDiagnostics(page){
+  const cdp=await browser.newCDPSession(page);
+  try{
+    const {targetInfos}=await cdp.send('Target.getTargets');
+    const target=targetInfos.find(item=>item.url.endsWith('/engine.html'));
+    if(!target)return {targets:targetInfos.map(item=>({type:item.type,url:item.url}))};
+    const {sessionId}=await cdp.send('Target.attachToTarget',{targetId:target.targetId,flatten:false});
+    const response=new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Engine diagnostics timed out')),5000);cdp.on('Target.receivedMessageFromTarget',event=>{if(event.sessionId!==sessionId)return;const message=JSON.parse(event.message);if(message.id===1){clearTimeout(timer);resolve(message);}});});
+    await cdp.send('Target.sendMessageToTarget',{sessionId,message:JSON.stringify({id:1,method:'Runtime.evaluate',params:{awaitPromise:true,returnByValue:true,expression:`(async()=>({locks:await navigator.locks.query(),runtimes:await Promise.all(Object.keys(window).filter(key=>key.startsWith('__pi_site_')).map(async key=>{const pi=window[key];return {key,harness:Boolean(pi.harness),conversation:pi.conversation?.id,ready:await Promise.race([pi.ready.then(()=>true,error=>error.message),new Promise(resolve=>setTimeout(()=>resolve('pending'),1000))]),inspection:pi.harness?await Promise.race([PiConsolePlugin.inspectRuntime(pi),new Promise(resolve=>setTimeout(()=>resolve('pending'),1000))]):null};}))}))()`}})});
+    return await response;
+  }finally{await cdp.detach();}
+}
 browser.on('page',page=>{page.on('pageerror',e=>{errors.push(e.message);console.log('PAGEERROR',e.message);});page.on('console',message=>{if(message.type()==='error')console.log('CONSOLE',message.text());});});
 async function activate(page,url){
   await page.goto(url);await page.waitForTimeout(300);
@@ -136,4 +148,4 @@ try{
   await unsupported.getByRole('alert').waitFor();assert.ok((await unsupported.getByRole('alert').innerText()).includes('独占锁'));
   await unsupported.getByRole('button',{name:'新建独立对话'}).click();await unsupported.waitForFunction(()=>window.pi?.__piConsolePlugin);await unsupported.evaluate(()=>pi.ready);await unsupported.close();console.log('PASS no-Web-Locks explicit independent storage');
   assert.deepEqual(errors,[]);await writeFile(join(output,'continuations.json'),JSON.stringify({browser:browser.browser()?.version(),requests,errors},null,2));
-}catch(error){for(const [i,page]of browser.pages().entries()){await page.screenshot({path:join(output,'failure-'+i+'.png')}).catch(()=>{});console.log(JSON.stringify({url:page.url(),views:await page.locator('[data-pi-overlay]').evaluateAll(hosts=>hosts.map(host=>Object.fromEntries(['continuation-summary','continuation-error','status','setup-error'].map(id=>[id,host.shadowRoot?.getElementById(id)?.textContent])))).catch(()=>[]),frames:await Promise.all(page.frames().map(async frame=>({url:frame.url(),error:await frame.locator('#error').innerText({timeout:250}).catch(()=>null)})))}));}throw error;}finally{await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r));await rm(directory,{recursive:true,force:true});}
+}catch(error){console.log('ENGINE',JSON.stringify(await engineDiagnostics(browser.pages().at(-1)).catch(error=>({error:error.message}))));for(const [i,page]of browser.pages().entries()){await page.screenshot({path:join(output,'failure-'+i+'.png')}).catch(()=>{});console.log(JSON.stringify({url:page.url(),views:await page.locator('[data-pi-overlay]').evaluateAll(hosts=>hosts.map(host=>Object.fromEntries(['continuation-summary','continuation-error','status','setup-error'].map(id=>[id,host.shadowRoot?.getElementById(id)?.textContent])))).catch(()=>[]),frames:await Promise.all(page.frames().map(async frame=>({url:frame.url(),error:await frame.locator('#error').innerText({timeout:250}).catch(()=>null)})))}));}throw error;}finally{await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r));await rm(directory,{recursive:true,force:true});}
