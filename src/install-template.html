@@ -1897,6 +1897,7 @@ async function openChat(initialConfig, options = {}) {
     if(runtimePi?.extension&&!agent.authorized){byId('continuation-error').textContent=t('请先点击“在当前页继续”，再发送任务。');await renderContinuation();return;}
     const chatId = pi?.id;
     if (!pi?.prompt) { message('system',t("Pi Tab 不可用，请重新点击书签。")); return; }
+    const submittedAttachments=attachments;
     input.value = '';
     attachments = []; renderAttachments();
     i18n.text(byId('attachment-error'), '');
@@ -1908,6 +1909,7 @@ async function openChat(initialConfig, options = {}) {
     try {
       await (wasBusy ? mode === 'followUp' ? pi.followUp(content) : pi.steer(content) : pi.prompt(content));
     } catch (error) {
+      if(error.notSubmitted&&agent.id===chatId&&!input.value&&!attachments.length){input.value=text;attachments=submittedAttachments;renderAttachments();updateComposer();}
       const detail = error instanceof Error ? error.message : String(error);
       if (!/agent 未完成: aborted/.test(detail)) {
         const text = /abort|cancel|停止|取消/i.test(detail) ? t("已停止本次任务。") : t("未能完成请求：{0}", detail);

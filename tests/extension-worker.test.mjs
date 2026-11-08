@@ -21,12 +21,14 @@ async function fixture(){
   offscreen:{hasDocument:async()=>true},scripting:{executeScript:async()=>{}},
   tabs:{onUpdated:{addListener:f=>onUpdated=f},onRemoved:{addListener:f=>onRemoved=f},query:async()=>[...tabs.values()],get:async id=>tabs.get(id),update:async(id,change)=>Object.assign(tabs.get(id),change),sendMessage:async(id,message,options)=>{pageCalls.push({id,message,options});if(message.type==='execute-tool'&&message.name==='held')return new Promise(resolve=>heldTools.set(message.requestId,resolve));if(message.type==='cancel-tool')heldTools.get(message.requestId)?.({ok:false,error:'cancelled'});return {ok:true,value:'result'};}},
   storage:{onChanged:{addListener(){}},local:{get:async()=>({})},session:{get:async key=>({[key]:session.get(key)}),set:async values=>{for(const [key,value]of Object.entries(values))session.set(key,value);},remove:async key=>session.delete(key)}}};
-  vm.runInNewContext((await readFile('src/extension-worker.js','utf8')).replace(/^import .*;$/gm,''),{continuationErrorMessage,chrome,McpConfigStore,conversationRef,refKey,createI18n,crypto:globalThis.crypto,URL,AbortController,setTimeout,console});
+  const source=(await readFile('src/extension-worker.js','utf8')).replace(/^import .*;$/gm,'');
+  const boot=()=>vm.runInNewContext(source,{continuationErrorMessage,chrome,McpConfigStore,conversationRef,refKey,createI18n,crypto:globalThis.crypto,URL,AbortController,setTimeout,console});boot();
   const sender=id=>({id:'extension',frameId:0,documentId:'doc-'+id,url:tabs.get(id).url,tab:tabs.get(id)});
-  const send=(message,from=10)=>new Promise(resolve=>onMessage(message,typeof from==='number'?sender(from):from,resolve));
+  let epoch;
+  const send=(message,from=10)=>new Promise(resolve=>onMessage({workerEpoch:epoch,...message},typeof from==='number'?sender(from):from,resolve));
   const internal={id:'extension',url:'chrome-extension://extension/engine.html'};
-  const hello=async id=>(await send({type:'document-hello',nonce:'nonce-'+id,routeEpoch:0,url:tabs.get(id).url},id)).value;
-  return {send,hello,sender,internal,tabs,calls,pageCalls,onClick,onUpdated,onRemoved,heldTools};
+  const hello=async id=>{const response=await send({type:'document-hello',nonce:'nonce-'+id,routeEpoch:0,url:tabs.get(id).url},id);epoch=response.value?.workerEpoch;return response.value;};
+  return {send,hello,sender,internal,tabs,calls,pageCalls,onClick,onUpdated,onRemoved,heldTools,boot};
 }
 test('native paths share a source engine; document tools use documentId and never follow navigation',async()=>{
   const f=await fixture();const target=await f.hello(10);await f.hello(11);
@@ -88,4 +90,20 @@ test('SPA registration uses the verified live URL despite an immutable sender UR
   assert.equal((await f.send({type:'document-hello',url:'https://foreign.example/',nonce:'x',routeEpoch:2},originalSender)).ok,false);
   assert.equal((await f.send({type:'document-hello',url:old.url,nonce:'x',routeEpoch:2},originalSender)).ok,false);
   assert.equal((await f.send({type:'continuation-call',operation:'view',ref:{ownerSite:'www.example.com',conversationId:1},viewId:'v'},{...originalSender,documentId:'other-document'})).ok,false);
+});
+
+test('a new worker requires fresh document proof and restores only persisted viewing choices',async()=>{
+  const f=await fixture(),old=await f.hello(10);await f.hello(11);
+  const ref={ownerSite:'www.example.com',conversationId:1};
+  const {value:{url}}=await f.send({type:'picker-open',viewId:'observer'},11),grant=url.split('#')[1];
+  const picker={...f.sender(11),frameId:1,documentId:'picker',url};
+  assert.equal((await f.send({type:'picker-select',grant,ref},picker)).ok,true);
+  f.boot();const before=f.calls.length;
+  const rejected=await f.send({type:'continuation-call',operation:'agent',name:'prompt',ref,viewId:'observer',leaseToken:'old-lease'},11);
+  assert.equal(rejected.code,'DOCUMENT_RECONNECT_REQUIRED');assert.equal(f.calls.length,before);
+  const fresh=await f.hello(11);assert.notEqual(fresh.workerEpoch,old.workerEpoch);
+  assert.equal((await f.send({type:'continuation-call',operation:'view',ref,viewId:'observer'},11)).ok,true);
+  assert.equal((await f.send({type:'picker-list',grant},picker)).ok,false);
+  assert.equal((await f.send({type:'continuation-call',operation:'agent',name:'prompt',ref,viewId:'observer',workerEpoch:old.workerEpoch},11)).code,'DOCUMENT_RECONNECT_REQUIRED');
+  assert.equal((await f.send({type:'validate-target',target:old},f.internal)).ok,false);
 });

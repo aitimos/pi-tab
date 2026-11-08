@@ -17,6 +17,7 @@ const siteOf = url => {
 };
 let openingEngine;
 const pageTools = new Map();
+const workerEpoch=crypto.randomUUID();
 
 const documents=new Map(), grants=new Map(), subscribers=new Map(), openedAgents=new Map(), revocations=new Map();
 const internal=sender=>!sender.tab && sender.id===chrome.runtime.id;
@@ -40,9 +41,10 @@ async function validTarget(target) {
   if(!matches())throw Error('TARGET_INVALIDATED');
   return true;
 }
-function senderTarget(sender) {
+function senderTarget(sender,epoch) {
   if(sender.id!==chrome.runtime.id||sender.frameId!==0||!sender.documentId||!sender.tab?.id)throw Error('INVALID_TOP_DOCUMENT');
   const target=documents.get(sender.tab.id);
+  if(!target||epoch!==workerEpoch)throw Error('DOCUMENT_RECONNECT_REQUIRED');
   // MessageSender.url is the document's initial URL even after pushState.
   // The registered live URL is verified against tabs.get and the exact document.
   if(!target||target.documentId!==sender.documentId||target.origin!==new URL(sender.url).origin)throw Error('TARGET_INVALIDATED');
@@ -153,15 +155,16 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
       if(sender.id!==chrome.runtime.id||sender.frameId!==0||!sender.documentId||!sender.tab?.id)throw Error('INVALID_TOP_DOCUMENT');
       siteOf(message.url);
       if(new URL(sender.url).origin!==new URL(message.url).origin||typeof message.nonce!=='string'||!message.nonce||!Number.isSafeInteger(message.routeEpoch)||message.routeEpoch<0)throw Error('INVALID_TOP_DOCUMENT');
-      const target={tabId:sender.tab.id,documentId:sender.documentId,origin:new URL(message.url).origin,url:message.url,nonce:message.nonce,routeEpoch:message.routeEpoch};
+      const target={tabId:sender.tab.id,documentId:sender.documentId,origin:new URL(message.url).origin,url:message.url,nonce:message.nonce,routeEpoch:message.routeEpoch,workerEpoch};
       await verifyDocument(target);
       if(JSON.stringify(documents.get(target.tabId))!==JSON.stringify(target))await revoke(target.tabId);
       await verifyDocument(target);
       documents.set(target.tabId,target);return target;
     }
     if(message.type==='validate-target'){if(!internal(sender))throw Error('INTERNAL_ONLY');return validTarget(message.target);}
+    if(message.type==='document-status'){await validTarget(senderTarget(sender,message.workerEpoch));return true;}
     if(message.type==='picker-open') {
-      const target=senderTarget(sender);await validTarget(target);
+      const target=senderTarget(sender,message.workerEpoch);await validTarget(target);
       for(const [key,value]of grants)if(value.expires<Date.now()||(value.target.tabId===target.tabId&&value.viewId===message.viewId))grants.delete(key);
       const grant=crypto.randomUUID();grants.set(grant,{target,viewId:message.viewId,expires:Date.now()+120000});
       return {url:chrome.runtime.getURL('history-picker.html')+'#'+grant};
@@ -179,9 +182,9 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
       }else await chrome.tabs.sendMessage(grant.target.tabId,{type:'history-picker-closed',viewId:grant.viewId},{documentId:grant.target.documentId});
       return true;
     }
-    if(message.type==='focus-target'){const target=senderTarget(sender);const ref=conversationRef(message.ref?.ownerSite,message.ref?.conversationId);if(!subscribers.get(refKey(ref))?.has(message.viewId))throw Error('CONVERSATION_NOT_SELECTED');const state=await coordinator({operation:'view',ref});if(!state.target)throw Error('TARGET_INVALIDATED');return chrome.tabs.update(state.target.tabId,{active:true});}
+    if(message.type==='focus-target'){const target=senderTarget(sender,message.workerEpoch);const ref=conversationRef(message.ref?.ownerSite,message.ref?.conversationId);if(!subscribers.get(refKey(ref))?.has(message.viewId))throw Error('CONVERSATION_NOT_SELECTED');const state=await coordinator({operation:'view',ref});if(!state.target)throw Error('TARGET_INVALIDATED');return chrome.tabs.update(state.target.tabId,{active:true});}
     if(message.type==='continuation-call') {
-      const target=senderTarget(sender), ref=conversationRef(message.ref?.ownerSite,message.ref?.conversationId);
+      const target=senderTarget(sender,message.workerEpoch), ref=conversationRef(message.ref?.ownerSite,message.ref?.conversationId);
       // A source becomes accessible only through its native list or a picker selection.
       const subscription=subscribers.get(refKey(ref))?.get(message.viewId);
       const selected=await chrome.storage.session.get(selectedKey(target.tabId,target.origin));
@@ -217,7 +220,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
       return {tabId,site:siteOf(sender.tab.url),active:Boolean(saved[activeKey(tabId)])};
     }
     if(message.type==='engine-call'){
-      const target=senderTarget(sender),tabId=target.tabId;
+      const target=senderTarget(sender,message.workerEpoch),tabId=target.tabId;
       if(!['initialize','listChats','manageModels','auth','getPreferences','setPreferences','listModels','listProviders','saveProvider','mcpConfig','getMcpServer','getMcpVariables','refreshMcp','previewMcpImport','changeMcpConfig','setMcpConfig'].includes(message.method))throw Error('USE_CONVERSATION_REF');
       return engineCall(siteOf(sender.tab.url),tabId,message.method,message.args,message.chatId,message.name);
     }
@@ -246,8 +249,8 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
         const replacement=conversationRef(message.ref.ownerSite,message.event.replacementId);
         for(const [viewId,view]of views){const target=documents.get(view.tabId);if(!target||target.documentId!==view.documentId)continue;subscribe(replacement,target,viewId);const key=selectedKey(view.tabId,target.origin),saved=await chrome.storage.session.get(key);await chrome.storage.session.set({[key]:[...new Set([...(saved[key]||[]),refKey(replacement)])]});}
       }
-      if(views)await Promise.all([...views.values()].map(view=>chrome.tabs.sendMessage(view.tabId,{type:'engine-event',ref:message.ref,event:message.event,sequence:message.sequence,epoch:message.epoch},{documentId:view.documentId}).catch(()=>{})));
-      if(!message.ref)await Promise.all([...documents.values()].map(target=>chrome.tabs.sendMessage(target.tabId,{type:'engine-event',event:message.event},{documentId:target.documentId}).catch(()=>{})));
+      if(views)await Promise.all([...views.values()].map(view=>chrome.tabs.sendMessage(view.tabId,{type:'engine-event',ref:message.ref,event:message.event,sequence:message.sequence,epoch:message.epoch,workerEpoch},{documentId:view.documentId}).catch(()=>{})));
+      if(!message.ref)await Promise.all([...documents.values()].map(target=>chrome.tabs.sendMessage(target.tabId,{type:'engine-event',event:message.event,workerEpoch},{documentId:target.documentId}).catch(()=>{})));
       return true;
     }
     if(message.type==='tabs-list'){
@@ -314,3 +317,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
     for (const tab of await chrome.tabs.query({})) await chrome.action.setTitle({tabId:tab.id,title});
   })();
 });
+
+// A startup notification requests a fresh proof from live content scripts. Only
+// the enabled-tab flag survives; document identities, grants and leases do not.
+void (async()=>{
+  const saved=await chrome.storage.session.get(null);
+  await Promise.allSettled((await chrome.tabs.query({})).filter(tab=>saved[activeKey(tab.id)]).map(tab=>chrome.tabs.sendMessage(tab.id,{type:'worker-connected',workerEpoch})));
+})().catch(()=>{});

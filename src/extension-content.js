@@ -1,15 +1,15 @@
 // PiConsolePlugin and openChat are bundled before this file by build.mjs.
 const extensionRequest = message => new Promise((resolve, reject) => {
   chrome.runtime.sendMessage(message, response => {
-    if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+    if (chrome.runtime.lastError) reject(Object.assign(new Error(chrome.runtime.lastError.message),{code:'EXTENSION_TRANSPORT_ERROR'}));
     else if (!response?.ok) reject(Object.assign(new Error(response?.error || '扩展通信失败。'),{diagnostics:response?.diagnostics,code:response?.code}));
     else resolve(response.value);
   });
 });
-const engineCall = (method, args, chatId, name) => extensionRequest({type:'engine-call',method,args,chatId,name});
+const engineCall = (method, args, chatId, name) => pageRequest({type:'engine-call',method,args,chatId,name},{readOnly:['initialize','listChats','listModels','listProviders','getPreferences','mcpConfig','getMcpServer','getMcpVariables'].includes(method)});
 const {conversationRef,refKey,parseRef}=PiConsolePlugin;
 const listeners = new Set();
-const viewId=PiConsolePlugin.createId(),leases=new Map(),states=new Map(),pickers=new Map();
+const viewId=PiConsolePlugin.createId(),leases=new Map(),states=new Map(),pickers=new Map(),stateReads=new Map();
 let targetNonce=PiConsolePlugin.createId(),routeEpoch=0,lastUrl=location.href;
 let documentTarget,registration=Promise.resolve();
 function hello(){
@@ -19,22 +19,70 @@ function hello(){
 }
 let documentReady=hello();
 let routeSynchronized=Promise.resolve();
+let reconnecting;
+const reconnectError=notSubmitted=>Object.assign(Error('连接已重建，请先查看历史和队列，再确认是否重新发送。'),{code:'RECONNECT_REVIEW_HISTORY',notSubmitted});
+async function pageRequest(message,{readOnly=false}={}){
+  let sent=false,ready,target;
+  try{
+    ready=documentReady;await ready;
+    target=documentTarget;sent=true;
+    const value=await extensionRequest({...message,workerEpoch:target?.workerEpoch});
+    if(target!==documentTarget)throw reconnectError(false);
+    return value;
+  }catch(error){
+    if(!['DOCUMENT_RECONNECT_REQUIRED','EXTENSION_TRANSPORT_ERROR'].includes(error.code))throw error;
+    const notSubmitted=!sent||error.code==='DOCUMENT_RECONNECT_REQUIRED';
+    if(ready!==documentReady||(target&&target!==documentTarget)){await documentReady;if(reconnecting)await reconnecting;}
+    else await reconnectWorker();
+    // Retry only pure reads. A missing response is never proof that a write
+    // wasn't accepted, and a restarted connection never restores a lease.
+    if(readOnly){const current=documentTarget,value=await extensionRequest({...message,workerEpoch:current?.workerEpoch});if(current!==documentTarget)throw reconnectError(false);return value;}
+    throw reconnectError(notSubmitted);
+  }
+}
 function checkTarget(target){syncRoute();if(!target||target.nonce!==targetNonce||target.routeEpoch!==routeEpoch||target.url!==location.href||target.origin!==location.origin)throw Error('TARGET_INVALIDATED');}
 const continuationCall=async(ref,operation,args=[],name,extra={})=>{
-  syncRoute();const epoch=routeEpoch;await documentReady;
-  const value=await extensionRequest({type:'continuation-call',ref,operation,args,name,viewId,leaseToken:leases.get(refKey(ref)),clientRequestId:PiConsolePlugin.createId(),...extra});
+  syncRoute();const epoch=routeEpoch;
+  const value=await pageRequest({type:'continuation-call',ref,operation,args,name,viewId,leaseToken:leases.get(refKey(ref)),clientRequestId:PiConsolePlugin.createId(),...extra},{readOnly:operation==='view'||(operation==='agent'&&['history','queuedMessages','savedConfig','discoverModels'].includes(name))});
   syncRoute();if(epoch!==routeEpoch)throw Object.assign(Error('执行页面已刷新、跳转或关闭，请在本页重新接续。'),{code:'TARGET_INVALIDATED'});
   return value;
 };
 const emitState=(id,value)=>{const state={...states.get(id),...value};states.set(id,state);for(const listener of listeners)listener({type:'binding_state',conversationId:id,state});};
-const refreshState=async ref=>{const id=refKey(ref),state=await continuationCall(ref,'view'),previous=states.get(id);if(!state.target||(previous&&(previous.version.epoch!==state.version.epoch||previous.version.seq!==state.version.seq)))leases.delete(id);busy.set(id,state.busy);configs.set(id,state.config);emitState(id,state);return state;};
-function syncRoute(){
-  if(location.href===lastUrl)return;
-  lastUrl=location.href;routeEpoch++;leases.clear();
+const beginStateRead=id=>{const generation=(stateReads.get(id)||0)+1;stateReads.set(id,generation);return generation;};
+function applyState(ref,state,generation){
+  const id=refKey(ref),previous=states.get(id);
+  if(generation!==stateReads.get(id)||(previous?.version.epoch===state.version.epoch&&previous.version.seq>state.version.seq))return previous||state;
+  if(!state.target||(previous&&(previous.version.epoch!==state.version.epoch||previous.version.seq!==state.version.seq)))leases.delete(id);
+  busy.set(id,state.busy);configs.set(id,state.config);emitState(id,state);return state;
+}
+const refreshState=async ref=>{const generation=beginStateRead(refKey(ref));return applyState(ref,await continuationCall(ref,'view'),generation);};
+function invalidateLocal(){
+  leases.clear();
+  for(const id of states.keys())beginStateRead(id);
   for(const controller of toolRuns.values())controller.abort();
   for(const [id,picker]of pickers){picker.iframe.remove();pickers.delete(id);picker.resolve(null);}
-  documentReady=hello();
   for(const [id,state]of states)if(state.target?.tabId===documentTarget?.tabId)emitState(id,{target:null});
+}
+function reconnectWorker(){
+  if(reconnecting)return reconnecting;
+  invalidateLocal();eventSequences.clear();
+  documentReady=hello();
+  const epoch=routeEpoch;
+  reconnecting=documentReady.then(async target=>{
+    const ids=[...states.keys()];
+    await Promise.allSettled(ids.map(async id=>{
+      const ref=parseRef(id),generation=beginStateRead(id),state=await extensionRequest({type:'continuation-call',operation:'view',ref,viewId,workerEpoch:target.workerEpoch});
+      if(epoch===routeEpoch&&documentTarget?.workerEpoch===target.workerEpoch)applyState(ref,state,generation);
+    }));
+    if(epoch===routeEpoch)for(const id of ids)for(const listener of listeners)listener({type:'history_resync',conversationId:id});
+  }).finally(()=>{reconnecting=null;});
+  routeSynchronized=reconnecting;
+  return reconnecting;
+}
+function syncRoute(){
+  if(location.href===lastUrl)return;
+  lastUrl=location.href;routeEpoch++;invalidateLocal();
+  documentReady=hello();
   const epoch=routeEpoch;
   routeSynchronized=documentReady.then(async()=>{
     if(epoch!==routeEpoch)return;
@@ -58,8 +106,7 @@ let site;
 let activeId;
 
 async function initializeExtension() {
-  await documentReady;
-  const identity = await extensionRequest({type:'identity'});
+  const identity = await pageRequest({type:'identity'},{readOnly:true});
   if (!identity.active) return;
   site = identity.site;
   const locale = PiConsolePlugin.getI18n();
@@ -83,9 +130,9 @@ async function initializeExtension() {
     __piConsolePlugin:true, extension:true,
     parseConversationRef:parseRef,
     async chooseHistory(){
-      syncRoute();await documentReady;
-      if(pickers.has(viewId)){pickers.get(viewId).iframe.focus();return null;}
-      const grant=await extensionRequest({type:'picker-open',viewId});
+      syncRoute();
+      if(pickers.has(viewId)){await pageRequest({type:'document-status'},{readOnly:true});if(pickers.has(viewId)){pickers.get(viewId).iframe.focus();return null;}}
+      const grant=await pageRequest({type:'picker-open',viewId},{readOnly:true});
       const iframe=document.createElement('iframe');iframe.src=grant.url;iframe.title=locale.t('历史对话');
       iframe.style.cssText='position:fixed;inset:10vh auto auto 50%;transform:translateX(-50%);width:min(580px,90vw);height:75vh;border:1px solid #777;border-radius:12px;z-index:2147483647;background:#fff;color-scheme:light dark';
       document.documentElement.append(iframe);
@@ -114,20 +161,23 @@ async function initializeExtension() {
     },
     agent(initialId){
       let chatId=initialId;
-      const invoke=async(name,...args)=>{try{return await continuationCall(parseRef(chatId),name==='abort'?'stop':'agent',args,name);}catch(error){if(['CONTINUE_HERE_REQUIRED','TARGET_INVALIDATED','RECONNECT_REVIEW_HISTORY'].includes(error.code)){leases.delete(chatId);void refreshState(parseRef(chatId)).catch(()=>{});}throw error;}};
+      const invoke=async(name,...args)=>{const lease=leases.get(chatId);try{return await continuationCall(parseRef(chatId),name==='abort'?'stop':'agent',args,name);}catch(error){if(['CONTINUE_HERE_REQUIRED','TARGET_INVALIDATED','RECONNECT_REVIEW_HISTORY'].includes(error.code)){if(leases.get(chatId)===lease)leases.delete(chatId);void refreshState(parseRef(chatId)).catch(()=>{});}throw error;}};
       const bound=refreshState(parseRef(chatId)).then(state=>{configs.set(chatId,state.config);busy.set(chatId,state.busy);});
       return {
         get id(){return chatId;},get config(){return configs.get(chatId);},get busy(){return busy.get(chatId)===true;},get ready(){return bound;},
         get bindingState(){return states.get(chatId);},get authorized(){return leases.has(chatId);},
         async refreshBinding(){return refreshState(parseRef(chatId));},
         async continueHere(){
-          syncRoute();await routeSynchronized;
+          syncRoute();await pageRequest({type:'document-status'},{readOnly:true});await routeSynchronized;
           const ref=parseRef(chatId),state=states.get(chatId)||await refreshState(ref);
           const value=await continuationCall(ref,'continue',[],undefined,{expectedVersion:state.version});
+          const current=states.get(chatId)?.version;
+          if(current&&(current.epoch!==value.version.epoch||current.seq>value.version.seq))throw reconnectError(false);
+          beginStateRead(chatId);
           leases.set(chatId,value.leaseToken);emitState(chatId,value);return value;
         },
         async recoverSource(){const state=await refreshState(parseRef(chatId));return continuationCall(parseRef(chatId),'recover',[state.recovery?.version]);},
-        async returnToTarget(){syncRoute();await documentReady;return extensionRequest({type:'focus-target',ref:parseRef(chatId),viewId});},
+        async returnToTarget(){syncRoute();return pageRequest({type:'focus-target',ref:parseRef(chatId),viewId});},
         apis:remotePi.apis,describeModel:remotePi.describeModel,
         onEvent(listener){return remotePi.onEvent(event=>{if(event.conversationId===chatId)listener(event);});},
         async configure(config){const result=await invoke('configure',config);configs.set(chatId,result);return result;},
@@ -174,6 +224,11 @@ function startExtension(){
 }
 
 chrome.runtime.onMessage.addListener((message,_sender,respond)=>{
+  if(message.type==='worker-connected'){
+    if(_sender.id!==chrome.runtime.id)return false;
+    if(documentTarget?.workerEpoch===message.workerEpoch){respond({ok:true});return false;}
+    reconnectWorker().then(()=>respond({ok:true}),error=>respond({ok:false,error:error.message}));return true;
+  }
   if(message.type==='verify-target'){try{checkTarget(message.target);respond({ok:true});}catch(error){respond({ok:false,error:error.message});}return false;}
   if(message.type==='history-selected'||message.type==='history-picker-closed'){const picker=pickers.get(message.viewId);if(picker){picker.iframe.remove();pickers.delete(message.viewId);picker.resolve(message.ref?refKey(message.ref):null);}return false;}
   if(message.type==='cancel-tool'){
@@ -182,6 +237,7 @@ chrome.runtime.onMessage.addListener((message,_sender,respond)=>{
     return false;
   }
   if(message.type==='engine-event'){
+    if(message.workerEpoch!==documentTarget?.workerEpoch)return false;
     if(site) {
       if(message.ref){
         const key=refKey(message.ref),previous=eventSequences.get(key);
@@ -208,6 +264,7 @@ chrome.runtime.onMessage.addListener((message,_sender,respond)=>{
   (async()=>{
     if(message.type==='activate'){
       await startExtension();
+      await pageRequest({type:'document-status'},{readOnly:true});
       // Activation may arrive while the initial inactive identity check finishes.
       if(!extensionStarted)await startExtension();
       if(message.openWindow){

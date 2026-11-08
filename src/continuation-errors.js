@@ -16,6 +16,7 @@ const messages={
   CONVERSATION_DELETED:'这条对话已删除，请选择其他对话。',
   SOURCE_DELETED_INDEX_DIRTY:'对话已删除，请刷新目录以更新列表。',
   RECONNECT_REVIEW_HISTORY:'连接已重建，请先查看历史和队列，再确认是否重新发送。',
+  DOCUMENT_RECONNECT_REQUIRED:'连接已重建，请先查看历史和队列，再确认是否重新发送。',
   HISTORY_INDEX_VERSION:'历史目录版本不受支持，可继续使用本站对话。',
 };
 export function continuationErrorMessage(error){return messages[error.message]||error.message||String(error);}
