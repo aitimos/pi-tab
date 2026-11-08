@@ -67,7 +67,14 @@ async function protocol(message) {
   if(operation==='agent'&&message.name==='savedConfig')return pi.configFor(id);
   if(operation==='agent'&&['history','queuedMessages','discoverModels'].includes(message.name))return pi.agent(id)[message.name](...args);
   requireOwner(engine);
-  if(operation==='continue')return continuations.bind(ref,message.expectedVersion,message.viewId,message.pageTarget);
+  if(operation==='continue'){
+    const binding=await continuations.bind(ref,message.expectedVersion,message.viewId,message.pageTarget);
+    try{
+      const snapshot=await continuations.tool(ref,target=>background({type:'page-tool',ref,target,requestId:PiConsolePlugin.createId(),name:'page_snapshot',args:{}}));
+      if(continuations.version(ref).seq!==binding.version.seq)throw Error('BINDING_CONFLICT');
+      continuations.row(ref).snapshot=snapshot;emitRef(ref,{type:'binding_ready'});return binding;
+    }catch(error){continuations.invalidate(message.pageTarget.tabId);throw error;}
+  }
   if(operation==='stop')return continuations.stop(ref,()=>pi.agent(id).abort());
   if(operation==='create')return continuations.serial(ref.ownerSite,async()=>{
     const created=await pi.createChat({inheritFrom:id,activate:false});
@@ -101,7 +108,7 @@ async function engineFor(site,{defaults=false}={}) {
       storageName: `pi-tab-site-${site}`,
       deferResume: true, sharedMcp:true,
       log: false,
-      pageContext: () => null,
+      pageContext: id => {const row=continuations.row(conversationRef(site,id));return row.target?{url:row.target.url,title:'',snapshot:row.snapshot}:null;},
     });
     await pi.ready;
     const inspection=await PiConsolePlugin.inspectRuntime(pi);
@@ -165,7 +172,7 @@ async function engineFor(site,{defaults=false}={}) {
 chrome.runtime.onMessage.addListener((message, _sender, respond) => {
   if(_sender.tab&&(_sender.frameId!==0||!_sender.url?.startsWith(chrome.runtime.getURL(''))||_sender.url.startsWith(chrome.runtime.getURL('history-picker.html'))))return false;
   if(message.type==='target-invalidated'||message.type==='tab-closed') {
-    const owned=[...continuations.rows.values()].filter(row=>row.target?.tabId===message.tabId).map(row=>row.ref);
+    const owned=[...continuations.rows.values()].filter(row=>row.ownerTabId===message.tabId).map(row=>row.ref);
     continuations.invalidate(message.tabId);
     const stopping=message.type==='tab-closed'?Promise.all(owned.map(async ref=>{const e=await existing(ref);if(!e.recovery)await e.pi.agent(ref.conversationId).abort();})):Promise.resolve();
     stopping.then(()=>respond({ok:true}),error=>respond({ok:false,code:error.code||error.message,error:continuationErrorMessage(error)}));return true;
@@ -196,6 +203,7 @@ chrome.runtime.onMessage.addListener((message, _sender, respond) => {
   }
   if (message.target !== 'engine') return false;
   (async () => {
+    if(message.method==='tabCandidates')return [...continuations.rows.values()].filter(row=>row.target?.tabId===message.tabId).map(row=>row.ref);
     const engine=await engineFor(message.site,{defaults:['initialize','createChat'].includes(message.method)});
     const {pi}=engine;
     const {method,chatId,args=[],tabId} = message;
@@ -206,7 +214,7 @@ chrome.runtime.onMessage.addListener((message, _sender, respond) => {
         chats:(await pi.listChats()).map(chat=>({...chat,busy:pi.busyFor(chat.id),config:pi.configFor(chat.id)}))};
     }
     if (method === 'bind') { return {config:pi.configFor(chatId),busy:pi.busyFor(chatId)}; }
-    if (method === 'createChat') { const id=await pi.createChat({inheritFrom:args[0],activate:true}); return id; }
+    if (method === 'createChat') { const id=await pi.createChat({inheritFrom:args[0],activate:true}); continuations.forget(conversationRef(message.site,id)); return id; }
     if (method === 'selectChat') { return {config:pi.configFor(chatId),busy:pi.busyFor(chatId)}; }
     if (method === 'listChats') return (await pi.listChats()).map(chat=>({...chat,busy:pi.busyFor(chat.id),config:pi.configFor(chat.id)}));
     if (method === 'deleteChat') {
@@ -264,7 +272,6 @@ chrome.runtime.onMessage.addListener((message, _sender, respond) => {
       if(!row.target||row.target.tabId!==tabId)throw Error('CONTINUE_HERE_REQUIRED');
       return continuations.submit(ref,{target:row.target,viewId:row.viewId,leaseToken:row.lease},PiConsolePlugin.createId(),()=>pi.receiveFromTab(chatId,args[0],args[1]),{queue:true});
     }
-    if(method==='tabCandidates')return [...continuations.rows.values()].filter(row=>row.target?.tabId===tabId).map(row=>row.ref);
     if (method === 'readAgent') {
       const history=await pi.agent(chatId).history();
       return history.entries.slice(-(args[0]||10)).map(entry=>({kind:entry.kind,text:entry.model?.map(item=>typeof item.content==='string'?item.content:item.content?.filter(part=>part.type==='text').map(part=>part.text).join('\n')).filter(Boolean).join('\n')}));

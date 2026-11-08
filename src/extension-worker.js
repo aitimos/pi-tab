@@ -259,7 +259,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
     }
     if(message.type==='tabs-send'||message.type==='tabs-read'){
       if(!internal(sender))throw Error('INTERNAL_ONLY');
-      const tab=await chrome.tabs.get(message.tabId);siteOf(tab.url);
+      let tab=await chrome.tabs.get(message.tabId);
       const openedRecord=openedAgents.get(tab.id);
       if(openedRecord){
         for(let attempt=0;attempt<30;attempt++){
@@ -269,11 +269,8 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
           await new Promise(resolve=>setTimeout(resolve,100));
         }
       }else await activate(tab.id);
-      const candidates=[];
-      for(const site of new Set([siteOf(tab.url),...([...subscribers.keys()].map(key=>JSON.parse(key)[0]))])) {
-        const refs=await engineCall(site,tab.id,'tabCandidates');
-        for(const ref of refs)if(ref.conversationId===message.chatId)candidates.push(ref);
-      }
+      tab=await chrome.tabs.get(message.tabId);siteOf(tab.url);
+      const candidates=(await engineCall(siteOf(tab.url),tab.id,'tabCandidates')).filter(ref=>ref.conversationId===message.chatId);
       const opened=openedRecord?.ref;
       if(opened?.conversationId===message.chatId&&!candidates.some(ref=>refKey(ref)===refKey(opened)))candidates.push(opened);
       const matches=candidates.filter(ref=>!message.ownerSite||message.ownerSite===ref.ownerSite);

@@ -23,7 +23,7 @@ export class Continuations {
       if (expected?.epoch !== this.epoch || expected.seq !== row.seq) throw Error('BINDING_CONFLICT');
       if ((await this.state(ref)).busy || row.pending || row.inFlight || row.stopping) throw Error('CONVERSATION_BUSY');
       if(expected.seq!==row.seq)throw Error('BINDING_CONFLICT');
-      row.seq++; row.target = structuredClone(target); row.viewId = viewId; row.lease = crypto.randomUUID();
+      row.seq++; row.target = structuredClone(target); row.ownerTabId=target.tabId; row.snapshot=null; row.viewId = viewId; row.lease = crypto.randomUUID();
       this.emit(ref, {type:'binding_changed',holderViewId:viewId});
       return {...await this.state(ref), leaseToken:row.lease};
     });
@@ -79,11 +79,12 @@ export class Continuations {
   }
   inherit(from, to) {
     const parent = this.row(from), child = this.row(to);
-    if (parent.target) { child.target = structuredClone(parent.target); child.seq++; }
+    child.ownerTabId=parent.ownerTabId;
+    if (parent.target) { child.target = structuredClone(parent.target); child.snapshot=parent.snapshot; child.seq++; }
   }
   invalidate(tabId, documentId) {
     for (const row of this.rows.values()) if (row.target?.tabId === tabId && (!documentId || row.target.documentId === documentId)) {
-      row.target = null; row.lease = null; row.seq++;
+      row.target = null; row.snapshot=null; row.lease = null; row.seq++;
       this.emit(row.ref, {type:'target_invalidated'});
     }
   }

@@ -2,7 +2,7 @@ import {extensionTestRpc} from './extension-test-rpc.mjs';
 import assert from 'node:assert/strict';
 import {chromium} from 'playwright';
 import {createServer} from 'node:http';
-import {mkdtemp,cp,writeFile,readFile} from 'node:fs/promises';
+import {mkdtemp,cp,writeFile,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {createBookmarklet} from '../src/bookmarklet.js';
 import {join,resolve} from 'node:path';
@@ -47,7 +47,11 @@ try{
   const independent=await call('tab_open',{url:`http://localhost:${port}/independent`});
   await call('tab_list');
   const sent=await call('tab_send',{tabId:independent.tabId,chatId:independent.chatId,message:'TOOL_PAGE'});assert.equal(sent.to,independent.chatId);
-  console.log('PASS tab_open independent agent and legacy tab_send');
+  await call('tab_read',{tabId:independent.tabId,chatId:independent.chatId});
+  const sameSite=await call('tab_open',{url:base+'/independent-same'});
+  const sameSent=await call('tab_send',{tabId:sameSite.tabId,chatId:sameSite.chatId,message:'TOOL_PAGE'});assert.equal(sameSent.to,sameSite.chatId);
+  await call('tab_read',{tabId:sameSite.tabId,chatId:sameSite.chatId});
+  console.log('PASS cross-site and same-site tab_open independent agents, legacy tab_send and tab_read');
   for(const host of ['127.0.0.1','sub.localhost','localhost']){
     const url=`http://${host}:${port}/target-${host}`,b=await browser.newPage();await activate(b,url);
     await view(b).locator('#choose-history').click();const picker=b.frameLocator('iframe[title="历史对话"]');
@@ -56,7 +60,7 @@ try{
     const before=requests.length;await view(b).locator('#message-input').fill('TOOL_PAGE');await view(b).locator('#send').click();assert.equal(requests.length,before,'viewing must not submit');
     await view(b).locator('#continue-here').click();await view(b).locator('#send').click();
     await b.waitForFunction(url=>document.querySelector('[data-pi-overlay]')?.shadowRoot?.getElementById('chat-messages').textContent.includes(url),url);
-    const observed=await observeRequest(input=>JSON.stringify(input.messages).includes('ORIGINAL_TASK_CONTEXT')&&JSON.stringify(input.messages).includes(url));
+    const observed=await observeRequest(input=>JSON.stringify(input.messages).includes('ORIGINAL_TASK_CONTEXT')&&input.messages.some(message=>message.role==='tool'&&JSON.stringify(message.content).includes(url)));
     assert.ok(observed.messages.some(message=>message.role==='tool'&&JSON.stringify(message.content).includes(url)));
     await b.screenshot({path:join(output,`continue-${host}.png`)});
     // Same-URL reload must revoke the old authorization, while history remains readable.
@@ -91,7 +95,7 @@ try{
   interrupted.once('dialog',dialog=>dialog.accept());await view(interrupted).locator('#recover-source').click();
   await view(interrupted).locator('#recover-source').waitFor({state:'hidden'});assert.equal(requests.length,recoveryCount,'recovery replayed a model');
   await view(interrupted).locator('#continue-here').click();await send(interrupted,'TOOL_PAGE');
-  await interrupted.waitForFunction(()=>document.querySelector('[data-pi-overlay]')?.shadowRoot?.getElementById('chat-messages').textContent.includes('/recovery'));
+  await view(interrupted).locator('#chat-messages').filter({hasText:'/recovery'}).waitFor();
   await interrupted.screenshot({path:join(output,'recovery-cleared.png')});await interrupted.close();console.log('PASS two interrupted conversations remain paused and clear without model replay');
 
   const installer=await readFile('pi-bookmarklet-chat-install.html','utf8');
@@ -115,4 +119,4 @@ try{
   await unsupported.getByRole('alert').waitFor();assert.ok((await unsupported.getByRole('alert').innerText()).includes('独占锁'));
   await unsupported.getByRole('button',{name:'新建独立对话'}).click();await unsupported.waitForFunction(()=>window.pi?.__piConsolePlugin);await unsupported.evaluate(()=>pi.ready);await unsupported.close();console.log('PASS no-Web-Locks explicit independent storage');
   assert.deepEqual(errors,[]);await writeFile(join(output,'continuations.json'),JSON.stringify({browser:browser.browser()?.version(),requests,errors},null,2));
-}catch(error){for(const [i,page]of browser.pages().entries()){await page.screenshot({path:join(output,'failure-'+i+'.png')}).catch(()=>{});console.log((await page.locator('[data-pi-overlay]').last().innerText().catch(()=>'')));}throw error;}finally{await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r));}
+}catch(error){for(const [i,page]of browser.pages().entries()){await page.screenshot({path:join(output,'failure-'+i+'.png')}).catch(()=>{});console.log((await page.locator('[data-pi-overlay]').last().innerText().catch(()=>'')));}throw error;}finally{await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r));await rm(directory,{recursive:true,force:true});}

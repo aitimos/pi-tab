@@ -161,7 +161,7 @@ chrome.runtime.onMessage.addListener((message,_sender,respond)=>{
           eventSequences.set(key,{epoch:message.epoch,sequence:message.sequence});
         }
         message.event={...message.event,conversationId:key,...(message.event.replacementId?{replacementId:refKey(conversationRef(message.ref.ownerSite,message.event.replacementId))}:{}),...(message.event.agentId?{agentId:refKey(conversationRef(message.ref.ownerSite,message.event.agentId))}: {})};
-        if(['target_invalidated','binding_changed','run_end','recovery_complete'].includes(message.event.type)){if(message.event.type==='target_invalidated'||(message.event.type==='binding_changed'&&message.event.holderViewId!==viewId))leases.delete(key);void refreshState(message.ref).catch(()=>{});}
+        if(['target_invalidated','binding_changed','binding_ready','run_end','recovery_complete'].includes(message.event.type)){if(message.event.type==='target_invalidated'||(message.event.type==='binding_changed'&&message.event.holderViewId!==viewId))leases.delete(key);void refreshState(message.ref).catch(()=>{});}
       }
       if(message.event.type==='chat_deleted'){
         configs.delete(message.event.conversationId);busy.delete(message.event.conversationId);

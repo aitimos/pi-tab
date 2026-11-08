@@ -114,3 +114,11 @@ test('credential changes stay in the engine and broadcast only a settings notifi
   assert.equal(events.length,2);assert.ok(!JSON.stringify(events).includes('PRIVATE_SENTINEL'));
   assert.ok(events.every(request=>request.event.type==='models_changed'));
 });
+
+
+test('closing after document invalidation still stops the task that owned that tab',async()=>{
+  const {bind,broadcast,close,running,stopped}=await engineFixture();
+  await bind(2,20);running.add(2);
+  await broadcast({type:'target-invalidated',tabId:20});
+  assert.equal((await close(20)).ok,true);assert.deepEqual(stopped,[2]);
+});

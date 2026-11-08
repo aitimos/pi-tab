@@ -1827,7 +1827,7 @@ async function openChat(initialConfig, options = {}) {
       if(event.type==='directory_error'){byId('continuation-error').textContent=t('对话已创建，但历史目录暂不可用，可稍后刷新目录。');return;}
       if(event.type==='binding_state')return;
       if(event.type==='history_resync'){if(event.conversationId===pi.id)void restoreHistory();return;}
-      if(['binding_changed','target_invalidated','recovery_complete'].includes(event.type)){void renderContinuation();return;}
+      if(['binding_changed','binding_ready','target_invalidated','recovery_complete'].includes(event.type)){void renderContinuation();return;}
       if(event.type==='mcp_changed'){renderMcpStatus(event);return;}
       if(event.type==='mcp_imported'){if(event.skipped?.length)i18n.text(byId('mcp-notice'),()=>t('书签配置中有 {0} 项已保留本站设置。',event.skipped.length));return;}
       if(event.type==='models_changed'){
