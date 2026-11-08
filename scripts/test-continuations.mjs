@@ -74,10 +74,24 @@ try{
   // Rebuild history without a source tab or a live Harness.
   await a.close();await worker.evaluate(()=>chrome.offscreen.closeDocument());
   const cold=await browser.newPage();await activate(cold,`http://localhost:${port}/cold`);
+  const coldTab=await worker.evaluate(async url=>(await chrome.tabs.query({url}))[0].id,cold.url());
+  await worker.evaluate(async tabId=>{await chrome.scripting.executeScript({target:{tabId},world:'ISOLATED',func:()=>{
+    const send=chrome.runtime.sendMessage.bind(chrome.runtime);let delayed=false;
+    chrome.runtime.sendMessage=(message,callback)=>{
+      if(!delayed&&message.type==='continuation-call'&&message.operation==='view'&&message.ref.ownerSite==='localhost'){
+        delayed=true;return send(message,response=>{window.__releaseNativeView=()=>{chrome.runtime.sendMessage=send;callback({...response,value:{...response.value,title:'STALE_NATIVE_TITLE'}});};});
+      }
+      return send(message,callback);
+    };
+    const locale=window.__piTabAgent.i18n;locale.setMode(locale.mode,false);
+  }});},coldTab);
+  await worker.evaluate(async tabId=>{for(let i=0;i<100;i++){const [result]=await chrome.scripting.executeScript({target:{tabId},world:'ISOLATED',func:()=>Boolean(window.__releaseNativeView)});if(result.result)return;await new Promise(resolve=>setTimeout(resolve,20));}throw Error('Delayed view fixture did not start');},coldTab);
   const beforeCold=requests.length;await view(cold).locator('#choose-history').click();
   const picker=cold.frameLocator('iframe[title="历史对话"]');
   await picker.locator('button[data-ref="'+encodeURIComponent(JSON.stringify(['127.0.0.1',1]))+'"]').click();
   await Promise.race([view(cold).locator('#continuation-summary').filter({hasText:'Continuation fixture · 127.0.0.1'}).waitFor(),picker.locator('#error').filter({hasText:/\S/}).waitFor().then(async()=>{throw Error('Cold picker: '+await picker.locator('#error').innerText());}),view(cold).locator('#continuation-error').filter({hasText:/\S/}).waitFor().then(async()=>{throw Error('Cold view: '+await view(cold).locator('#continuation-error').innerText());})]);
+  await worker.evaluate(async tabId=>chrome.scripting.executeScript({target:{tabId},world:'ISOLATED',func:async()=>{window.__releaseNativeView();delete window.__releaseNativeView;await new Promise(requestAnimationFrame);}}),coldTab);
+  assert.ok(!(await view(cold).locator('#continuation-summary').innerText()).includes('STALE_NATIVE_TITLE'),'late native view must not replace the selected conversation');
   assert.equal(requests.length,beforeCold);await view(cold).locator('#continue-here').click();await send(cold,'TOOL_PAGE');
   await cold.waitForFunction(()=>document.querySelector('[data-pi-overlay]')?.shadowRoot?.getElementById('chat-messages').textContent.includes('/cold'));
   await cold.screenshot({path:join(output,'cold-history.png')});console.log('PASS cold history with source tab closed');

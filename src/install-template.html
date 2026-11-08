@@ -652,18 +652,22 @@ async function openChat(initialConfig, options = {}) {
   }, { passive:false });
   const state = { busy: false, pending:0, pendingByChat:new Map(), historyVersion:0, connected: false, minimized: false, configuring: false, unsubscribe: null, started: false, bookmarkConfig: null, tools: new Map(), stream: null, runStarted: 0, timer: null, selectedTool: null, trace: null, traces: [], activeConfig:null, profiles:[], providers:[], selectedProviderId:null, candidates:[], candidateProvider:null, selectedModel:null, discovery:null, discoveryTimer:null, discoveryVersion:0 };
 
+  let continuationRenderVersion=0;
   async function renderContinuation(){
     if(!runtimePi?.extension||!agent)return;
-    const panel=byId('continuation-panel');panel.hidden=false;panel.dataset.authorized=String(agent.authorized);
+    const version=++continuationRenderVersion,selectedAgent=agent,selectedId=agent.id;
+    const current=()=>version===continuationRenderVersion&&selectedAgent===agent&&selectedId===agent.id;
+    const panel=byId('continuation-panel');panel.hidden=false;panel.dataset.authorized=String(selectedAgent.authorized);
     try {
-      const binding=await agent.refreshBinding(),ref=runtimePi.parseConversationRef(agent.id);
+      const binding=await selectedAgent.refreshBinding();if(!current())return;
+      const ref=runtimePi.parseConversationRef(selectedId);
       byId('continuation-summary').textContent=t('当前对话：{0}；执行页面：{1}',(binding.title||t('新对话'))+' · '+ref.ownerSite,binding.target?.url||t('未绑定，请在本页重新接续'));
       byId('continue-here').disabled=binding.busy||Boolean(binding.recovery)||agent.authorized;
       byId('stop-continue').hidden=!binding.busy||Boolean(binding.recovery);
       byId('recover-source').hidden=!binding.recovery;
       const recoveryList=byId('recovery-list');recoveryList.hidden=!binding.recovery;recoveryList.replaceChildren(...(binding.recovery?.chats||[]).map(chat=>{const item=document.createElement('li');item.textContent=chat.title==='来源后台任务'?t(chat.title):chat.title;return item;}));
       byId('target-return').hidden=!binding.target;
-    }catch(error){byId('continuation-error').textContent=t(error.message);}
+    }catch(error){if(current())byId('continuation-error').textContent=t(error.message);}
   }
   async function continuationAction(work){try{byId('continuation-error').textContent='';await work();}catch(error){byId('continuation-error').textContent=t(error.message);}finally{await renderContinuation();}}
   byId('choose-history').onclick=event=>{if(event.isTrusted)void continuationAction(async()=>{const id=await runtimePi.chooseHistory();if(id)await switchConversation(id);});};
