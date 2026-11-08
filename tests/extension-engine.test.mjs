@@ -1,3 +1,4 @@
+import {continuationErrorMessage} from '../src/continuation-errors.js';
 import {Continuations} from '../src/continuations.js';
 import {conversationRef,refKey} from '../src/conversation-ref.js';
 import {createId} from '../src/id.js';
@@ -45,7 +46,7 @@ async function engineFixture() {
       return {ok:true,value:{tabs:[]}};
     },
   }};
-  vm.runInNewContext((await readFile('src/extension-engine.js','utf8')).replace(/^import .*;$/gm,''),{Continuations,conversationRef,refKey,HistoryIndex:class {async reconcile(){}},readMcpJson,mcpVariableReferences,structuredClone,createLinuxEnvironments:()=>({get(){},delete(){},dispose(){}}),createLinuxTools:()=>[],PiConsolePlugin:{install:()=>pi,createId,inspectRuntime:async()=>({tasks:[],submissions:[]})},chrome,Map,Set,crypto:globalThis.crypto,AbortController,btoa:value=>Buffer.from(value).toString('base64')});
+  vm.runInNewContext((await readFile('src/extension-engine.js','utf8')).replace(/^import .*;$/gm,''),{continuationErrorMessage,Continuations,conversationRef,refKey,HistoryIndex:class {async reconcile(){}},readMcpJson,mcpVariableReferences,structuredClone,createLinuxEnvironments:()=>({get(){},delete(){},dispose(){}}),createLinuxTools:()=>[],PiConsolePlugin:{install:()=>pi,createId,inspectRuntime:async()=>({tasks:[],submissions:[]})},chrome,Map,Set,crypto:globalThis.crypto,AbortController,btoa:value=>Buffer.from(value).toString('base64')});
   const send=(method,chatId,tabId,args=[],name)=>new Promise(resolve=>messageHandler({target:'engine',site:'example.com',method,chatId,tabId,args,name},{},resolve));
   await send('initialize',undefined,10);
   const target=tabId=>({tabId,documentId:'doc-'+tabId,origin:'https://example.com',url:'https://example.com/',nonce:'nonce-'+tabId,routeEpoch:0});

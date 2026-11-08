@@ -936,11 +936,11 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     async reset(id=conversation.id) { await pi.ready; await stopConversation(id); await (await harness.conversation(id,ctx)).reset(undefined,ctx); events.length=0; emit({type:'chat_reset',conversationId:id}); return 'conversation reset'; },
     async history() { await pi.ready; ensureOpen(); return conversation.context(ctx); },
     async usage() { await pi.ready; ensureOpen(); return harness.usage(ctx); },
-    async dispose() {
+    async dispose({abort = true} = {}) {
       if (disposed) return;
       await pi.ready;
       try {
-        await pi.abort();
+        if(abort)await pi.abort();
         await Promise.all([...eventStreams.values()].map(stream=>stream.stop()));
       } finally {
         try { await harness.close(ctx); }
@@ -969,14 +969,18 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
   }
   pi.ready = (async () => {
     modelConfig = createModelConfig(await loadModelCatalog());
-    const openHarness = async name => Harness.open(await (storageFactory ? storageFactory(name) : IndexedDbStorage.open(name)), { models, registry, env:executionEnv, settings: () => ({
+    const openHarness = async name => {
+      const storage=await (storageFactory ? storageFactory(name) : IndexedDbStorage.open(name));
+      try {return await Harness.open(storage, { models, registry, env:executionEnv, settings: () => ({
       toolExecution: preferences.toolExecution ?? 'sequential',
       retry: { maxRetries: preferences.maxRetries ?? 0 },
       compaction: { enabled: preferences.autoCompact ?? true },
       steeringMode: preferences.steeringMode ?? 'one-at-a-time',
       followUpMode: preferences.followUpMode ?? 'one-at-a-time',
       afterFailedRun: preferences.afterFailedRun ?? 'keep',
-    }) }, ctx);
+    }) }, ctx);}
+      catch(error){await storage.close(ctx);throw error;}
+    };
     if (storageFactory) {
       harness = await openHarness(storageName);
     } else if (navigator.locks) {

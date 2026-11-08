@@ -1,3 +1,4 @@
+import {continuationErrorMessage} from '../src/continuation-errors.js';
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
@@ -18,7 +19,7 @@ async function fixture(){
     }},
     storage:{onChanged:{addListener(){}},local:{get:async keys=>Object.fromEntries(keys.filter(key=>Object.hasOwn(saved,key)).map(key=>[key,structuredClone(saved[key])])),set:async patch=>{if(fail)throw Error('quota');Object.assign(saved,structuredClone(patch));}}},
   };
-  vm.runInNewContext((await readFile('src/extension-worker.js','utf8')).replace(/^import .*;$/gm,''),{chrome,McpConfigStore,URL,AbortController,setTimeout,createI18n(){},console});
+  vm.runInNewContext((await readFile('src/extension-worker.js','utf8')).replace(/^import .*;$/gm,''),{continuationErrorMessage,chrome,McpConfigStore,URL,AbortController,setTimeout,createI18n(){},console});
   const send=message=>new Promise(resolve=>listener({type:'shared-config',...message},{},resolve));
   return {send,saved,events,setBusy:v=>{busy=v;},setFail:v=>{fail=v;},setBroadcastFail:v=>{failBroadcast=v;}};
 }

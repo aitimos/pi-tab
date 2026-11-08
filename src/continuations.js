@@ -21,7 +21,8 @@ export class Continuations {
       await this.exists(ref); await this.validateTarget(target);
       const row = this.row(ref);
       if (expected?.epoch !== this.epoch || expected.seq !== row.seq) throw Error('BINDING_CONFLICT');
-      if ((await this.state(ref)).busy) throw Error('CONVERSATION_BUSY');
+      if ((await this.state(ref)).busy || row.pending || row.inFlight || row.stopping) throw Error('CONVERSATION_BUSY');
+      if(expected.seq!==row.seq)throw Error('BINDING_CONFLICT');
       row.seq++; row.target = structuredClone(target); row.viewId = viewId; row.lease = crypto.randomUUID();
       this.emit(ref, {type:'binding_changed',holderViewId:viewId});
       return {...await this.state(ref), leaseToken:row.lease};
@@ -41,6 +42,8 @@ export class Continuations {
       if (!requestId) throw Error('RECONNECT_REVIEW_HISTORY');
       if (row.requests.has(requestId)) { task = row.requests.get(requestId); return; }
       if (!queue && (await this.state(ref)).busy) throw Error('CONVERSATION_BUSY');
+      this.assertLease(row,authorization);
+      if(row.stopping)throw Error('CONVERSATION_STOPPING');
       row.pending++;
       task = Promise.resolve().then(work).finally(() => { row.pending--; });
       row.requests.set(requestId, task);

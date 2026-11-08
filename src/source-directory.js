@@ -22,9 +22,9 @@ export async function readSourceDirectory(ownerSite, factory = indexedDB) {
 }
 
 export async function inspectRuntime(pi) { return pi.harness.inspect(ctx); }
-export async function stopColdRuntime(pi) {
+export async function stopColdRuntime(pi, {retry = false} = {}) {
   const before = await inspectRuntime(pi);
-  if (before.scheduling !== 'paused') throw Error('RECOVERY_NOT_PAUSED');
+  if (before.scheduling !== 'paused' && !(retry && before.tasks.every(item=>item.record.abortRequested))) throw Error('RECOVERY_NOT_PAUSED');
   for (const item of before.submissions) if (item.status === 'queued') await pi.harness.abortSubmission(item.id, ctx);
   for (const item of before.tasks) await pi.harness.abortTask(item.record.id, ctx);
   // waitForIdle excludes background tasks in Pi 1.4.0.

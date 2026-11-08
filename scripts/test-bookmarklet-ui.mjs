@@ -59,6 +59,7 @@ const root="document.querySelector('[data-pi-overlay]')?.shadowRoot";
 const selected="[...window.__piQuickChatOverlay.instances.values()][0].id";
 async function launch(){
   await browser('click','#launch');
+  if(await evaluate('!navigator.locks')){await browser('wait','[role=alert]');await evaluate(`[...document.querySelectorAll('[role=alert] button')].find(button=>/独立|independent/.test(button.textContent)).click()`);}
   await browser('wait','--fn',`${root}?.getElementById('message-input')?.offsetHeight>0 && ${root}.getElementById('settings').disabled===false`);
 }
 async function click(selector){

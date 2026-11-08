@@ -1825,6 +1825,7 @@ async function openChat(initialConfig, options = {}) {
     if (!pi || typeof pi.onEvent !== 'function') return;
     state.unsubscribe = runtimePi.onEvent(event => {
       if(event.type==='binding_state')return;
+      if(event.type==='history_resync'){if(event.conversationId===pi.id)void restoreHistory();return;}
       if(['binding_changed','target_invalidated','recovery_complete'].includes(event.type)){void renderContinuation();return;}
       if(event.type==='mcp_changed'){renderMcpStatus(event);return;}
       if(event.type==='mcp_imported'){if(event.skipped?.length)i18n.text(byId('mcp-notice'),()=>t('书签配置中有 {0} 项已保留本站设置。',event.skipped.length));return;}
@@ -1832,7 +1833,7 @@ async function openChat(initialConfig, options = {}) {
         void agent.savedConfig().then(config=>{state.activeConfig=config;if(config)syncModelControls(config);if(byId('model-dialog').hidden){if(!config){state.connected=false;if(byId('preferences').style.display!=='flex')showSetup();}else if(state.connected)i18n.text(byId('chat-model'),config.model);}});return;
       }
       if (event.type === 'chat_title_changed') {
-        const row = [...byId('chat-entries').children].find(row=>row.dataset.chatId===String(event.conversationId));
+        const row = [...byId('chat-entries').children].find(row=>row.dataset.chatId===encodeURIComponent(String(event.conversationId)));
         if (row) {
           i18n.text(row.querySelector('.chat-title'), event.title);
           row.querySelector('.chat-select').title=event.title;
@@ -1841,14 +1842,14 @@ async function openChat(initialConfig, options = {}) {
         return;
       }
       if (event.type === 'chat_deleted') {
-        [...byId('chat-entries').children].find(row=>row.dataset.chatId===String(event.conversationId))?.remove();
+        [...byId('chat-entries').children].find(row=>row.dataset.chatId===encodeURIComponent(String(event.conversationId)))?.remove();
         if (pi.id === event.conversationId) void switchConversation(event.replacementId).catch(error => message('system', error.message));
         return;
       }
       if (event.type === 'run_start' || event.type === 'run_end' || event.type === 'snapshot') {
         const running = event.type === 'run_start' || (event.type === 'snapshot' && Boolean(event.run));
         for (const row of byId('chat-entries').children) {
-          if (row.dataset.chatId === String(event.conversationId)) row.querySelector('.chat-running').hidden = !running;
+          if (row.dataset.chatId === encodeURIComponent(String(event.conversationId))) row.querySelector('.chat-running').hidden = !running;
         }
       }
       if (event.conversationId !== pi.id) return;
@@ -2158,7 +2159,7 @@ async function openChat(initialConfig, options = {}) {
     for (const chat of agent ? await agent.listChats() : []) {
       const row = document.createElement('div');
       row.className = 'chat-row';
-      row.dataset.chatId = String(chat.id);
+      row.dataset.chatId = encodeURIComponent(String(chat.id));
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'chat-select';

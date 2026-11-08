@@ -1,3 +1,4 @@
+import {continuationErrorMessage} from './continuation-errors.js';
 import {conversationRef,refKey} from './conversation-ref.js';
 import {McpConfigStore} from './mcp-store.js';
 import { createI18n } from './i18n.js';
@@ -50,9 +51,9 @@ function subscribe(ref,target,viewId) {
   const key=refKey(ref);if(!subscribers.has(key))subscribers.set(key,new Map());
   subscribers.get(key).set(viewId,{tabId:target.tabId,documentId:target.documentId});
 }
-function pickerGrant(message,sender) {
+function pickerGrant(message,sender,{allowExpired=false}={}) {
   const grant=grants.get(message.grant);
-  if(!grant||grant.expires<Date.now()||sender.id!==chrome.runtime.id||sender.tab?.id!==grant.target.tabId||sender.frameId===0||!sender.documentId||!sender.url?.startsWith(chrome.runtime.getURL('history-picker.html')+'#'))throw Error('PICKER_UNAUTHORIZED');
+  if(!grant||(!allowExpired&&grant.expires<Date.now())||sender.id!==chrome.runtime.id||sender.tab?.id!==grant.target.tabId||sender.frameId===0||!sender.documentId||!sender.url?.startsWith(chrome.runtime.getURL('history-picker.html')+'#'))throw Error('PICKER_UNAUTHORIZED');
   if(grant.pickerDocumentId&&grant.pickerDocumentId!==sender.documentId)throw Error('PICKER_UNAUTHORIZED');
   grant.pickerDocumentId=sender.documentId;
   const current=documents.get(grant.target.tabId);
@@ -101,6 +102,8 @@ chrome.action.onClicked.addListener(async tab => {
 });
 chrome.tabs.onRemoved.addListener(async tabId => {
   revoke(tabId);openedAgents.delete(tabId);
+  const selected=await chrome.storage.session.get(null);
+  for(const key of Object.keys(selected))if(key.startsWith(`selected:${tabId}:`))await chrome.storage.session.remove(key);
   await chrome.storage.session.remove(activeKey(tabId));
   if (!await chrome.offscreen.hasDocument()) return;
   const response = await chrome.runtime.sendMessage({type:'tab-closed',tabId});
@@ -143,11 +146,12 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
     if(message.type==='validate-target'){if(!internal(sender))throw Error('INTERNAL_ONLY');return validTarget(message.target);}
     if(message.type==='picker-open') {
       const target=senderTarget(sender);await validTarget(target);
+      for(const [key,value]of grants)if(value.expires<Date.now()||(value.target.tabId===target.tabId&&value.viewId===message.viewId))grants.delete(key);
       const grant=crypto.randomUUID();grants.set(grant,{target,viewId:message.viewId,expires:Date.now()+120000});
       return {url:chrome.runtime.getURL('history-picker.html')+'#'+grant};
     }
     if(message.type==='picker-list'||message.type==='picker-select'||message.type==='picker-close') {
-      const grant=pickerGrant(message,sender);await validTarget(grant.target);
+      const grant=pickerGrant(message,sender,{allowExpired:message.type==='picker-close'});await validTarget(grant.target);
       if(message.type==='picker-list')return coordinator({operation:'list',cursor:message.cursor,refresh:message.refresh,reset:message.reset});
       grants.delete(message.grant);
       if(message.type==='picker-select') {
@@ -169,6 +173,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
       subscribe(ref,target,message.viewId);
       const value=await coordinator({operation:message.operation,ref,args:message.args,name:message.name,expectedVersion:message.expectedVersion,viewId:message.viewId,target,
         authorization:{target,viewId:message.viewId,leaseToken:message.leaseToken},clientRequestId:message.clientRequestId});
+      if(message.operation==='continue'){try{await validTarget(target);}catch(error){await chrome.runtime.sendMessage({type:'target-invalidated',tabId:target.tabId});throw error;}}
       if(message.operation==='create')subscribe(value,target,message.viewId);
       return value;
     }
@@ -219,7 +224,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
     if(message.type==='engine-event'){
       if(!internal(sender))throw Error('INTERNAL_ONLY');
       const views=message.ref?subscribers.get(refKey(message.ref)):null;
-      if(views)await Promise.all([...views.values()].map(view=>chrome.tabs.sendMessage(view.tabId,{type:'engine-event',ref:message.ref,event:message.event},{documentId:view.documentId}).catch(()=>{})));
+      if(views)await Promise.all([...views.values()].map(view=>chrome.tabs.sendMessage(view.tabId,{type:'engine-event',ref:message.ref,event:message.event,sequence:message.sequence,epoch:message.epoch},{documentId:view.documentId}).catch(()=>{})));
       if(!message.ref)await Promise.all([...documents.values()].map(target=>chrome.tabs.sendMessage(target.tabId,{type:'engine-event',event:message.event},{documentId:target.documentId}).catch(()=>{})));
       return true;
     }
@@ -244,25 +249,34 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
       const chatId=await engineCall(site,tab.id,'createChat',site===message.sourceSite?[message.fromChatId]:[]);
       await chrome.storage.session.set({[activeKey(tab.id)]:true});
       await chrome.tabs.update(tab.id,{url:url.href});
-      const ref=conversationRef(site,chatId);openedAgents.set(tab.id,ref);
+      const ref=conversationRef(site,chatId);openedAgents.set(tab.id,{ref,url:url.href});
       return {tabId:tab.id,chatId,conversationRef:ref,url:url.href,loading:true};
     }
     if(message.type==='tabs-send'||message.type==='tabs-read'){
       if(!internal(sender))throw Error('INTERNAL_ONLY');
       const tab=await chrome.tabs.get(message.tabId);siteOf(tab.url);
-      await activate(tab.id);
+      const openedRecord=openedAgents.get(tab.id);
+      if(openedRecord){
+        for(let attempt=0;attempt<30;attempt++){
+          const current=await chrome.tabs.get(tab.id);
+          if(current.status==='complete'&&documents.has(tab.id)){await activate(tab.id);break;}
+          if(attempt===29)throw Error('TARGET_PERMISSION_OR_UNSUPPORTED');
+          await new Promise(resolve=>setTimeout(resolve,100));
+        }
+      }else await activate(tab.id);
       const candidates=[];
       for(const site of new Set([siteOf(tab.url),...([...subscribers.keys()].map(key=>JSON.parse(key)[0]))])) {
         const refs=await engineCall(site,tab.id,'tabCandidates');
         for(const ref of refs)if(ref.conversationId===message.chatId)candidates.push(ref);
       }
-      const opened=openedAgents.get(tab.id);
+      const opened=openedRecord?.ref;
       if(opened?.conversationId===message.chatId&&!candidates.some(ref=>refKey(ref)===refKey(opened)))candidates.push(opened);
       const matches=candidates.filter(ref=>!message.ownerSite||message.ownerSite===ref.ownerSite);
       if(matches.length!==1)throw Error(matches.length?'AMBIGUOUS_CONVERSATION_REF':'CONTINUE_HERE_REQUIRED');
       const ref=matches[0];
       if(message.type==='tabs-send'&&opened&&refKey(opened)===refKey(ref)) {
         const target=documents.get(tab.id);await validTarget(target);
+        if(target.url!==openedRecord.url)throw Error('TARGET_INVALIDATED');
         const state=await coordinator({operation:'view',ref});
         if(!state.target)await coordinator({operation:'continue',ref,viewId:'tab-agent:'+tab.id,target,expectedVersion:state.version});
       }
@@ -270,7 +284,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
         message.type==='tabs-send'?[message.text,`agent ${message.fromChatId}`]:[message.limit],ref.conversationId);
     }
     throw new Error('未知扩展消息。');
-  })().then(value=>respond({ok:true,value}),error=>respond({ok:false,error:error.message||String(error),diagnostics:error.diagnostics}));
+  })().then(value=>respond({ok:true,value}),error=>respond({ok:false,code:error.message,error:continuationErrorMessage(error),diagnostics:error.diagnostics}));
   return true;
 });
 

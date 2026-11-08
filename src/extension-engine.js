@@ -1,3 +1,4 @@
+import {continuationErrorMessage} from './continuation-errors.js';
 import {conversationRef, refKey} from './conversation-ref.js';
 import {HistoryIndex} from './history-index.js';
 import {Continuations} from './continuations.js';
@@ -17,7 +18,8 @@ async function background(request) {
   return response.value;
 }
 
-const emitRef = (ref, event) => { void chrome.runtime.sendMessage({type:'engine-event', site:ref.ownerSite, ref, event:{...event,conversationId:ref.conversationId}, protocolVersion:1}).catch(()=>{}); };
+const eventSequences=new Map();
+const emitRef = (ref, event) => { const key=refKey(ref),sequence=(eventSequences.get(key)||0)+1;eventSequences.set(key,sequence);void chrome.runtime.sendMessage({type:'engine-event', site:ref.ownerSite, ref, event:{...event,conversationId:ref.conversationId}, sequence, epoch:continuations.epoch, protocolVersion:1}).catch(()=>{}); };
 const historyIndex = new HistoryIndex({
   readSource:site=>PiConsolePlugin.readSourceDirectory(site),
   activeSource:async site=>engines.has(site)?(await engines.get(site)).pi:null,
@@ -55,12 +57,13 @@ async function protocol(message) {
   refKey(ref);
   const engine=await existing(ref), {pi}=engine, id=ref.conversationId;
   if(operation==='view')return sourceState(ref);
-  if(operation==='recover') {
+  if(operation==='recover')return continuations.serial(ref.ownerSite,async()=>{
     if(!engine.recovery || args[0]!==engine.recovery.version)throw Error('RECOVERY_VERSION_CHANGED');
-    await PiConsolePlugin.stopColdRuntime(pi);
+    const retry=Boolean(engine.recovery.attempted);engine.recovery.attempted=true;
+    await PiConsolePlugin.stopColdRuntime(pi,{retry});
     engine.recovery=null;pi.resume();emitRef(ref,{type:'recovery_complete'});
     return sourceState(ref);
-  }
+  });
   if(operation==='agent'&&message.name==='savedConfig')return pi.configFor(id);
   if(operation==='agent'&&['history','queuedMessages','discoverModels'].includes(message.name))return pi.agent(id)[message.name](...args);
   requireOwner(engine);
@@ -89,9 +92,10 @@ async function protocol(message) {
 }
 
 async function engineFor(site) {
+  let createdPi,createdLinux;
   if (!engines.has(site)) engines.set(site, (async () => {
-    const linux=createLinuxEnvironments(site);
-    const pi = PiConsolePlugin.install({
+    const linux=createdLinux=createLinuxEnvironments(site);
+    const pi = createdPi=PiConsolePlugin.install({
       executionEnv:linux.get, nativeTools:createLinuxTools(),
       globalName: `__pi_site_${btoa(site).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'')}`,
       storageName: `pi-tab-site-${site}`,
@@ -100,8 +104,6 @@ async function engineFor(site) {
       pageContext: () => null,
     });
     await pi.ready;
-    const targets = new Map();
-    const bindTarget=()=>{};
     const inspection=await PiConsolePlugin.inspectRuntime(pi);
     const recovery=inspection.tasks.length||inspection.submissions.length?{version:PiConsolePlugin.createId(),chats:[...new Set([...inspection.tasks.map(item=>item.record.conversationId),...inspection.submissions.map(item=>item.conversationId)])]}:null;
     const saved = await background({type:'shared-config',operation:'get'});
@@ -154,8 +156,8 @@ async function engineFor(site) {
     });
     if(sharedMcpGate)pi.setMcpUpdateGate(true);
     if(!recovery)pi.resume();
-    return {pi,targets,bindTarget,recovery};
-  })().catch(error=>{engines.delete(site);throw error;}));
+    return {pi,recovery};
+  })().catch(async error=>{await createdPi?.dispose({abort:false}).catch(()=>{});createdLinux?.dispose();engines.delete(site);throw error;}));
   return engines.get(site);
 }
 
@@ -165,10 +167,10 @@ chrome.runtime.onMessage.addListener((message, _sender, respond) => {
     const owned=[...continuations.rows.values()].filter(row=>row.target?.tabId===message.tabId).map(row=>row.ref);
     continuations.invalidate(message.tabId);
     const stopping=message.type==='tab-closed'?Promise.all(owned.map(async ref=>{const e=await existing(ref);if(!e.recovery)await e.pi.agent(ref.conversationId).abort();})):Promise.resolve();
-    stopping.then(()=>respond({ok:true}),error=>respond({ok:false,error:error.message}));return true;
+    stopping.then(()=>respond({ok:true}),error=>respond({ok:false,code:error.message,error:continuationErrorMessage(error)}));return true;
   }
   if(message.target==='continuations'){
-    protocol(message).then(value=>respond({ok:true,value}),error=>respond({ok:false,error:error.message}));return true;
+    protocol(message).then(value=>respond({ok:true,value}),error=>respond({ok:false,code:error.message,error:continuationErrorMessage(error)}));return true;
   }
   if(message.type==='mcp-update-guard'){
     sharedMcpGate=message.value;
@@ -194,22 +196,20 @@ chrome.runtime.onMessage.addListener((message, _sender, respond) => {
   if (message.target !== 'engine') return false;
   (async () => {
     const engine=await engineFor(message.site);
-    const {pi,targets,bindTarget}=engine;
+    const {pi}=engine;
     const {method,chatId,args=[],tabId} = message;
     if(!['initialize','bind','selectChat','listChats','readAgent','tabCandidates'].includes(method))requireOwner(engine);
     if (method === 'initialize') {
-      const activeId=[...targets].find(([,target])=>target===tabId)?.[0]??pi.conversation.id;
-      bindTarget(activeId, tabId);
+      const activeId=[...continuations.rows.values()].find(row=>row.ref.ownerSite===message.site&&row.target?.tabId===tabId)?.ref.conversationId??pi.conversation.id;
       return {activeId,config:pi.configFor(activeId),defaultPrompt:pi.defaultPrompt,
         chats:(await pi.listChats()).map(chat=>({...chat,busy:pi.busyFor(chat.id),config:pi.configFor(chat.id)}))};
     }
-    if (method === 'bind') { bindTarget(chatId,tabId); return {config:pi.configFor(chatId),busy:pi.busyFor(chatId)}; }
-    if (method === 'createChat') { const id=await pi.createChat({inheritFrom:args[0],activate:true}); targets.set(id,tabId); return id; }
+    if (method === 'bind') { return {config:pi.configFor(chatId),busy:pi.busyFor(chatId)}; }
+    if (method === 'createChat') { const id=await pi.createChat({inheritFrom:args[0],activate:true}); return id; }
     if (method === 'selectChat') { return {config:pi.configFor(chatId),busy:pi.busyFor(chatId)}; }
     if (method === 'listChats') return (await pi.listChats()).map(chat=>({...chat,busy:pi.busyFor(chat.id),config:pi.configFor(chat.id)}));
     if (method === 'deleteChat') {
       const result = await pi.deleteChat(args[0]);
-      targets.delete(args[0]);
       return result;
     }
     if (method === 'agent') {
@@ -269,6 +269,6 @@ chrome.runtime.onMessage.addListener((message, _sender, respond) => {
       return history.entries.slice(-(args[0]||10)).map(entry=>({kind:entry.kind,text:entry.model?.map(item=>typeof item.content==='string'?item.content:item.content?.filter(part=>part.type==='text').map(part=>part.text).join('\n')).filter(Boolean).join('\n')}));
     }
     throw new Error('未知引擎操作。');
-  })().then(value=>respond({ok:true,value}),error=>respond({ok:false,error:error.message||String(error),diagnostics:error.diagnostics}));
+  })().then(value=>respond({ok:true,value}),error=>respond({ok:false,code:error.message,error:continuationErrorMessage(error),diagnostics:error.diagnostics}));
   return true;
 });

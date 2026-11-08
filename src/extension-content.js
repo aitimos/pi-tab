@@ -2,7 +2,7 @@
 const extensionRequest = message => new Promise((resolve, reject) => {
   chrome.runtime.sendMessage(message, response => {
     if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
-    else if (!response?.ok) reject(Object.assign(new Error(response?.error || '扩展通信失败。'),{diagnostics:response?.diagnostics}));
+    else if (!response?.ok) reject(Object.assign(new Error(response?.error || '扩展通信失败。'),{diagnostics:response?.diagnostics,code:response?.code}));
     else resolve(response.value);
   });
 });
@@ -19,6 +19,7 @@ const emitState=(id,state)=>{states.set(id,state);for(const listener of listener
 const refreshState=async ref=>{const id=refKey(ref),state=await continuationCall(ref,'view');emitState(id,state);return state;};
 setInterval(()=>{if(location.href!==lastUrl){lastUrl=location.href;routeEpoch++;leases.clear();void hello().catch(()=>{});}},250);
 const configs = new Map();
+const eventSequences=new Map();
 const busy = new Map();
 const toolRuns = new Map();
 let extensionStarted = false;
@@ -54,6 +55,7 @@ async function initializeExtension() {
     __piConsolePlugin:true, extension:true,
     parseConversationRef:parseRef,
     async chooseHistory(){
+      if(pickers.has(viewId)){pickers.get(viewId).iframe.focus();return null;}
       const grant=await extensionRequest({type:'picker-open',viewId});
       const iframe=document.createElement('iframe');iframe.src=grant.url;iframe.title=locale.t('历史对话');
       iframe.style.cssText='position:fixed;inset:10vh auto auto 50%;transform:translateX(-50%);width:min(580px,90vw);height:75vh;border:1px solid #777;border-radius:12px;z-index:2147483647;background:#fff;color-scheme:light dark';
@@ -83,7 +85,7 @@ async function initializeExtension() {
     },
     agent(initialId){
       let chatId=initialId;
-      const invoke=(name,...args)=>continuationCall(parseRef(chatId),name==='abort'?'stop':'agent',args,name);
+      const invoke=async(name,...args)=>{try{return await continuationCall(parseRef(chatId),name==='abort'?'stop':'agent',args,name);}catch(error){if(['CONTINUE_HERE_REQUIRED','TARGET_INVALIDATED','RECONNECT_REVIEW_HISTORY'].includes(error.code)){leases.delete(chatId);void refreshState(parseRef(chatId)).catch(()=>{});}throw error;}};
       const bound=refreshState(parseRef(chatId)).then(state=>{configs.set(chatId,state.config);busy.set(chatId,state.busy);});
       return {
         get id(){return chatId;},get config(){return configs.get(chatId);},get busy(){return busy.get(chatId)===true;},get ready(){return bound;},
@@ -152,7 +154,13 @@ chrome.runtime.onMessage.addListener((message,_sender,respond)=>{
   if(message.type==='engine-event'){
     if(site) {
       if(message.ref){
-        const key=refKey(message.ref);message.event={...message.event,conversationId:key,...(message.event.replacementId?{replacementId:refKey(conversationRef(message.ref.ownerSite,message.event.replacementId))}:{}),...(message.event.agentId?{agentId:refKey(conversationRef(message.ref.ownerSite,message.event.agentId))}: {})};
+        const key=refKey(message.ref),previous=eventSequences.get(key);
+        if(message.sequence){
+          if(previous?.epoch===message.epoch&&message.sequence<=previous.sequence)return false;
+          if(previous&&(previous.epoch!==message.epoch||message.sequence!==previous.sequence+1)){for(const listener of listeners)listener({type:'history_resync',conversationId:key});void refreshState(message.ref).catch(()=>{});}
+          eventSequences.set(key,{epoch:message.epoch,sequence:message.sequence});
+        }
+        message.event={...message.event,conversationId:key,...(message.event.replacementId?{replacementId:refKey(conversationRef(message.ref.ownerSite,message.event.replacementId))}:{}),...(message.event.agentId?{agentId:refKey(conversationRef(message.ref.ownerSite,message.event.agentId))}: {})};
         if(['target_invalidated','binding_changed','run_end','recovery_complete'].includes(message.event.type)){if(message.event.type==='target_invalidated'||(message.event.type==='binding_changed'&&message.event.holderViewId!==viewId))leases.delete(key);void refreshState(message.ref).catch(()=>{});}
       }
       if(message.event.type==='chat_deleted'){

@@ -1,3 +1,4 @@
+import {extensionTestRpc} from './extension-test-rpc.mjs';
 import assert from 'node:assert/strict';
 import {chromium} from 'playwright';
 import {createServer} from 'node:http';
@@ -7,7 +8,7 @@ import {createBookmarklet} from '../src/bookmarklet.js';
 import {join,resolve} from 'node:path';
 const output=resolve(process.env.PI_TAB_EVIDENCE||'../evidence');
 await (await import('node:fs/promises')).mkdir(output,{recursive:true});
-const directory=await mkdtemp(join(tmpdir(),'pi-tab-continuations-')),requests=[];
+const directory=await mkdtemp(join(tmpdir(),'pi-tab-continuations-')),requests=[];let heldRequests=0;
 let bookmark;
 const server=createServer((request,response)=>{
   if(!request.url.endsWith('/chat/completions')){response.setHeader('Content-Type','text/html;charset=utf-8');response.end('<title>Continuation fixture</title><h1>'+request.url+'</h1><p id="target">untouched</p>'+(bookmark?'<a id="bookmark" href="'+bookmark.replaceAll('&','&amp;').replaceAll('\"','&quot;')+'">Pi Tab</a>':''));return;}
@@ -15,7 +16,9 @@ const server=createServer((request,response)=>{
     const input=JSON.parse(body),title=input.messages.some(m=>['system','developer'].includes(m.role)&&JSON.stringify(m.content).includes('你是会话标题生成器'));
     if(!title)requests.push(input);
     const last=input.messages.at(-1),content=typeof last.content==='string'?last.content:JSON.stringify(last.content);
-    const delta=title?{role:'assistant',content:'Continuation fixture'}:last.role==='tool'?{role:'assistant',content}:content.includes('TOOL_PAGE')?{role:'assistant',tool_calls:[{index:0,id:'tool_'+requests.length,type:'function',function:{name:'js_eval',arguments:JSON.stringify({code:'return {url:location.href,h1:document.querySelector("h1").textContent}'})}}]}:{role:'assistant',content:'REMEMBERED_ORIGINAL_CONTEXT'};
+    if(!title&&last.role==='user'&&content.includes('HOLD_RECOVERY')){heldRequests++;return;}
+    const command=content.includes('PI_TAB_TOOL ')?JSON.parse(content.slice(content.indexOf('PI_TAB_TOOL ')+12)):null;
+    const delta=title?{role:'assistant',content:'Continuation fixture'}:last.role==='tool'?{role:'assistant',content}:command?{role:'assistant',tool_calls:[{index:0,id:'tab_'+requests.length,type:'function',function:{name:command.name,arguments:JSON.stringify(command.args)}}]}:content.includes('TOOL_PAGE')?{role:'assistant',tool_calls:[{index:0,id:'tool_'+requests.length,type:'function',function:{name:'js_eval',arguments:JSON.stringify({code:'return {url:location.href,h1:document.querySelector("h1").textContent}'})}}]}:{role:'assistant',content:'REMEMBERED_ORIGINAL_CONTEXT'};
     response.writeHead(200,{'Content-Type':'text/event-stream'});response.end('data: '+JSON.stringify({id:'test',object:'chat.completion.chunk',model:'fixture',choices:[{index:0,delta,finish_reason:delta.tool_calls?'tool_calls':'stop'}]})+'\n\ndata: [DONE]\n\n');
   });
 });
@@ -38,6 +41,12 @@ try{
   const a=await browser.newPage();await activate(a,base+'/source');await view(a).locator('#continue-here').click();await send(a,'ORIGINAL_TASK_CONTEXT');
   await a.waitForFunction(()=>document.querySelector('[data-pi-overlay]')?.shadowRoot?.getElementById('chat-messages').textContent.includes('REMEMBERED_ORIGINAL_CONTEXT'));
   await a.screenshot({path:join(output,'source.png')});
+  const sourceTab=await worker.evaluate(async url=>(await chrome.tabs.query({url}))[0].id,base+'/source');
+  const call=async(name,args={})=>{const response=await worker.evaluate(extensionTestRpc,{site:'127.0.0.1',tabId:sourceTab,method:'agent',chatId:1,name:'prompt',args:['PI_TAB_TOOL '+JSON.stringify({name,args})]});assert.ok(response.ok,response.error);try{return JSON.parse(response.value);}catch{throw Error(response.value);}};
+  const independent=await call('tab_open',{url:`http://localhost:${port}/independent`});
+  const independentPage=browser.pages().find(page=>page.url().includes('/independent'));if(independentPage)await independentPage.waitForLoadState();
+  const sent=await call('tab_send',{tabId:independent.tabId,chatId:independent.chatId,message:'TOOL_PAGE'});assert.equal(sent.to,independent.chatId);
+  console.log('PASS tab_open independent agent and legacy tab_send');
   for(const host of ['127.0.0.1','sub.localhost','localhost']){
     const url=`http://${host}:${port}/target-${host}`,b=await browser.newPage();await activate(b,url);
     await view(b).locator('#choose-history').click();const picker=b.frameLocator('iframe[title="历史对话"]');
@@ -65,6 +74,22 @@ try{
   await cold.waitForFunction(()=>document.querySelector('[data-pi-overlay]')?.shadowRoot?.getElementById('chat-messages').textContent.includes('/cold'));
   await cold.screenshot({path:join(output,'cold-history.png')});console.log('PASS cold history with source tab closed');
   await cold.close();
+  // Persist two real running conversations, recreate the background, and prove
+  // reading/clearing cannot replay either interrupted model request.
+  const interrupted=await browser.newPage();await activate(interrupted,base+'/recovery');
+  let recoveryView=view(interrupted);await recoveryView.locator('#continue-here').click();
+  await recoveryView.locator('#message-input').fill('HOLD_RECOVERY_1');await recoveryView.locator('#send').click();
+  while(heldRequests<1)await interrupted.waitForTimeout(25);
+  await recoveryView.locator('#new-agent').click();await interrupted.locator('[data-pi-overlay]').nth(1).waitFor();
+  recoveryView=interrupted.locator('[data-pi-overlay]').nth(1);await recoveryView.locator('#continue-here').click();await recoveryView.locator('#message-input').fill('HOLD_RECOVERY_2');await recoveryView.locator('#send').click();
+  while(heldRequests<2)await interrupted.waitForTimeout(25);
+  await worker.evaluate(()=>chrome.offscreen.closeDocument());const recoveryCount=requests.length;
+  await interrupted.reload();await view(interrupted).locator('#recover-source').waitFor();
+  assert.equal(requests.length,recoveryCount,'cold reading resumed a model');
+  interrupted.once('dialog',dialog=>dialog.accept());await view(interrupted).locator('#recover-source').click();
+  await view(interrupted).locator('#recover-source').waitFor({state:'hidden'});assert.equal(requests.length,recoveryCount,'recovery replayed a model');
+  await interrupted.screenshot({path:join(output,'recovery-cleared.png')});await interrupted.close();console.log('PASS two interrupted conversations remain paused and clear without model replay');
+
   const installer=await readFile('pi-bookmarklet-chat-install.html','utf8');
   const runtime=JSON.parse(installer.match(/<script id="pi-runtime"[^>]*>(.*?)<\/script>/s)[1]);
   const profile={id:'bookmark',api:'openai-completions',baseUrl:base+'/v1',apiKey:'test-only',model:'fixture',thinking:'off',reasoning:false};

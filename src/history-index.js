@@ -44,7 +44,8 @@ export class HistoryIndex {
     cursor.onsuccess = () => {
       const item = cursor.result;
       if (item) { item.delete(); item.continue(); return; }
-      for (const row of prepared)store.put(row);
+      try { for (const row of prepared)store.put(row); }
+      catch {tx.abort();}
     };
     await done;
   }

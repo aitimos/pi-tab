@@ -165,6 +165,7 @@ try{
   await evaluate(`chrome.offscreen.createDocument({url:'engine.html',reasons:['WORKERS'],justification:'Verify Linux reset after background recreation'})`);
   await browser('wait','--fn',`(async()=>{try{return (await chrome.runtime.sendMessage({target:'engine',site:'127.0.0.1',method:'listChats'})).ok}catch{return false}})()`);
   await browser('wait','--fn',`(async()=>{const r=await chrome.runtime.sendMessage({target:'engine',site:'127.0.0.1',method:'listChats'});return r.ok&&r.value.some(c=>c.id===${source}&&!c.busy)})()`);
+  await engine('recoverSource',[],source);
   result=await call('bash',{command:`test ! -e ${quote(path)} && test ! -e /workspace/replayed`});assert.equal(result.isError,false);
   console.log('PASS UI/history: image/diff/errors restored after refresh; reset/deletion, Wasm crash recovery, offscreen recreation and no replay of unfinished Linux calls');
 }finally{

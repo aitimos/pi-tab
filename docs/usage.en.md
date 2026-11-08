@@ -30,7 +30,7 @@ The top **新对话** button starts a blank conversation in the current window. 
 
 Windows support dragging, resizing, snapping to the left or right edge, and minimizing. While dragging, windows can move beyond either edge. Moving the pointer to the viewport edge shows a docking hint; releasing folds the window immediately, while moving back cancels docking. Positions in the middle stay where you place them. Docked windows remain at the edge when the browser resizes. In **Pi 设置**, choose **跟随** (follow), **浅色** (light), or **深色** (dark). Follow is the default: it uses the page’s CSS color scheme or background, falling back to the browser or system preference. Settings are grouped into General, Instructions, and Execution, with a fixed save button. They include a restore-built-in-instructions action, automatic context compaction, retries, tool execution, and queue options. Model controls are below the composer.
 
-Stop cancels the current conversation and queued messages. Closing its tab in extension mode also stops that tab’s tasks; reloading preserves them. Page actions already performed are not undone. Docked windows collapse to an edge handle when the mouse leaves and expand on hover; drag the handle vertically to reposition it or inward to restore the floating window; active input drafts stay open. Replies support Markdown headings, lists, tables, quotes, and code blocks, and copying preserves the original Markdown.
+Stop cancels the current conversation and queued messages. Closing its tab in extension mode also stops that tab’s tasks; background tasks survive reloads, but page operations require explicit authorization for the new document. Page actions already performed are not undone. Docked windows collapse to an edge handle when the mouse leaves and expand on hover; drag the handle vertically to reposition it or inward to restore the floating window; active input drafts stay open. Replies support Markdown headings, lists, tables, quotes, and code blocks, and copying preserves the original Markdown.
 
 ## Install the Chrome extension
 
@@ -69,7 +69,7 @@ Up to 8 attachments are allowed, with 5 MB per file and 10 MB total. Attachments
 | | Bookmark | Chrome extension |
 | --- | --- | --- |
 | Storage | IndexedDB in the webpage's origin | Extension IndexedDB, grouped by exact hostname |
-| Multiple tabs | Concurrent tabs may use separate stores; a shared list is not guaranteed | Tabs on the same hostname share a conversation list |
+| Multiple tabs | Concurrent tabs may use separate stores; a shared list is not guaranteed | History stays grouped by source; explicitly select any source to continue |
 | Reload and navigation | Click again to open a blank conversation, or resume an unfinished task; previous conversations remain in the list | Enabled tabs are reinjected; background runs survive webpage reloads |
 | Model settings | Separate webpage storage; the bookmark carries its saved configuration | Saved models and providers are shared across websites |
 
@@ -129,3 +129,15 @@ Configuration example:
 Bookmarks contain the code and configuration saved when you created them. Drag a new bookmark from the installer after an update or a configuration change; existing bookmarks do not update automatically.
 
 For the unpacked extension, replace the files in its original directory, reload it in `chrome://extensions`, and refresh the webpage. GitHub Releases do not automatically update installed extensions.
+
+
+### Continue a conversation on another page
+
+Enable the extension on the destination page, open **Conversation history**, and select the original conversation. Selecting only opens history; click **Continue on this page** before sending a task. Existing context and model settings remain with the original conversation, while page tools use the selected document. This works on the same hostname, another subdomain, or another hostname.
+
+The conversation source and execution page appear above the chat. While a task runs, wait or choose **Stop task and continue here**. Reloading, navigation, or closing a page revokes its authorization. If the extension background restarts with interrupted tasks, review and explicitly stop the source site's interrupted conversations before continuing. History is retained and tasks are not automatically replayed.
+
+New conversations, new windows, and `tab_open` create independent tasks without inheriting messages. `tab_open` also returns `conversationRef`; `tab_send` and `tab_read` accept `ownerSite` and reject ambiguous numeric IDs.
+
+Bookmark history belongs to the current origin. When another tab owns that history, startup waits at most 1.5 seconds and offers retry or an explicit independent conversation. Pages without Web Locks also require an explicit independent conversation. Use the extension for cross-site continuation.
+
