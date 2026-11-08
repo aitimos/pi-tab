@@ -11,13 +11,41 @@ const {conversationRef,refKey,parseRef}=PiConsolePlugin;
 const listeners = new Set();
 const viewId=PiConsolePlugin.createId(),leases=new Map(),states=new Map(),pickers=new Map();
 let targetNonce=PiConsolePlugin.createId(),routeEpoch=0,lastUrl=location.href;
-async function hello(){return extensionRequest({type:'document-hello',nonce:targetNonce,routeEpoch});}
-const documentReady=hello();
-function checkTarget(target){if(!target||target.nonce!==targetNonce||target.routeEpoch!==routeEpoch||target.url!==location.href||target.origin!==location.origin)throw Error('TARGET_INVALIDATED');}
-const continuationCall=(ref,operation,args=[],name,extra={})=>extensionRequest({type:'continuation-call',ref,operation,args,name,viewId,leaseToken:leases.get(refKey(ref)),clientRequestId:PiConsolePlugin.createId(),...extra});
-const emitState=(id,state)=>{states.set(id,state);for(const listener of listeners)listener({type:'binding_state',conversationId:id,state});};
-const refreshState=async ref=>{const id=refKey(ref),state=await continuationCall(ref,'view'),previous=states.get(id);if(!state.target||(previous&&(previous.version.epoch!==state.version.epoch||previous.version.seq!==state.version.seq)))leases.delete(id);emitState(id,state);return state;};
-setInterval(()=>{if(location.href!==lastUrl){lastUrl=location.href;routeEpoch++;leases.clear();for(const controller of toolRuns.values())controller.abort();void hello().catch(()=>{});}},250);
+let documentTarget,registration=Promise.resolve();
+function hello(){
+  const message={type:'document-hello',nonce:targetNonce,routeEpoch,url:location.href};
+  registration=registration.catch(()=>{}).then(()=>extensionRequest(message)).then(target=>{if(target.routeEpoch===routeEpoch&&target.url===location.href)documentTarget=target;return target;});
+  return registration;
+}
+let documentReady=hello();
+let routeSynchronized=Promise.resolve();
+function checkTarget(target){syncRoute();if(!target||target.nonce!==targetNonce||target.routeEpoch!==routeEpoch||target.url!==location.href||target.origin!==location.origin)throw Error('TARGET_INVALIDATED');}
+const continuationCall=async(ref,operation,args=[],name,extra={})=>{
+  syncRoute();const epoch=routeEpoch;await documentReady;
+  const value=await extensionRequest({type:'continuation-call',ref,operation,args,name,viewId,leaseToken:leases.get(refKey(ref)),clientRequestId:PiConsolePlugin.createId(),...extra});
+  syncRoute();if(epoch!==routeEpoch)throw Object.assign(Error('执行页面已刷新、跳转或关闭，请在本页重新接续。'),{code:'TARGET_INVALIDATED'});
+  return value;
+};
+const emitState=(id,value)=>{const state={...states.get(id),...value};states.set(id,state);for(const listener of listeners)listener({type:'binding_state',conversationId:id,state});};
+const refreshState=async ref=>{const id=refKey(ref),state=await continuationCall(ref,'view'),previous=states.get(id);if(!state.target||(previous&&(previous.version.epoch!==state.version.epoch||previous.version.seq!==state.version.seq)))leases.delete(id);busy.set(id,state.busy);configs.set(id,state.config);emitState(id,state);return state;};
+function syncRoute(){
+  if(location.href===lastUrl)return;
+  lastUrl=location.href;routeEpoch++;leases.clear();
+  for(const controller of toolRuns.values())controller.abort();
+  for(const [id,picker]of pickers){picker.iframe.remove();pickers.delete(id);picker.resolve(null);}
+  documentReady=hello();
+  for(const [id,state]of states)if(state.target?.tabId===documentTarget?.tabId)emitState(id,{target:null});
+  const epoch=routeEpoch;
+  routeSynchronized=documentReady.then(async()=>{
+    if(epoch!==routeEpoch)return;
+    const ids=[...states.keys()];await Promise.allSettled(ids.map(id=>refreshState(parseRef(id))));
+    if(epoch===routeEpoch)for(const id of ids)for(const listener of listeners)listener({type:'history_resync',conversationId:id});
+  });
+  void routeSynchronized.catch(()=>{});
+}
+setInterval(syncRoute,250);
+window.addEventListener('popstate',syncRoute);
+window.addEventListener('hashchange',syncRoute);
 const configs = new Map();
 const eventSequences=new Map();
 const busy = new Map();
@@ -55,6 +83,7 @@ async function initializeExtension() {
     __piConsolePlugin:true, extension:true,
     parseConversationRef:parseRef,
     async chooseHistory(){
+      syncRoute();await documentReady;
       if(pickers.has(viewId)){pickers.get(viewId).iframe.focus();return null;}
       const grant=await extensionRequest({type:'picker-open',viewId});
       const iframe=document.createElement('iframe');iframe.src=grant.url;iframe.title=locale.t('历史对话');
@@ -92,12 +121,13 @@ async function initializeExtension() {
         get bindingState(){return states.get(chatId);},get authorized(){return leases.has(chatId);},
         async refreshBinding(){return refreshState(parseRef(chatId));},
         async continueHere(){
+          syncRoute();await routeSynchronized;
           const ref=parseRef(chatId),state=states.get(chatId)||await refreshState(ref);
           const value=await continuationCall(ref,'continue',[],undefined,{expectedVersion:state.version});
           leases.set(chatId,value.leaseToken);emitState(chatId,value);return value;
         },
         async recoverSource(){const state=await refreshState(parseRef(chatId));return continuationCall(parseRef(chatId),'recover',[state.recovery?.version]);},
-        async returnToTarget(){return extensionRequest({type:'focus-target',ref:parseRef(chatId),viewId});},
+        async returnToTarget(){syncRoute();await documentReady;return extensionRequest({type:'focus-target',ref:parseRef(chatId),viewId});},
         apis:remotePi.apis,describeModel:remotePi.describeModel,
         onEvent(listener){return remotePi.onEvent(event=>{if(event.conversationId===chatId)listener(event);});},
         async configure(config){const result=await invoke('configure',config);configs.set(chatId,result);return result;},

@@ -18,7 +18,7 @@ const siteOf = url => {
 let openingEngine;
 const pageTools = new Map();
 
-const documents=new Map(), grants=new Map(), subscribers=new Map(), openedAgents=new Map();
+const documents=new Map(), grants=new Map(), subscribers=new Map(), openedAgents=new Map(), revocations=new Map();
 const internal=sender=>!sender.tab && sender.id===chrome.runtime.id;
 async function coordinator(request) {
   await ensureEngine();
@@ -26,19 +26,26 @@ async function coordinator(request) {
   if(!response?.ok)throw Object.assign(Error(response?.error||'ENGINE_UNAVAILABLE'),{code:response?.code});
   return response.value;
 }
-async function validTarget(target) {
-  const current=documents.get(target?.tabId);
-  if(!current||JSON.stringify(current)!==JSON.stringify(target))throw Error('TARGET_INVALIDATED');
+async function verifyDocument(target) {
   const tab=await chrome.tabs.get(target.tabId);
   if(tab.url!==target.url)throw Error('TARGET_INVALIDATED');
   const reply=await chrome.tabs.sendMessage(target.tabId,{type:'verify-target',target},{documentId:target.documentId});
   if(!reply?.ok)throw Error(reply?.error||'TARGET_PERMISSION_OR_UNSUPPORTED');
   return true;
 }
+async function validTarget(target) {
+  const matches=()=>target&&JSON.stringify(documents.get(target.tabId))===JSON.stringify(target);
+  if(!matches())throw Error('TARGET_INVALIDATED');
+  await verifyDocument(target);
+  if(!matches())throw Error('TARGET_INVALIDATED');
+  return true;
+}
 function senderTarget(sender) {
   if(sender.id!==chrome.runtime.id||sender.frameId!==0||!sender.documentId||!sender.tab?.id)throw Error('INVALID_TOP_DOCUMENT');
   const target=documents.get(sender.tab.id);
-  if(!target||target.documentId!==sender.documentId||target.url!==sender.url)throw Error('TARGET_INVALIDATED');
+  // MessageSender.url is the document's initial URL even after pushState.
+  // The registered live URL is verified against tabs.get and the exact document.
+  if(!target||target.documentId!==sender.documentId||target.origin!==new URL(sender.url).origin)throw Error('TARGET_INVALIDATED');
   return target;
 }
 function revoke(tabId) {
@@ -46,7 +53,12 @@ function revoke(tabId) {
   documents.delete(tabId);
   for(const [key,grant]of grants)if(grant.target.tabId===tabId)grants.delete(key);
   for(const [key,views]of subscribers){for(const [id,view]of views)if(view.tabId===tabId)views.delete(id);if(!views.size)subscribers.delete(key);}
-  if(chrome.offscreen)void chrome.offscreen.hasDocument().then(has=>{if(has)return chrome.runtime.sendMessage({type:'target-invalidated',tabId});}).catch(()=>{});
+  const pending=(revocations.get(tabId)||Promise.resolve()).then(async()=>{
+    if(chrome.offscreen&&await chrome.offscreen.hasDocument())await chrome.runtime.sendMessage({type:'target-invalidated',tabId});
+  }).catch(()=>{});
+  revocations.set(tabId,pending);
+  void pending.finally(()=>{if(revocations.get(tabId)===pending)revocations.delete(tabId);});
+  return pending;
 }
 function subscribe(ref,target,viewId) {
   const key=refKey(ref);if(!subscribers.has(key))subscribers.set(key,new Map());
@@ -111,7 +123,7 @@ chrome.tabs.onRemoved.addListener(async tabId => {
   if (!response?.ok) console.error('[Pi Tab]',response?.error || 'Could not stop closed tab tasks');
 });
 chrome.tabs.onUpdated.addListener((tabId,change) => {
-  if(change.status==='loading'||change.url)revoke(tabId);
+  if(change.status==='loading'||(change.url&&documents.get(tabId)?.url!==change.url))void revoke(tabId);
   if(change.status!=='complete')return;
   void chrome.storage.session.get(activeKey(tabId)).then(saved=>{if(saved[activeKey(tabId)])return activate(tabId);}).catch(error=>console.error('[Pi Tab]',error));
 });
@@ -139,9 +151,12 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
   (async()=>{
     if(message.type==='document-hello') {
       if(sender.id!==chrome.runtime.id||sender.frameId!==0||!sender.documentId||!sender.tab?.id)throw Error('INVALID_TOP_DOCUMENT');
-      siteOf(sender.url);
-      const target={tabId:sender.tab.id,documentId:sender.documentId,origin:new URL(sender.url).origin,url:sender.url,nonce:message.nonce,routeEpoch:message.routeEpoch};
-      if(JSON.stringify(documents.get(target.tabId))!==JSON.stringify(target))revoke(target.tabId);
+      siteOf(message.url);
+      if(new URL(sender.url).origin!==new URL(message.url).origin||typeof message.nonce!=='string'||!message.nonce||!Number.isSafeInteger(message.routeEpoch)||message.routeEpoch<0)throw Error('INVALID_TOP_DOCUMENT');
+      const target={tabId:sender.tab.id,documentId:sender.documentId,origin:new URL(message.url).origin,url:message.url,nonce:message.nonce,routeEpoch:message.routeEpoch};
+      await verifyDocument(target);
+      if(JSON.stringify(documents.get(target.tabId))!==JSON.stringify(target))await revoke(target.tabId);
+      await verifyDocument(target);
       documents.set(target.tabId,target);return target;
     }
     if(message.type==='validate-target'){if(!internal(sender))throw Error('INTERNAL_ONLY');return validTarget(message.target);}

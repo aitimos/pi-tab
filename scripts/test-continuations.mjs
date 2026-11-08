@@ -12,7 +12,14 @@ const directory=await mkdtemp(join(tmpdir(),'pi-tab-continuations-')),requests=[
 function observeRequest(predicate){const found=requests.find(predicate);if(found)return Promise.resolve(found);return new Promise((resolve,reject)=>{const timeout=setTimeout(()=>{requestWaiters.delete(listener);reject(Error('Expected model context was not observed'));},15000);const listener=input=>{if(predicate(input)){clearTimeout(timeout);requestWaiters.delete(listener);resolve(input);}};requestWaiters.add(listener);});}
 let bookmark;
 const server=createServer((request,response)=>{
-  if(!request.url.endsWith('/chat/completions')){response.setHeader('Content-Type','text/html;charset=utf-8');response.end('<title>Continuation fixture</title><h1>'+request.url+'</h1><p id="target">untouched</p>'+(bookmark?'<a id="bookmark" href="'+bookmark.replaceAll('&','&amp;').replaceAll('\"','&quot;')+'">Pi Tab</a>':''));return;}
+  if(!request.url.endsWith('/chat/completions')){response.setHeader('Content-Type','text/html;charset=utf-8');response.end('<title>Continuation fixture</title><h1>'+request.url+'</h1><p id="target">untouched</p>'+`
+    <button id="spa-push" onclick="history.pushState({},'', '/spa-push');showRoute()">Push route</button>
+    <button id="spa-replace" onclick="history.replaceState({},'', '/spa-replace');showRoute()">Replace route</button>
+    <button id="spa-hash" onclick="location.hash='details'">Hash route</button>
+    <button id="spa-back" onclick="history.back()">Back route</button>
+    <button id="spa-forward" onclick="history.forward()">Forward route</button>
+    <script>function showRoute(){document.querySelector('h1').textContent=location.pathname+location.hash;document.querySelector('#target').textContent='untouched'}addEventListener('popstate',showRoute);addEventListener('hashchange',showRoute);</script>
+  `+(bookmark?'<a id="bookmark" href="'+bookmark.replaceAll('&','&amp;').replaceAll('\"','&quot;')+'">Pi Tab</a>':''));return;}
   let body='';request.on('data',chunk=>body+=chunk);request.on('end',()=>{
     const input=JSON.parse(body),title=input.messages.some(m=>['system','developer'].includes(m.role)&&JSON.stringify(m.content).includes('你是会话标题生成器'));
     if(!title){requests.push(input);for(const listener of requestWaiters)listener(input);}
@@ -83,6 +90,47 @@ try{
     await b.screenshot({path:join(output,`reload-${host}.png`)});
     await b.close();console.log('PASS continuation',host);
   }
+  // Same-document navigation must revoke locally and allow explicit recovery,
+  // including Chrome's immutable MessageSender.url after pushState.
+  const spa=await browser.newPage();await activate(spa,base+'/spa-fixture');
+  await view(spa).locator('#choose-history').click();
+  await spa.screenshot({path:join(output,'spa-picker.png')});
+  await spa.frameLocator('iframe[title="历史对话"]').locator('button[data-ref="'+encodeURIComponent(JSON.stringify(['127.0.0.1',1]))+'"]').click();
+  await view(spa).locator('#continuation-summary').filter({hasText:'Continuation fixture · 127.0.0.1'}).waitFor();
+  await view(spa).locator('#continue-here').click();await send(spa,'ORIGINAL_SPA_CONTEXT');
+  let routeCase=0;
+  for(const [button,path]of [['push','/spa-push'],['replace','/spa-replace'],['hash','/spa-replace#details'],['back','/spa-replace'],['back','/spa-fixture'],['forward','/spa-replace'],['forward','/spa-replace#details']]){
+    const url=base+path;await spa.locator('#spa-'+button).click();await spa.waitForURL(url);
+    // No send/refresh action may be needed to reveal the invalidation.
+    await view(spa).locator('#continuation-summary').filter({hasText:'未绑定，请在本页重新接续'}).waitFor({timeout:4000});
+    await view(spa).locator('#continue-here:enabled').waitFor();
+    if(routeCase===0)await spa.screenshot({path:join(output,'spa-invalidated.png')});
+    const before=requests.length;await send(spa,'TOOL_PAGE');assert.equal(requests.length,before,'old route lease must not submit');assert.equal(await spa.locator('#target').innerText(),'untouched');
+    await view(spa).locator('#continue-here').click();
+    await view(spa).locator('#continuation-panel[data-authorized="true"]').waitFor();
+    await send(spa,'PI_TAB_TOOL '+JSON.stringify({name:'js_eval',args:{code:'document.querySelector("#target").textContent=location.href;return {url:location.href,h1:document.querySelector("h1").textContent}'}}));
+    await spa.locator('#target').filter({hasText:url}).waitFor();
+    await observeRequest(input=>JSON.stringify(input.messages).includes('ORIGINAL_SPA_CONTEXT')&&input.messages.some(message=>message.role==='tool'&&JSON.stringify(message.content).includes(url)));
+    console.log('PASS SPA explicit recovery',button,path);routeCase++;
+  }
+  const spoof=await worker.evaluate(async url=>{
+    const tab=(await chrome.tabs.query({})).find(tab=>tab.url===url);
+    const [response]=await chrome.scripting.executeScript({target:{tabId:tab.id},world:'ISOLATED',func:()=>chrome.runtime.sendMessage({type:'document-hello',url:location.href,nonce:'wrong-document-nonce',routeEpoch:999})});
+    return response.result;
+  },spa.url());
+  assert.equal(spoof.ok,false,'a live URL alone must not register an unverified document');
+  const pendingCode='document.documentElement.dataset.waitingTool="INFLIGHT_SPA";await new Promise(()=>{});';
+  await view(spa).locator('#message-input').fill('PI_TAB_TOOL '+JSON.stringify({name:'js_eval',args:{code:pendingCode,timeoutMs:60000}}));await view(spa).locator('#send').click();
+  await spa.waitForFunction(()=>document.documentElement.dataset.waitingTool==='INFLIGHT_SPA');
+  await spa.locator('#spa-push').click();
+  await view(spa).locator('#continuation-summary').filter({hasText:'未绑定，请在本页重新接续'}).waitFor({timeout:4000});
+  await view(spa).locator('#abort').waitFor({state:'hidden'});
+  await observeRequest(input=>JSON.stringify(input.messages).includes('INFLIGHT_SPA')&&input.messages.some(message=>message.role==='tool'&&/取消|abort|TARGET_INVALIDATED/i.test(JSON.stringify(message.content))));
+  assert.equal(await spa.locator('#target').innerText(),'untouched');
+  await view(spa).locator('#continue-here:enabled').click();await send(spa,'TOOL_PAGE');
+  await view(spa).locator('#chat-messages').filter({hasText:base+'/spa-push'}).waitFor();
+  console.log('PASS SPA cancels an in-flight tool and rejects an unverified document nonce');
+  await spa.screenshot({path:join(output,'spa-rebound.png')});await spa.close();
   // Rebuild history without a source tab or a live Harness.
   await a.close();
   for(let round=0;round<3;round++){

@@ -25,7 +25,7 @@ async function fixture(){
   const sender=id=>({id:'extension',frameId:0,documentId:'doc-'+id,url:tabs.get(id).url,tab:tabs.get(id)});
   const send=(message,from=10)=>new Promise(resolve=>onMessage(message,typeof from==='number'?sender(from):from,resolve));
   const internal={id:'extension',url:'chrome-extension://extension/engine.html'};
-  const hello=async id=>(await send({type:'document-hello',nonce:'nonce-'+id,routeEpoch:0},id)).value;
+  const hello=async id=>(await send({type:'document-hello',nonce:'nonce-'+id,routeEpoch:0,url:tabs.get(id).url},id)).value;
   return {send,hello,sender,internal,tabs,calls,pageCalls,onClick,onUpdated,onRemoved,heldTools};
 }
 test('native paths share a source engine; document tools use documentId and never follow navigation',async()=>{
@@ -69,4 +69,23 @@ test('navigation cancels an in-flight tool on its original document',async()=>{
   assert.equal(f.heldTools.has('held'),true);f.onUpdated(10,{status:'loading'});
   assert.equal((await running).ok,false);
   const cancelled=f.pageCalls.find(call=>call.message.type==='cancel-tool');assert.equal(cancelled.options.documentId,'doc-10');
+});
+
+test('SPA registration uses the verified live URL despite an immutable sender URL',async()=>{
+  const f=await fixture(),originalSender=f.sender(10),old=await f.hello(10);
+  f.tabs.get(10).url='https://www.example.com/after-spa#details';
+  f.onUpdated(10,{url:f.tabs.get(10).url});
+  const registered=await f.send({type:'document-hello',url:f.tabs.get(10).url,nonce:'nonce-10',routeEpoch:1},originalSender);
+  assert.equal(registered.ok,true);assert.equal(registered.value.url,f.tabs.get(10).url);
+  assert.equal(registered.value.documentId,originalSender.documentId);
+  assert.equal((await f.send({type:'validate-target',target:registered.value},f.internal)).ok,true);
+  f.onUpdated(10,{url:registered.value.url});
+  assert.equal((await f.send({type:'validate-target',target:registered.value},f.internal)).ok,true,'a delayed URL event must not revoke an already verified route');
+  assert.equal((await f.send({type:'validate-target',target:old},f.internal)).ok,false);
+  const response=await f.send({type:'continuation-call',operation:'continue',ref:{ownerSite:'www.example.com',conversationId:1},viewId:'v'},originalSender);
+  assert.equal(response.ok,true);assert.equal(f.calls.at(-1).pageTarget.routeEpoch,1);
+  assert.equal(f.pageCalls.findLast(call=>call.message.type==='verify-target').options.documentId,originalSender.documentId);
+  assert.equal((await f.send({type:'document-hello',url:'https://foreign.example/',nonce:'x',routeEpoch:2},originalSender)).ok,false);
+  assert.equal((await f.send({type:'document-hello',url:old.url,nonce:'x',routeEpoch:2},originalSender)).ok,false);
+  assert.equal((await f.send({type:'continuation-call',operation:'view',ref:{ownerSite:'www.example.com',conversationId:1},viewId:'v'},{...originalSender,documentId:'other-document'})).ok,false);
 });

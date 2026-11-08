@@ -653,13 +653,13 @@ async function openChat(initialConfig, options = {}) {
   const state = { busy: false, pending:0, pendingByChat:new Map(), historyVersion:0, connected: false, minimized: false, configuring: false, unsubscribe: null, started: false, bookmarkConfig: null, tools: new Map(), stream: null, runStarted: 0, timer: null, selectedTool: null, trace: null, traces: [], activeConfig:null, profiles:[], providers:[], selectedProviderId:null, candidates:[], candidateProvider:null, selectedModel:null, discovery:null, discoveryTimer:null, discoveryVersion:0 };
 
   let continuationRenderVersion=0;
-  async function renderContinuation(){
+  async function renderContinuation(bindingState){
     if(!runtimePi?.extension||!agent)return;
     const version=++continuationRenderVersion,selectedAgent=agent,selectedId=agent.id;
     const current=()=>version===continuationRenderVersion&&selectedAgent===agent&&selectedId===agent.id;
     const panel=byId('continuation-panel');panel.hidden=false;panel.dataset.authorized=String(selectedAgent.authorized);
     try {
-      const binding=await selectedAgent.refreshBinding();if(!current())return;
+      const binding=bindingState||await selectedAgent.refreshBinding();if(!current())return;
       const ref=runtimePi.parseConversationRef(selectedId);
       byId('continuation-summary').textContent=t('当前对话：{0}；执行页面：{1}',(binding.title||t('新对话'))+' · '+ref.ownerSite,binding.target?.url||t('未绑定，请在本页重新接续'));
       byId('continue-here').disabled=binding.busy||Boolean(binding.recovery)||agent.authorized;
@@ -1830,8 +1830,8 @@ async function openChat(initialConfig, options = {}) {
     if (!pi || typeof pi.onEvent !== 'function') return;
     state.unsubscribe = runtimePi.onEvent(event => {
       if(event.type==='directory_error'){byId('continuation-error').textContent=t('对话已创建，但历史目录暂不可用，可稍后刷新目录。');return;}
-      if(event.type==='binding_state')return;
-      if(event.type==='history_resync'){if(event.conversationId===pi.id)void restoreHistory();return;}
+      if(event.type==='binding_state'){if(event.conversationId===agent.id){void renderContinuation(event.state);if(state.busy!==(Boolean(event.state.busy)||state.pending>0))setBusy(Boolean(event.state.busy)||state.pending>0);}return;}
+      if(event.type==='history_resync'){if(event.conversationId===pi.id){setBusy(pi.busy||state.pending>0);void restoreHistory().catch(()=>{});}return;}
       if(['binding_changed','binding_ready','target_invalidated','recovery_complete'].includes(event.type)){void renderContinuation();return;}
       if(event.type==='mcp_changed'){renderMcpStatus(event);return;}
       if(event.type==='mcp_imported'){if(event.skipped?.length)i18n.text(byId('mcp-notice'),()=>t('书签配置中有 {0} 项已保留本站设置。',event.skipped.length));return;}
