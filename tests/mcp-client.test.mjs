@@ -75,7 +75,7 @@ test('surfaces server errors, bad responses and rejected credentials', async t =
   });
   t.after(() => server.close());
   const client = createMcpHttpClient({url, server: 'broken'});
-  await assert.rejects(client.initialize(), /broken：boom/);
+  await assert.rejects(client.initialize(), /broken：服务器返回 MCP 协议错误/);
   await assert.rejects(client.listTools(), /broken：服务器拒绝访问（HTTP 401）/);
 });
 
@@ -89,4 +89,19 @@ test('tool results keep images and fall back to structured content', () => {
   assert.deepEqual(mcpToolOutput({content: [{type: 'resource', resource: {uri: 'file://a', text: 'hi'}}]}), [{type: 'text', text: JSON.stringify({uri: 'file://a', text: 'hi'}, null, 2)}]);
   assert.deepEqual(mcpToolOutput({structuredContent: {ok: true}}), [{type: 'text', text: JSON.stringify({ok: true}, null, 2)}]);
   assert.deepEqual(mcpToolOutput({}), [{type: 'text', text: '（MCP 工具没有返回内容。）'}]);
+});
+
+test('closing a session stays bounded when its DELETE endpoint never responds', {timeout:5000}, async t=>{
+  let deleted=false;
+  const {server,url}=await startServer(({request,response,message,reply})=>{
+    if(request.method==='DELETE'){deleted=true;return;}
+    if(message?.id===undefined){response.writeHead(202);response.end();return;}
+    response.setHeader('Mcp-Session-Id','bounded-close');
+    reply({jsonrpc:'2.0',id:message.id,result:initializeResult});
+  });
+  t.after(()=>{server.closeAllConnections();server.close();});
+  const client=createMcpHttpClient({url});await client.initialize();
+  const started=Date.now();await client.close();
+  assert.equal(deleted,true);assert.ok(Date.now()-started<3500,'close must not wait indefinitely');
+  await assert.rejects(client.listTools(),/连接已关闭/);
 });

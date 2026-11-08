@@ -28,7 +28,7 @@ Pi Tab 基于 Pi Durable，把 Agent 带进你正在浏览的网页。点击书�
 | 会话管理 | 自动生成标题、显示运行状态、切换和删除会话，也可在新窗口继续另一项任务 |
 | 多 Agent 协作 | 同页 Agent 互发消息；扩展还可打开其他标签页、发送任务并读取结果 |
 | Linux 工具（仅扩展） | 每个会话独立运行 Linux，使用 `bash/read/grep/edit` 执行命令、读取、搜索和修改文件 |
-| MCP 工具 | 在「Pi 设置 → MCP」粘贴 Pi 的 `mcpServers` 配置，让模型使用远程 MCP 服务器提供的工具 |
+| MCP 工具 | 在「Pi 设置 → MCP」管理服务器或导入单条、批量 JSON，让模型使用远程 MCP 服务器提供的工具 |
 | 中英双语 | 默认跟随浏览器语言，也可在设置中切换；切换不影响会话和正在执行的任务 |
 | 界面与偏好 | 跟随网页或系统主题，也可选浅色、深色；支持拖动、缩放、最小化和贴边放置 |
 
@@ -75,13 +75,15 @@ Pi Tab 基于 Pi Durable，把 Agent 带进你正在浏览的网页。点击书�
 
 ### MCP 服务器
 
-「Pi 设置 → MCP」可以粘贴 Pi 的 `mcp.json`（`mcpServers` 格式），连接远程 MCP 服务器。服务器提供的工具会以 `mcp__服务器__工具` 的名字交给模型直接调用，连接状态、工具数量和错误显示在同一页。
+「Pi 设置 → MCP」提供单项添加、编辑、删除，以及单条/批量 JSON 导入。导入先预览冲突，错误整批拒绝；旧 `mcpServers` 文档继续可用。配置远程 MCP 服务器后，服务器提供的工具会以 `mcp__服务器__工具` 的名字交给模型直接调用，连接状态、工具数量和错误显示在同一页。
 
 - 只支持 streamable HTTP 服务器（配置中写 `url`）。用 `command` 启动的 stdio 服务器需要在本机进程中运行，书签和扩展都在浏览器里，无法启动，会标记为不支持。
-- 字段与 Pi 一致：`url`、`headers`、`timeout`、`enabled`、`description`、`exposure`、`toolExposure`。`sse` 会像 Pi 一样被拒绝；需要 OAuth 登录的服务器暂不支持，请改用 `Authorization` 等请求头。
+- 字段与 Pi 一致：`url`、`headers`、`timeout`、`enabled`、`description`、`exposure`、`toolExposure`。旧版 `sse` 会保留并标记为不支持；需要 OAuth 登录的服务器暂不支持，请改用 `Authorization` 等请求头。
 - 请求头可以用 `${NAME}` 引用变量，值写在同一个配置对象顶层的 `env` 中，例如 `{"mcpServers": {"docs": {"url": "https://example.com/mcp", "headers": {"Authorization": "Bearer ${DOCS_TOKEN}"}}}, "env": {"DOCS_TOKEN": "..."}}`。
 - `toolExposure` 设为 `hidden` 的工具不会注册；其余工具直接提供给模型。
 - 书签模式的 MCP 请求从网页发出，服务器需要允许跨域（CORS）；扩展从扩展后台请求。书签中的配置按网站保存，可随保存的书签带到其他网站；扩展的配置跨网站共享。
+
+`make help` 列出统一入口，`make build` / `make test` / `make test-mcp` 复用现有 npm 脚本。`npm run test:mcp` 使用锁定的 Playwright，验证真实构建的书签与扩展，并在临时目录输出界面截图及提交信息。
 
 开发和测试使用 Node.js 24（可运行 `nvm use`），先执行 `npm ci`。浏览器测试直接使用项目锁定的 `agent-browser`，不使用全局安装版本。运行 `npx playwright install chromium` 后，将 `PI_TAB_TEST_CHROME` 设置为 `node --input-type=module -e "import {chromium} from 'playwright'; console.log(chromium.executablePath())"` 输出的路径，即可运行 `npm run test:bookmarklet`、`npm run test:extension` 等回归，与 CI 使用相同的工具和浏览器版本。
 

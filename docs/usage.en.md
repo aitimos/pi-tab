@@ -79,7 +79,20 @@ Deleting a conversation removes its list entry and resets its active context. Sa
 
 ## MCP servers
 
-Open **Pi settings → MCP**, paste the contents of Pi's `mcp.json`, and press **Save settings**. Entries use Pi's `mcpServers` format; a bare map of servers also works:
+Open **Pi settings → MCP** to view servers. Use **Add server** or **Edit** to manage one entry, with headers and advanced options. Each entry saves independently; cancel leaves it unchanged. Deletion asks for confirmation and removes its tools. Header and environment values are hidden by default and can be revealed individually.
+
+**Import JSON** accepts pasted text or a file and always previews changes before confirmation. Four strict JSON formats are supported:
+
+- One entry: `{"name":"docs","config":{"url":"https://example.com/mcp"}}`.
+- A batch: an array of those named entries.
+- A complete Pi document: the `mcpServers` example below.
+- A legacy server map, retaining top-level `env` and `autoEnableCodemode`.
+
+Existing names are kept by default. Replace explicitly overwrites an entire server entry. Names differing only in case or `-`/`_` must be renamed or skipped. Any JSON, duplicate-key, field, or naming error prevents the entire batch from being written. Global variables and extra fields also have conflict previews; variable changes validate affected existing servers.
+
+Saving and connecting are separate results: connection failure retains saved data for correction or reconnection. Stop running tasks and wait for connections to finish before editing. Changes from another window require a fresh preview. Simultaneous writes from same-origin bookmark windows on plain HTTP do not have a strict mutual-exclusion guarantee. Legacy and unknown fields are preserved; unsupported entries remain visible.
+
+Configuration example:
 
 ```json
 {
@@ -96,7 +109,7 @@ Open **Pi settings → MCP**, paste the contents of Pi's `mcp.json`, and press *
 ```
 
 - Only remote streamable HTTP servers are connected (an entry with `url`). stdio servers defined with `command` and `args` need a local process, which neither the bookmark nor the extension can start, so they are listed as unsupported.
-- Fields follow Pi: `url`, `headers`, `timeout` (seconds, default 60), `enabled`, `description`, `exposure`, `toolExposure`. The legacy `type: "sse"` is rejected; servers that require OAuth sign-in are not supported yet, so use headers such as `Authorization`.
+- Fields follow Pi: `url`, `headers`, `timeout` (seconds, default 60), `enabled`, `description`, `exposure`, `toolExposure`. The legacy `type: "sse"` is retained as unsupported; servers that require OAuth sign-in are not supported yet, so use headers such as `Authorization`.
 - `${NAME}` in header values resolves from an `env` object beside `mcpServers`; `!command` values cannot run in the browser.
 - Tool names follow Pi: `mcp__<server>__<tool>`, with any other character replaced by `_`. Tools marked `hidden` in `toolExposure` are not registered and the rest are offered to the model directly; this runtime has no `codemode` or `tool_search`, so `exposure` is accepted for compatibility only.
 - Connection state, tool counts, and errors appear under the field. **Reconnect** drops the current connections and reconnects with the saved configuration; saving changes reconnects and replaces the previous tools.

@@ -1,174 +1,232 @@
-// Exercises MCP support through the real bookmark: configuration UI, server
-// connection, and a tool call driven by the model against a local MCP server.
-import {agentBrowser} from './browser-cli.mjs';
+// Real built bookmark and unpacked extension, isolated browser profiles and local
+// HTTP fixtures only. Screenshots contain synthetic values with masked secrets.
 import assert from 'node:assert/strict';
-import {execFile} from 'node:child_process';
-import {readFile, mkdtemp} from 'node:fs/promises';
 import {createServer} from 'node:http';
+import {readFile,mkdtemp,mkdir,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
-import {join} from 'node:path';
-import {promisify} from 'node:util';
+import {join,resolve} from 'node:path';
+import {execFileSync} from 'node:child_process';
+import {chromium} from 'playwright';
 
-const chrome=process.env.PI_TAB_TEST_CHROME;
-if(!chrome)throw new Error('Set PI_TAB_TEST_CHROME to Chrome for Testing.');
-const run=promisify(execFile);
-const session=`pi-tab-mcp-${process.pid}`;
-const directory=await mkdtemp(join(tmpdir(),'pi-tab-mcp-'));
+const directory=process.env.PI_TAB_MCP_EVIDENCE||await mkdtemp(join(tmpdir(),'pi-tab-mcp-'));
+await mkdir(directory,{recursive:true});
 const html=await readFile('pi-bookmarklet-chat-install.html','utf8');
-let bookmark='';
-const mcpRequests=[], modelRequests=[], mcpHeaders=[];
-const mcpTool={name:'search',description:'Search the documentation',inputSchema:{type:'object',properties:{q:{type:'string',description:'Query'}},required:['q'],additionalProperties:false}};
-
-function cors(request,response){
+const requests=[],headers=[],modelInputs=[],consoleText=[];
+let modelHeld=false,onModelHeld;
+const server=createServer((request,response)=>{
   response.setHeader('Access-Control-Allow-Origin','*');
-  response.setHeader('Access-Control-Allow-Headers',request.headers['access-control-request-headers'] || 'Authorization, Content-Type');
-  response.setHeader('Access-Control-Allow-Methods','GET, POST, DELETE, OPTIONS');
+  response.setHeader('Access-Control-Allow-Headers',request.headers['access-control-request-headers']||'*');
+  response.setHeader('Access-Control-Allow-Methods','POST,DELETE,GET,OPTIONS');
   response.setHeader('Access-Control-Expose-Headers','Mcp-Session-Id');
-}
-
-const mcp=createServer((request,response)=>{
-  cors(request,response);
   if(request.method==='OPTIONS'){response.writeHead(204);response.end();return;}
-  let body='';
-  request.on('data',chunk=>body+=chunk);
-  request.on('end',()=>{
+  if(request.url==='/install'){response.setHeader('Content-Type','text/html;charset=utf-8');response.end(html);return;}
+  if(request.url.endsWith('/models')){response.setHeader('Content-Type','application/json');response.end(JSON.stringify({data:[{id:'test-model',reasoning:false}]}));return;}
+  if(request.method==='GET'){response.setHeader('Content-Type','text/html;charset=utf-8');response.end('<!doctype html><title>MCP settings regression</title><h1>Local test page</h1>');return;}
+  let body='';request.on('data',chunk=>body+=chunk);request.on('end',()=>{
     const message=body?JSON.parse(body):null;
-    mcpRequests.push(message);
-    mcpHeaders.push(request.headers);
+    if(request.url.endsWith('/chat/completions')){
+      modelInputs.push(message);if(modelHeld){onModelHeld?.();return;}
+      const title=JSON.stringify(message.messages).includes('你是会话标题生成器');
+      const answered=message.messages.some(item=>item.role==='tool'||item.role==='toolResult');
+      response.writeHead(200,{'Content-Type':'text/event-stream'});
+      const choice=title?{delta:{role:'assistant',content:'MCP test'},finish_reason:'stop'}:answered?{delta:{role:'assistant',content:'MCP tool finished'},finish_reason:'stop'}:{delta:{role:'assistant',tool_calls:[{index:0,id:'call_mcp',type:'function',function:{name:'mcp__docs__search',arguments:'{"q":"test"}'}}]},finish_reason:'tool_calls'};
+      response.write('data: '+JSON.stringify({id:'fixture',object:'chat.completion.chunk',created:1,model:'test-model',choices:[{index:0,...choice}]})+'\n\n');response.end('data: [DONE]\n\n');return;
+    }
+    requests.push({path:request.url,message});headers.push(request.headers);
     if(request.method==='DELETE'){response.writeHead(204);response.end();return;}
+    if(request.url.startsWith('/denied')){response.writeHead(401);response.end('HEADER_SENTINEL ENV_SENTINEL');return;}
     if(!message||message.id===undefined){response.writeHead(202);response.end();return;}
-    const reply=result=>{response.writeHead(200,{'Content-Type':'application/json'});response.end(JSON.stringify({jsonrpc:'2.0',id:message.id,result}));};
-    if(message.method==='initialize')return reply({protocolVersion:'2025-06-18',capabilities:{tools:{}},serverInfo:{name:'docs-fixture',version:'1.0.0'},instructions:'Search the documentation.'});
-    if(message.method==='tools/list')return reply({tools:[mcpTool]});
-    if(message.method==='tools/call')return reply({content:[{type:'text',text:`MCP answered ${message.params.arguments.q}`}]});
-    response.writeHead(404);response.end();
+    response.setHeader('Mcp-Session-Id','fixture-session');
+    response.setHeader('Content-Type','application/json');
+    const result=message.method==='initialize'?{protocolVersion:'2025-06-18',capabilities:{tools:{}},serverInfo:{name:'fixture',version:'1'}}:message.method==='tools/list'?{tools:[{name:'search',description:'Search fixture',inputSchema:{type:'object',properties:{q:{type:'string'}}}}]}:{content:[{type:'text',text:'MCP fixture answer'}]};
+    response.end(JSON.stringify({jsonrpc:'2.0',id:message.id,result}));
   });
 });
-
-const app=createServer((request,response)=>{
-  cors(request,response);
-  if(request.method==='OPTIONS'){response.writeHead(204);response.end();return;}
-  if(request.url==='/install'){
-    response.setHeader('Content-Type','text/html;charset=utf-8');
-    response.end(html);return;
-  }
-  if(request.url.endsWith('/models')){
-    response.setHeader('Content-Type','application/json');
-    response.end(JSON.stringify({data:[{id:'test-model',reasoning:false}]}));return;
-  }
-  if(request.url.endsWith('/chat/completions')){
-    let body='';
-    request.on('data',chunk=>body+=chunk);
-    request.on('end',()=>{
-      const input=JSON.parse(body);
-      const title=input.messages.some(item=>['system','developer'].includes(item.role)&&JSON.stringify(item.content).includes('你是会话标题生成器'));
-      if(title){
-        response.writeHead(200,{'Content-Type':'text/event-stream'});
-        response.write('data: '+JSON.stringify({id:'title',object:'chat.completion.chunk',created:1,model:input.model,choices:[{index:0,delta:{role:'assistant',content:'MCP 测试'},finish_reason:null}]})+'\n\n');
-        response.end('data: [DONE]\n\n');
-        return;
-      }
-      modelRequests.push(input);
-      const answered=input.messages.some(item=>item.role==='tool'||item.role==='toolResult');
-      response.writeHead(200,{'Content-Type':'text/event-stream'});
-      const chunks=answered
-        ? [{delta:{role:'assistant',content:'Tool finished: '+JSON.stringify(input.messages.at(-1).content).slice(0,120)},finish_reason:null},{delta:{},finish_reason:'stop'}]
-        : [{delta:{role:'assistant',tool_calls:[{index:0,id:'call_mcp_1',type:'function',function:{name:'mcp__docs__search',arguments:JSON.stringify({q:'pi tab'})}}]},finish_reason:'tool_calls'}];
-      for(const choice of chunks)response.write('data: '+JSON.stringify({id:'test',object:'chat.completion.chunk',created:1,model:input.model,choices:[{index:0,...choice}]})+'\n\n');
-      response.end('data: [DONE]\n\n');
-    });
-    return;
-  }
-  response.writeHead(200,{'Content-Type':'text/html;charset=utf-8'});
-  response.end(`<title>MCP regression</title><a id="launch" href="${bookmark.replaceAll('&','&amp;').replaceAll('"','&quot;')}">Pi Tab</a>`);
-});
-
-await new Promise(resolve=>mcp.listen(0,'127.0.0.1',resolve));
-await new Promise(resolve=>app.listen(0,'127.0.0.1',resolve));
-const base=`http://127.0.0.1:${app.address().port}`;
-const url=`${base}/`;
-const installer=`http://localhost:${app.address().port}/install`;
-const mcpUrl=`http://127.0.0.1:${mcp.address().port}/mcp`;
-
-async function browser(...args){
-  const {stdout}=await run(agentBrowser,['--headed','false','--executable-path',chrome,'--args','--headless=new,--no-sandbox,--no-proxy-server','--session',session,'--json',...args],{maxBuffer:4*1024*1024});
-  const reply=JSON.parse(stdout);
-  if(!reply.success)throw new Error(JSON.stringify(reply.error));
-  return reply.data;
+await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+const port=server.address().port,base=`http://127.0.0.1:${port}`,installer=`http://localhost:${port}/install`,mcpUrl=base+'/mcp';
+const screenshots=[];
+let browser,extensionContext,browserVersion;
+const options={headless:true,executablePath:process.env.PI_TAB_TEST_CHROME||chromium.executablePath(),args:['--no-sandbox','--no-proxy-server']};
+const overlay=page=>page.locator('[data-pi-overlay]').last();
+const view=page=>overlay(page);
+const primary=page=>view(page).locator('#mcp-editor .primary');
+async function shot(page,name){
+  await view(page).locator('#settings-mcp').scrollIntoViewIfNeeded();
+  await overlay(page).screenshot({path:join(directory,name+'.png')});screenshots.push(name+'.png');
 }
-const evaluate=async script=>(await browser('eval','-b',Buffer.from(script).toString('base64'))).result;
-const root="document.querySelector('[data-pi-overlay]')?.shadowRoot";
-async function click(selector){
-  const point=await evaluate(`(()=>{const element=${root}.querySelector(${JSON.stringify(selector)});element.scrollIntoView({block:'nearest',inline:'nearest'});const r=element.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
-  await browser('mouse','move',String(Math.round(point.x)),String(Math.round(point.y)));
-  await browser('mouse','down','left');
-  await browser('mouse','up','left');
+async function settings(page){
+  await view(page).locator('#settings').click();await view(page).locator('#settings-mcp-tab').click();
+  await view(page).locator('#mcp-list-view').waitFor();
 }
-async function wait(condition){
-  await browser('wait','--fn',condition);
+async function waitConnected(page,name='docs'){
+  await view(page).locator(`.mcp-server[data-server="${name}"] .mcp-state`).filter({hasText:/已连接|Connected/}).waitFor();
 }
-async function launch(){
-  await browser('click','#launch');
-  await wait(`${root}?.getElementById('message-input')?.offsetHeight>0 && ${root}.getElementById('settings').disabled===false`);
+async function importJson(page,input,{confirm=true}={}){
+  await view(page).locator('#mcp-import').click();await view(page).locator('#mcp-import-text').fill(typeof input==='string'?input:JSON.stringify(input));
+  await primary(page).click();await view(page).locator('.mcp-preview-row').first().waitFor();
+  if(confirm){await primary(page).click();await view(page).locator('#mcp-list-view').waitFor();}
 }
-async function send(text){
-  const replies=await evaluate(`${root}.querySelectorAll('.message.ai').length`);
-  await click('#message-input');
-  await browser('keyboard','inserttext',text);
-  await browser('press','Enter');
-  await wait(`${root}.querySelectorAll('.message.ai').length>${replies} && ${root}.getElementById('shell').dataset.busy==='false'`);
+async function waitMcp(page,previousVersion){
+  await page.evaluate(previousVersion=>new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>{off();reject(Error('MCP status did not settle'));},30000);
+    const check=state=>{if(state&&!state.busy&&(previousVersion===undefined||state.version!==previousVersion)){clearTimeout(timer);off();resolve();}};
+    const off=pi.onEvent(event=>{if(event.type==='mcp_changed')check(event);});
+    pi.mcpConfig().then(check,reject);
+  }),previousVersion);
 }
-
+async function tools(page){return page.evaluate(()=>window.pi.tools().map(tool=>tool.name));}
+async function configure(page){
+  await page.evaluate(async base=>{
+    await pi.configure({api:'openai-completions',baseUrl:base+'/v1',apiKey:'test-only',model:'test-model'});
+  },base);
+}
 try{
-  await browser('open',installer);
-  await browser('set','viewport','1440','1000');
-  await wait(`${root}?.getElementById('api')?.options.length>0 && document.getElementById('pi-bookmarklet').hasAttribute('href')`);
-  await evaluate(`(()=>{const r=${root};r.getElementById('base-url').value=${JSON.stringify(url+'v1')};r.getElementById('api-key').value='test-only';r.getElementById('discover-models').click()})()`);
-  await wait(`${root}.getElementById('setup-model-select').value==='test-model'`);
-  await click('#start');
-  await wait(`${root}.getElementById('chat').style.display==='flex'`);
+  browser=await chromium.launch(options);browserVersion=browser.version();
+  const context=await browser.newContext({viewport:{width:1280,height:1050},locale:'zh-CN'});
+  await context.addInitScript(()=>{localStorage.setItem('pi-tab-language','zh-CN');localStorage.setItem('pi-tab-size',JSON.stringify({width:600,height:880}));});
+  const page=await context.newPage();page.on('console',message=>consoleText.push(message.text()));
+  page.on('pageerror',error=>consoleText.push(error.message));
+  await page.goto(installer);await view(page).locator('#settings:enabled').waitFor();
+  await configure(page);await settings(page);
+  await view(page).locator('#mcp-add').click();await view(page).locator('#mcp-name').fill('docs');await view(page).locator('#mcp-url').fill(mcpUrl);
+  await shot(page,'01-add-server');
+  await primary(page).click();await waitConnected(page);assert.ok((await tools(page)).includes('mcp__docs__search'));
+  await shot(page,'02-server-list');
+  await view(page).getByRole('button',{name:'编辑服务器：docs',exact:true}).click();
+  await view(page).locator('#mcp-description').fill('Documentation fixture');await shot(page,'03-edit-server');
+  await primary(page).click();await waitConnected(page);
+  await importJson(page,{name:'search',config:{url:mcpUrl,description:'Search fixture'}},{confirm:false});
+  await shot(page,'04-single-import');await primary(page).click();await waitConnected(page,'search');
+  const before=requests.length;
+  await importJson(page,[{name:'docs',config:{url:mcpUrl,description:'Replacement fixture'}},{name:'local',config:{command:'npx',args:['fixture']}}],{confirm:false});
+  assert.equal(requests.length,before,'preview does not connect or mutate runtime');
+  await shot(page,'05-batch-conflict');
+  await view(page).locator('[data-import-id="server.0"] select').selectOption('replace');
+  await primary(page).click();await waitConnected(page);
+  assert.match((await page.evaluate(()=>pi.getMcpServer('docs'))).config.description,/Replacement/);
+  await importJson(page,[{name:'valid',config:{url:mcpUrl}},{name:'invalid',config:{url:'file:///not-supported'}}],{confirm:false});
+  assert.equal(await primary(page).isDisabled(),true);await shot(page,'06-batch-validation');
+  assert.equal((await page.evaluate(()=>pi.mcpConfig())).servers.some(server=>server.name==='valid'),false);
+  await view(page).getByRole('button',{name:'取消',exact:true}).first().click();
+  await view(page).locator('#mcp-import').click();await view(page).locator('#mcp-import-text').fill('{"SENTINEL":');await primary(page).click();
+  assert.match(await view(page).locator('#mcp-error').innerText(),/JSON/);assert.ok(!(await view(page).locator('#mcp-error').innerText()).includes('SENTINEL'));
+  await shot(page,'07-invalid-json');await view(page).getByRole('button',{name:'取消',exact:true}).first().click();
+  // Old raw data, placeholders and unknown fields survive edits and reloads.
+  const legacy={mcpServers:{docs:{url:mcpUrl,headers:{Authorization:'Bearer ${TOKEN}'},custom:{keep:1}},broken:{url:17},local:{command:'npx'}},env:{TOKEN:'ENV_SENTINEL'},customRoot:{keep:true}};
+  await page.evaluate(value=>{
+    const saved=JSON.parse(localStorage.getItem('pi-tab-site-settings'));saved.mcp=value;localStorage.setItem('pi-tab-site-settings',JSON.stringify(saved));
+  },legacy);
+  await page.reload();await view(page).locator('#settings:enabled').waitFor();await settings(page);await waitConnected(page);
+  await view(page).getByRole('button',{name:'编辑服务器：docs',exact:true}).click();
+  assert.equal(await view(page).locator('.mcp-pair input[type=password]').count(),1);
+  await view(page).locator('#mcp-description').fill('Edited legacy server');await primary(page).click();await waitConnected(page);
+  let raw=await page.evaluate(()=>pi.exportMcpConfig());
+  assert.deepEqual(raw.mcpServers.docs.custom,{keep:1});assert.equal(raw.mcpServers.docs.timeout,undefined);
+  assert.deepEqual(raw.mcpServers.broken,{url:17});assert.deepEqual(raw.customRoot,{keep:true});assert.equal(raw.env.TOKEN,'ENV_SENTINEL');
+  assert.ok(headers.some(value=>value.authorization==='Bearer ENV_SENTINEL'));
+  // The real model sees the registered tool and calls the local HTTP server.
+  await page.evaluate(()=>pi.prompt('Use docs search'));
+  assert.ok(requests.some(item=>item.message?.method==='tools/call'));
+  for(const input of modelInputs)assert.ok(!JSON.stringify(input).includes('ENV_SENTINEL'));
+  // A real in-flight model request blocks configuration changes until aborted.
+  modelHeld=true;await page.evaluate(()=>{window.fixtureTask=pi.prompt('Hold the request').catch(()=>{});});
+  await page.waitForFunction(()=>pi.busy);
+  const denied=await page.evaluate(async()=>{try{await pi.changeMcpConfig({operation:{kind:'delete',name:'docs'}});return '';}catch(error){return error.message;}});
+  assert.match(denied,/先停止/);await page.evaluate(async()=>{await pi.abort();await window.fixtureTask;});modelHeld=false;
+  // A stale preview from another same-origin tab cannot overwrite a newer edit.
+  const other=await context.newPage();await other.goto(installer);await view(other).locator('#settings:enabled').waitFor();
+  await waitMcp(other);
+  const state=await page.evaluate(()=>pi.mcpConfig());
+  await other.evaluate(async()=>pi.changeMcpConfig({operation:{kind:'upsert',name:'other',patch:{url:'http://127.0.0.1:1/mcp',enabled:false}}}));
+  await waitMcp(page,state.version);
+  const stale=await page.evaluate(async version=>{try{await pi.changeMcpConfig({expectedVersion:version,operation:{kind:'delete',name:'docs'}});return '';}catch(error){return error.message;}},state.version);
+  assert.match(stale,/配置已变化/);await other.close();
+  await page.reload();await view(page).locator('#settings:enabled').waitFor();await settings(page);await waitConnected(page);
+  const failure=await page.evaluate(async url=>{const state=await pi.mcpConfig();return pi.changeMcpConfig({expectedVersion:state.version,operation:{kind:'upsert',name:'denied',patch:{url:url+'/denied?token=QUERY_SENTINEL',headers:{Authorization:'HEADER_SENTINEL'}}}});},base);
+  assert.equal(failure.saved,true);
+  await view(page).locator('[data-server="denied"] .mcp-state').filter({hasText:/401/}).waitFor();
+  await shot(page,'08-safe-connection-error');
+  const publicState=JSON.stringify(await page.evaluate(()=>pi.mcpConfig()));
+  for(const secret of ['HEADER_SENTINEL','ENV_SENTINEL','QUERY_SENTINEL']){assert.ok(!publicState.includes(secret));assert.ok(!consoleText.join('\n').includes(secret));assert.ok(!(await view(page).locator('#settings-mcp').innerText()).includes(secret));}
+  // Generated bookmarks carry the original raw config, including unknown keys.
+  const bookmark=await page.locator('#pi-bookmarklet').getAttribute('href');assert.ok(decodeURIComponent(bookmark).includes('importMcpConfig'));
+  const target=await context.newPage();await target.goto(base+'/target');
+  await target.evaluate(bookmark=>{const link=document.createElement('a');link.href=bookmark;link.id='fixture-launch';link.textContent='Launch';document.body.append(link);},bookmark);
+  await target.locator('#fixture-launch').click();await view(target).locator('#settings:enabled').waitFor();
+  await waitMcp(target);assert.equal((await target.evaluate(()=>pi.mcpConfig())).servers.find(server=>server.name==='docs').status,'connected');
+  raw=await target.evaluate(()=>pi.exportMcpConfig());assert.deepEqual(raw.mcpServers.docs.custom,{keep:1});assert.equal(raw.env.TOKEN,'ENV_SENTINEL');
+  // Delete and disable remove tools; a later reconnect does not duplicate them.
+  const current=await page.evaluate(()=>pi.mcpConfig());
+  await page.evaluate(version=>pi.changeMcpConfig({expectedVersion:version,operation:{kind:'upsert',name:'docs',previousName:'docs',patch:{enabled:false}}}),current.version);
+  await page.waitForFunction(()=>!pi.tools().some(tool=>tool.name==='mcp__docs__search'));
+  await waitMcp(page);
+  await view(page).getByRole('button',{name:'删除服务器：docs',exact:true}).click();await primary(page).click();await view(page).locator('#mcp-list-view').waitFor();
+  assert.equal((await page.evaluate(()=>pi.mcpConfig())).servers.some(server=>server.name==='docs'),false);
+  await page.evaluate(()=>pi.i18n.setMode('en'));
+  assert.equal(await view(page).locator('#mcp-add').innerText(),'Add server');
+  await view(page).locator('#mcp-add').click();
+  assert.equal(await view(page).locator('#mcp-editor h3').innerText(),'Add server');
+  await page.setViewportSize({width:390,height:900});
+  const overflow=await view(page).locator('#mcp-editor').evaluate(node=>node.scrollWidth>node.clientWidth+1);
+  assert.equal(overflow,false,'the editor fits a narrow viewport');
+  await page.evaluate(()=>{localStorage.setItem('pi-tab-theme','dark');window.dispatchEvent(new Event('pi-tab-theme-change'));});
+  await shot(page,'11-english-narrow-dark');
+  await view(page).locator('#mcp-name').press('Escape');
+  assert.equal(await view(page).locator('#mcp-editor').isVisible(),false);
+  await browser.close();browser=null;
+  console.log('PASS built bookmark CRUD/import/atomic validation/legacy reload/secrets/model call/busy/stale preview/cross-origin injection');
 
-  await click('#settings');
-  await click('#settings-mcp-tab');
-  await evaluate(`(()=>{const field=${root}.getElementById('setting-mcp');field.value=${JSON.stringify(JSON.stringify({mcpServers:{docs:{url:mcpUrl,description:'Documentation',headers:{Authorization:'Bearer ${MCP_TOKEN}'}}},env:{MCP_TOKEN:'test-only'}}))};field.dispatchEvent(new Event('input',{bubbles:true}))})()`);
-  await click('#preferences .form-footer [type=submit]');
-  await wait(`${root}.getElementById('mcp-status').textContent.includes('已连接（1 个工具）')`);
-  assert.ok(mcpRequests.some(message=>message?.method==='initialize'),'the page completed the MCP handshake');
-  assert.ok(mcpRequests.some(message=>message?.method==='tools/list'),'the page listed the MCP tools');
-  assert.equal(mcpHeaders.find(headers=>headers.authorization)?.authorization,'Bearer test-only','the configured header is sent');
-  console.log('PASS MCP configuration connects a streamable HTTP server and lists its tools');
-
-  await click('#preferences-back');
-  await send('Search the docs');
-  await wait(`${root}.getElementById('chat-messages').textContent.includes('MCP answered pi tab')`);
-  const call=mcpRequests.find(message=>message?.method==='tools/call');
-  assert.deepEqual(call.params,{name:'search',arguments:{q:'pi tab'}});
-  const offered=JSON.stringify(modelRequests[0].tools);
-  assert.ok(offered.includes('mcp__docs__search'),'the model receives the MCP tool declaration');
-  assert.ok(!JSON.stringify(modelRequests[0].messages).includes('Search the docs'),'no instruction leak into the transcript');
-  console.log('PASS the model calls mcp__docs__search and receives the server result');
-
-  await wait("document.getElementById('pi-bookmarklet').hasAttribute('href')");
-  bookmark=await evaluate("document.getElementById('pi-bookmarklet').getAttribute('href')");
-  assert.ok(decodeURIComponent(bookmark).includes('importMcpConfig'),'the generated bookmark carries the MCP configuration');
-
-  await browser('open',url);
-  await launch();
-  const saved=await evaluate('pi.mcpConfig()');
-  assert.equal(saved.servers[0].status,'connected');
-  assert.equal(saved.servers[0].url,mcpUrl);
-  assert.ok(await evaluate("pi.tools().some(tool=>tool.name==='mcp__docs__search')"),'the imported bookmark registers the MCP tool');
-  console.log('PASS the bookmark imports the MCP configuration and registers its tools');
-
-  await click('#settings');
-  await click('#settings-mcp-tab');
-  await evaluate(`(()=>{const field=${root}.getElementById('setting-mcp');field.value='{"mcpServers":{"local":{"command":"npx","args":["-y","server"]}}}';field.dispatchEvent(new Event('input',{bubbles:true}))})()`);
-  await click('#preferences .form-footer [type=submit]');
-  await wait(`${root}.getElementById('mcp-status').textContent.includes('不支持')`);
-  assert.equal(await evaluate("pi.tools().some(tool=>tool.name==='mcp__docs__search')"),false,'replaced configuration removes old tools');
-  console.log('PASS stdio entries are reported as unsupported instead of failing the whole config');
-} finally {
-  await browser('close').catch(()=>{});
-  await new Promise(resolve=>app.close(resolve));
-  await new Promise(resolve=>mcp.close(resolve));
+  // Launch the exact built unpacked extension. The worker triggers the same
+  // activation message as the toolbar action, without modifying packaged files.
+  const extension=resolve('dist/extension'),profile=await mkdtemp(join(tmpdir(),'pi-tab-mcp-extension-'));
+  extensionContext=await chromium.launchPersistentContext(profile,{...options,viewport:{width:1280,height:1000},locale:'zh-CN',args:[...options.args,`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
+  const worker=extensionContext.serviceWorkers()[0]||await extensionContext.waitForEvent('serviceworker');
+  await worker.evaluate(()=>chrome.storage.local.set({'pi-tab-language':'zh-CN'}));
+  async function activate(page,url){
+    await page.goto(url);
+    const result=await worker.evaluate(async url=>{
+      const tabs=await chrome.tabs.query({});const tab=tabs.find(tab=>tab.url===url);
+      await chrome.scripting.executeScript({target:{tabId:tab.id},files:['content.js']});
+      await chrome.storage.session.set({['active:'+tab.id]:true});return chrome.tabs.sendMessage(tab.id,{type:'activate',openWindow:true});
+    },url);assert.equal(result.ok,true,result.error);
+    await view(page).locator('#settings:enabled').waitFor();
+  }
+  const extCall=async(page,method,args=[],name)=>{const reply=await worker.evaluate(async({url,method,args,name})=>{const [tab]=await chrome.tabs.query({url});const target={target:'engine',site:new URL(url).hostname,tabId:tab.id};const initial=method==='agent'?await chrome.runtime.sendMessage({...target,method:'initialize'}):null;return chrome.runtime.sendMessage({...target,method,args,name,chatId:initial?.value.activeId});},{url:page.url(),method,args,name});assert.equal(reply.ok,true,reply.error);return reply.value;};
+  const first=await extensionContext.newPage();await first.addInitScript(()=>localStorage.setItem('pi-tab-size',JSON.stringify({width:600,height:880})));
+  await activate(first,base+'/extension');await settings(first);
+  await importJson(first,{mcpServers:{docs:{url:mcpUrl,headers:{Authorization:'Bearer ${TOKEN}'},custom:{keep:true}}},env:{TOKEN:'ENV_SENTINEL'}});await waitConnected(first);
+  await shot(first,'09-extension-list');
+  const second=await extensionContext.newPage();await activate(second,`http://localhost:${port}/other`);await settings(second);await waitConnected(second);
+  await view(second).getByRole('button',{name:'编辑服务器：docs',exact:true}).click();await view(second).locator('#mcp-description').fill('Unsaved draft');
+  await extCall(first,'agent',[{api:'openai-completions',baseUrl:base+'/v1',apiKey:'test-only',model:'test-model'}],'configure');
+  const callsBefore=requests.filter(item=>item.message?.method==='tools/call').length;
+  await extCall(first,'agent',['Use docs search'],'prompt');
+  assert.ok(requests.filter(item=>item.message?.method==='tools/call').length>callsBefore,'the extension model uses its registered MCP tool');
+  modelHeld=true;
+  const held=new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('The extension model task did not start')),15000);onModelHeld=()=>{clearTimeout(timer);resolve();};});
+  const pending=extCall(first,'agent',['Hold this task'],'prompt').catch(()=>{});
+  await held;onModelHeld=null;
+  await assert.rejects(extCall(second,'changeMcpConfig',[{operation:{kind:'delete',name:'docs'}}]),/先停止/);
+  await extCall(first,'agent',[],'abort');await pending;modelHeld=false;
+  assert.equal(await view(second).locator('#mcp-editor').isVisible(),true,'model notifications keep the MCP editor open');
+  assert.equal(await view(second).locator('#mcp-description').inputValue(),'Unsaved draft');
+  await view(second).getByRole('button',{name:'取消',exact:true}).first().click();
+  const shared=await worker.evaluate(()=>chrome.storage.local.get(['mcp','mcpRevision']));
+  assert.equal(shared.mcp.env.TOKEN,'ENV_SENTINEL');assert.deepEqual(shared.mcp.mcpServers.docs.custom,{keep:true});assert.equal(shared.mcpRevision,1);
+  await view(second).getByRole('button',{name:'编辑服务器：docs',exact:true}).click();await view(second).locator('#mcp-description').fill('Across sites');await primary(second).click();await waitConnected(second);
+  await first.reload();await view(first).locator('#settings:enabled').waitFor();await settings(first);await waitConnected(first);
+  assert.equal((await extCall(first,'getMcpServer',['docs'])).config.description,'Across sites');
+  const stateBefore=await extCall(first,'mcpConfig');
+  await importJson(first,[{name:'never-written',config:{url:mcpUrl}},{name:'bad',config:{url:'file:///bad'}}],{confirm:false});assert.equal(await primary(first).isDisabled(),true);
+  assert.equal((await worker.evaluate(()=>chrome.storage.local.get('mcpRevision'))).mcpRevision,2);
+  assert.equal(JSON.stringify(await extCall(first,'mcpConfig')),JSON.stringify(stateBefore));
+  await shot(first,'10-extension-validation');
+  for(const input of modelInputs)for(const secret of ['ENV_SENTINEL','HEADER_SENTINEL','QUERY_SENTINEL'])assert.ok(!JSON.stringify(input).includes(secret));
+  assert.ok(!JSON.stringify(await extCall(first,'mcpConfig')).includes('ENV_SENTINEL'));
+  await extensionContext.close();extensionContext=null;
+  console.log('PASS built extension shared CRUD/import/atomic validation/cross-site synchronization/reload');
+  const manifest={commit:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),dirty:Boolean(execFileSync('git',['status','--porcelain'],{encoding:'utf8'}).trim()),node:process.version,chromium:browserVersion,executable:options.executablePath.split('/').at(-1),platform:process.platform,arch:process.arch,screenshots,checks:['bookmark','extension']};
+  await writeFile(join(directory,'manifest.json'),JSON.stringify(manifest,null,2));console.log(JSON.stringify({evidence:directory,...manifest}));
+}finally{
+  await browser?.close();await extensionContext?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));
 }

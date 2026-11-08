@@ -1,14 +1,16 @@
+import {readMcpJson,mcpVariableReferences} from './mcp-config.js';
 import {createLinuxEnvironments} from './linux-env.js';
 import {createLinuxTools} from './linux-tools.js';
 
 // One durable Pi runtime owns each site's conversations. Page scripts only render
 // the UI and execute page tools, so a navigation cannot close an active run.
 const engines = new Map();
+let sharedMcpGate=false;
 const pageToolNames = new Set(['page_snapshot', 'inspect_dom', 'js_eval', 'click', 'set_value', 'get_console', 'get_network']);
 
 async function background(request) {
   const response = await chrome.runtime.sendMessage(request);
-  if (!response?.ok) throw new Error(response?.error || '后台没有响应。');
+  if (!response?.ok) throw Object.assign(new Error(response?.error || '后台没有响应。'),{diagnostics:response?.diagnostics});
   return response.value;
 }
 
@@ -19,7 +21,7 @@ async function engineFor(site) {
       executionEnv:linux.get, nativeTools:createLinuxTools(),
       globalName: `__pi_site_${btoa(site).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'')}`,
       storageName: `pi-tab-site-${site}`,
-      deferResume: true,
+      deferResume: true, sharedMcp:true,
       log: false,
       pageContext: () => null,
     });
@@ -31,7 +33,7 @@ async function engineFor(site) {
     pi.replaceModelSettings({profiles:saved.profiles || [],providers:saved.providers || []});
     if (!pi.config && saved.profiles?.length) await pi.configure({ ...saved.profiles[0], profileId:saved.profiles[0].id });
     // MCP configuration is shared by every site; connecting happens in the background.
-    if (saved.mcp) void pi.setMcpConfig(saved.mcp, {persist:false}).catch(error => console.error('[Pi Tab]', error));
+    pi.applyMcpConfig(saved.mcp||{mcpServers:{}},saved.mcpRevision||0);
 
     for (const tool of pi.tools().filter(item => pageToolNames.has(item.name))) {
       pi.unregisterTool(tool.name);
@@ -85,6 +87,7 @@ async function engineFor(site) {
       }
       void chrome.runtime.sendMessage({type:'engine-event',site,event}).catch(() => {});
     });
+    if(sharedMcpGate)pi.setMcpUpdateGate(true);
     pi.resume();
     return {pi,targets,bindTarget};
   })());
@@ -101,11 +104,24 @@ chrome.runtime.onMessage.addListener((message, _sender, respond) => {
     })).then(()=>respond({ok:true}),error=>respond({ok:false,error:error.message}));
     return true;
   }
+  if(message.type==='mcp-update-guard'){
+    sharedMcpGate=message.value;
+    Promise.all([...engines.values()]).then(values=>{
+      try{
+        for(const {pi} of values)pi.setMcpUpdateGate(message.value);
+        respond({ok:true});
+      }catch(error){sharedMcpGate=false;for(const {pi}of values)pi.setMcpUpdateGate(false);respond({ok:false,error:error.message});}
+    },()=>{sharedMcpGate=false;respond({ok:false,error:'无法确认 MCP 任务状态。'});});
+    return true;
+  }
   if (message.type === 'shared-config-updated') {
     Promise.all([...engines.values()].map(async engine=>{
       const {pi}=await engine;
-      pi.replaceModelSettings({profiles:message.profiles,providers:message.providers});
-      if (message.mcp) void pi.setMcpConfig(message.mcp, {persist:false}).catch(error=>console.error('[Pi Tab]',error));
+      if(message.profiles!==undefined||message.providers!==undefined){
+        const saved=await background({type:'shared-config',operation:'get'});
+        pi.replaceModelSettings({profiles:saved.profiles||[],providers:saved.providers||[]});
+      }
+      if(message.mcp!==undefined)pi.applyMcpConfig(message.mcp,message.mcpRevision||0);
     })).then(()=>respond({ok:true}),error=>respond({ok:false,error:error.message}));
     return true;
   }
@@ -151,12 +167,22 @@ chrome.runtime.onMessage.addListener((message, _sender, respond) => {
       await background({type:'shared-config',operation:'replace',profiles:await pi.savedProfiles(),providers:await pi.listProviders()});
       return true;
     }
-    if (method === 'mcpConfig') return pi.mcpConfig();
-    if (method === 'refreshMcp') return pi.refreshMcp();
-    if (method === 'setMcpConfig') {
-      const summary = await pi.setMcpConfig(args[0], {persist:false});
-      await background({type:'shared-config',operation:'mcp-set',mcp:summary.raw});
-      return summary;
+    if(['mcpConfig','getMcpServer','getMcpVariables','refreshMcp'].includes(method)){
+      const saved=await background({type:'shared-config',operation:'get'});
+      pi.applyMcpConfig(saved.mcp||{mcpServers:{}},saved.mcpRevision||0);
+      if(method==='getMcpServer')return {version:(await pi.mcpConfig()).version,config:structuredClone(saved.mcp?.mcpServers?.[args[0]])};
+      if(method==='getMcpVariables')return {version:(await pi.mcpConfig()).version,env:saved.mcp?.env||{},references:mcpVariableReferences(saved.mcp||{})};
+      if(method==='refreshMcp'){
+        for(const engine of await Promise.all([...engines.values()]))if(engine.pi.mcpBusy())throw Error('请先停止运行中的任务，或等待连接完成。');
+        return pi.refreshMcp();
+      }
+      return pi.mcpConfig();
+    }
+    if(method==='previewMcpImport')return background({type:'shared-config',operation:'mcp-preview',input:args[0],choices:args[1]});
+    if(method==='changeMcpConfig'||method==='setMcpConfig'){
+      const request=method==='setMcpConfig'?{operation:{kind:'replace',value:typeof args[0]==='string'?readMcpJson(args[0]):args[0]}}:args[0];
+      const result=await background({type:'shared-config',operation:'mcp-change',request});
+      return {...await pi.mcpConfig(),...result};
     }
     if (method === 'auth') return pi.auth(...args);
     if (method === 'getPreferences') return pi.getPreferences();
@@ -170,6 +196,6 @@ chrome.runtime.onMessage.addListener((message, _sender, respond) => {
       return history.entries.slice(-(args[0]||10)).map(entry=>({kind:entry.kind,text:entry.model?.map(item=>typeof item.content==='string'?item.content:item.content?.filter(part=>part.type==='text').map(part=>part.text).join('\n')).filter(Boolean).join('\n')}));
     }
     throw new Error('未知引擎操作。');
-  })().then(value=>respond({ok:true,value}),error=>respond({ok:false,error:error.message||String(error)}));
+  })().then(value=>respond({ok:true,value}),error=>respond({ok:false,error:error.message||String(error),diagnostics:error.diagnostics}));
   return true;
 });

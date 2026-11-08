@@ -13,7 +13,7 @@ export function createBookmarklet(source, { openChat, config, profiles = [], pro
     await pi.ready;
     ${profiles.length ? `pi.importProfiles(${JSON.stringify(profiles)});` : ''}
     ${providers.length ? `pi.importProviders(${JSON.stringify(providers)});` : ''}
-    ${mcp && Object.keys(mcp.mcpServers || {}).length ? `pi.importMcpConfig(${JSON.stringify(mcp)});` : ''}
+    ${mcp && Object.keys(mcp.mcpServers || {}).length ? `await pi.importMcpConfig(${JSON.stringify(mcp)});` : ''}
     ${openChat ? `const launch={};
     if(!window.__piQuickChatOverlay){
       const chats=await pi.listChats();

@@ -19,9 +19,10 @@ function linkSignals(signal, timeoutMs) {
   const controller = new AbortController();
   const abort = reason => controller.abort(reason);
   if (signal?.aborted) abort(signal.reason);
-  else signal?.addEventListener('abort', () => abort(signal.reason), {once: true});
+  const onAbort=()=>abort(signal.reason);
+  if(!signal?.aborted)signal?.addEventListener('abort',onAbort,{once:true});
   const timer = setTimeout(() => abort(new McpError('请求超时。')), timeoutMs);
-  return {signal: controller.signal, controller, cleanup: () => { clearTimeout(timer); }};
+  return {signal: controller.signal, controller, cleanup: () => { clearTimeout(timer);signal?.removeEventListener('abort',onAbort); }};
 }
 
 async function readSseMessage(stream, id, controller) {
@@ -65,7 +66,7 @@ async function readMessage(response, id, controller) {
   const text = await response.text();
   if (!text.trim()) throw new McpError('服务器返回了空响应。');
   let message;
-  try { message = JSON.parse(text); } catch { throw new McpError(`服务器返回了无法解析的内容：${text.slice(0, 200)}`); }
+  try { message = JSON.parse(text); } catch { throw new McpError('服务器返回了无法解析的内容。'); }
   if (Array.isArray(message)) {
     const match = message.find(item => item?.id === id);
     if (!match) throw new McpError('服务器没有返回本次请求的结果。');
@@ -97,10 +98,12 @@ export function createMcpHttpClient({url, headers = {}, timeout = 60, fetch: fet
   if (typeof fetchImpl !== 'function') throw new McpError('当前环境不支持 fetch。', {server});
   const timeoutMs = Math.max(1, Number(timeout) || 60) * 1000;
   let sessionId = '', protocolVersion = '', nextId = 0, closed = false;
+  const pending=new Set();
 
   async function post(body, {id, signal} = {}) {
     if (closed) throw new McpError('连接已关闭。', {server});
     const linked = linkSignals(signal, timeoutMs);
+    pending.add(linked.controller);
     try {
       let response;
       try {
@@ -118,20 +121,22 @@ export function createMcpHttpClient({url, headers = {}, timeout = 60, fetch: fet
         });
       } catch (error) {
         if (linked.signal.aborted && linked.signal.reason instanceof Error) throw linked.signal.reason;
-        throw new McpError(`无法连接服务器：${error.message}。请检查地址、网络，以及网页是否允许跨域请求（CORS）。`, {server});
+        throw new McpError('无法连接服务器。请检查地址、网络，以及网页是否允许跨域请求（CORS）。', {server});
       }
       const assigned = response.headers.get('mcp-session-id');
       if (assigned) sessionId = assigned;
       if (response.status === 401 || response.status === 403) throw new McpError(`服务器拒绝访问（HTTP ${response.status}），请检查 Authorization 等请求头。`, {server, status: response.status});
       if (!response.ok && response.status !== 202) {
-        const detail = await response.text().catch(() => '');
-        throw new McpError(`服务器返回 HTTP ${response.status}${detail ? `：${detail.slice(0, 300)}` : ''}`, {server, status: response.status});
+        throw new McpError(`服务器返回 HTTP ${response.status}。`, {server, status: response.status});
       }
-      if (id === undefined || response.status === 202 || !response.body) return undefined;
+      if (id === undefined || response.status === 202 || !response.body) {
+        await response.body?.cancel().catch(()=>{});
+        return undefined;
+      }
       const message = await readMessage(response, id, linked.controller);
-      if (message?.error) throw new McpError(message.error.message || JSON.stringify(message.error), {server});
+      if (message?.error) throw new McpError('服务器返回 MCP 协议错误。', {server});
       return message?.result;
-    } finally { linked.cleanup(); }
+    } finally { linked.controller.abort();linked.cleanup();pending.delete(linked.controller); }
   }
 
   async function notify(method, params) {
@@ -176,8 +181,12 @@ export function createMcpHttpClient({url, headers = {}, timeout = 60, fetch: fet
     async close() {
       if (closed) return;
       closed = true;
+      for(const controller of pending)controller.abort(new McpError('连接已关闭。'));
+      pending.clear();
       if (!sessionId) return;
-      try { await fetchImpl(url, {method: 'DELETE', headers: {...headers, 'Mcp-Session-Id': sessionId}}); } catch {}
+      const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),2000);
+      try { await fetchImpl(url, {method:'DELETE',headers:{...headers,'Mcp-Session-Id':sessionId},signal:controller.signal}); } catch {}
+      finally {clearTimeout(timer);controller.abort();}
     },
   };
 }

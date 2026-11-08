@@ -53,7 +53,8 @@ export function parseMcpConfig(input) {
     const servers = entries.length > 0 && entries.every(([, entry]) => entry && typeof entry === 'object' && !Array.isArray(entry)
       && ['command', 'url', 'type', 'enabled'].some(key => Object.hasOwn(entry, key)));
     if (!servers) throw new Error('MCP 配置缺少 mcpServers 对象。');
-    return {value: {mcpServers: Object.fromEntries(entries), ...(value.env ? {env: value.env} : {})}, text: JSON.stringify(value, null, 2)};
+    const document={mcpServers:Object.fromEntries(entries),...(value.env?{env:value.env}:{}),...(Object.hasOwn(value,'autoEnableCodemode')?{autoEnableCodemode:value.autoEnableCodemode}:{})};
+    return {value:document,text:JSON.stringify(document,null,2)};
   }
   if (!value.mcpServers || typeof value.mcpServers !== 'object' || Array.isArray(value.mcpServers)) throw new Error('mcpServers 必须是对象。');
   return {value, text: JSON.stringify(value, null, 2)};

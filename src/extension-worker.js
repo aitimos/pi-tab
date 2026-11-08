@@ -1,3 +1,4 @@
+import {McpConfigStore} from './mcp-store.js';
 import { createI18n } from './i18n.js';
 
 async function actionLocale() {
@@ -64,19 +65,41 @@ chrome.tabs.onUpdated.addListener((tabId,change) => {
   void chrome.storage.session.get(activeKey(tabId)).then(saved=>{if(saved[activeKey(tabId)])return activate(tabId);}).catch(error=>console.error('[Pi Tab]',error));
 });
 
+const mcpStore=new McpConfigStore({
+  read:()=>chrome.storage.local.get(['mcp','mcpRevision']),
+  write:next=>chrome.storage.local.set(next),
+  guard:async()=>{
+    if(!await chrome.offscreen.hasDocument())return;
+    const reply=await chrome.runtime.sendMessage({type:'mcp-update-guard',value:true});
+    if(!reply?.ok)throw Error(reply?.error||'无法确认 MCP 任务状态。');
+  },
+  release:async()=>{
+    if(await chrome.offscreen.hasDocument())await chrome.runtime.sendMessage({type:'mcp-update-guard',value:false}).catch(()=>{});
+  },
+  onSaved:async(mcp,mcpRevision)=>{
+    if(!await chrome.offscreen.hasDocument())return;
+    const reply=await chrome.runtime.sendMessage({type:'shared-config-updated',mcp,mcpRevision});
+    if(!reply?.ok)throw Error('连接同步失败。');
+  },
+});
+
 chrome.runtime.onMessage.addListener((message,sender,respond) => {
-  if(message.target==='engine'||message.type==='shared-config-updated'||message.type==='tab-closed')return false;
+  if(message.target==='engine'||message.type==='shared-config-updated'||message.type==='tab-closed'||message.type==='mcp-update-guard')return false;
   (async()=>{
     if(message.type==='shared-config'){
-      if(message.operation==='get')return chrome.storage.local.get(['profiles','providers','mcp']);
-      const saved=await chrome.storage.local.get(['profiles','providers','mcp']);
-      if(message.operation==='profile-save'){
-        saved.profiles=[...(saved.profiles||[]).filter(item=>item.id!==message.profile.id),message.profile];
-      }else if(message.operation==='provider-save'){
-        saved.providers=[...(saved.providers||[]).filter(item=>item.id!==message.provider.id),message.provider];
-      }else if(message.operation==='mcp-set'){saved.mcp=message.mcp;}else if(message.operation==='replace'){saved.profiles=message.profiles;saved.providers=message.providers;}else throw new Error('未知设置操作。');
-      await chrome.storage.local.set(saved);
-      await chrome.runtime.sendMessage({type:'shared-config-updated',profiles:saved.profiles||[],providers:saved.providers||[],mcp:saved.mcp||null});
+      if(message.operation==='get')return chrome.storage.local.get(['profiles','providers','mcp','mcpRevision']);
+      if(message.operation==='mcp-preview')return mcpStore.preview(message.input,message.choices);
+      if(message.operation==='mcp-change')return mcpStore.change(message.request);
+      // Only write fields owned by this operation: an old model snapshot must
+      // never overwrite a newer MCP document during an asynchronous save.
+      const saved=await chrome.storage.local.get(['profiles','providers']);
+      let patch;
+      if(message.operation==='profile-save')patch={profiles:[...(saved.profiles||[]).filter(item=>item.id!==message.profile.id),message.profile]};
+      else if(message.operation==='provider-save')patch={providers:[...(saved.providers||[]).filter(item=>item.id!==message.provider.id),message.provider]};
+      else if(message.operation==='replace')patch={profiles:message.profiles,providers:message.providers};
+      else throw new Error('未知设置操作。');
+      await chrome.storage.local.set(patch);
+      await chrome.runtime.sendMessage({type:'shared-config-updated',...patch});
       return true;
     }
     if(message.type==='identity'){
@@ -152,7 +175,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
         message.type==='tabs-send'?[message.text,`标签页 ${sender.tab?.id||'其他'} 的 agent ${message.fromChatId}`]:[message.limit],message.chatId);
     }
     throw new Error('未知扩展消息。');
-  })().then(value=>respond({ok:true,value}),error=>respond({ok:false,error:error.message||String(error)}));
+  })().then(value=>respond({ok:true,value}),error=>respond({ok:false,error:error.message||String(error),diagnostics:error.diagnostics}));
   return true;
 });
 

@@ -37,3 +37,9 @@ test('all catalog entries have English text and matching interpolation parameter
     assert.deepEqual([...source.matchAll(/\{\d+\}/g)].map(m=>m[0]).sort(),[...target.matchAll(/\{\d+\}/g)].map(m=>m[0]).sort(),source);
   }
 });
+test('closing an editor releases its bindings before a later language change',()=>{
+  const locale=createI18n({mode:'zh-CN'}),node={isConnected:true,textContent:''};
+  locale.text(node,()=>locale.t('保存'));
+  locale.release({contains:child=>child===node});
+  locale.setMode('en');assert.equal(node.textContent,'保存');
+});

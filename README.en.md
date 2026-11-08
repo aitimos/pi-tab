@@ -28,7 +28,7 @@ Built on Pi Durable, Pi Tab brings an agent into the webpage you are browsing. O
 | Conversation management | Generate titles automatically, see running status, switch or delete conversations, and open another task in a new window |
 | Agent collaboration | Exchange messages between agents on the same page; the extension can also open tabs, send tasks, and read results |
 | Linux tools (extension only) | Each conversation gets its own Linux for `bash/read/grep/edit` command execution and file operations |
-| MCP tools | Paste Pi's `mcpServers` config in **Pi settings → MCP** and let the model use tools from remote MCP servers |
+| MCP tools | Manage servers or import single and batch JSON in **Pi settings → MCP** and let the model use tools from remote MCP servers |
 | Chinese and English | Follow your browser language or switch in settings without interrupting conversations or tasks |
 | Appearance and preferences | Follow the page or system theme, or choose light or dark; drag, resize, minimize, and dock windows at the edge |
 
@@ -77,13 +77,15 @@ Built-in `curl` sends HTTP(S) requests through JavaScript fetch in the extension
 
 ### MCP servers
 
-**Pi settings → MCP** accepts Pi's `mcp.json` (`mcpServers` format) and connects remote MCP servers. Their tools reach the model as `mcp__server__tool`, and the same page shows connection state, tool counts, and errors.
+**Pi settings → MCP** supports per-server add, edit and delete, plus single and batch JSON imports with conflict previews and atomic validation. Existing `mcpServers` documents remain supported. Their tools reach the model as `mcp__server__tool`, and the same page shows connection state, tool counts, and errors.
 
 - Only streamable HTTP servers are supported (an entry with `url`). stdio servers started with `command` need a local process, which neither the bookmark nor the extension can spawn, so they are listed as unsupported.
-- Fields follow Pi: `url`, `headers`, `timeout`, `enabled`, `description`, `exposure`, `toolExposure`. `sse` is rejected as in Pi; servers that require OAuth sign-in are not supported yet, so use headers such as `Authorization` instead.
+- Fields follow Pi: `url`, `headers`, `timeout`, `enabled`, `description`, `exposure`, `toolExposure`. `sse` is retained as unsupported; servers that require OAuth sign-in are not supported yet, so use headers such as `Authorization` instead.
 - Header values may reference `${NAME}`, defined in an `env` object beside `mcpServers`, for example `{"mcpServers": {"docs": {"url": "https://example.com/mcp", "headers": {"Authorization": "Bearer ${DOCS_TOKEN}"}}}, "env": {"DOCS_TOKEN": "..."}}`.
 - Tools with `toolExposure` set to `hidden` are not registered; the rest are offered to the model directly.
 - Bookmark requests come from the webpage, so the server must allow CORS; the extension requests from its background page. Bookmark configuration is stored per site and travels with a saved bookmark; extension configuration is shared across websites.
+
+Development shortcuts: `make help`, `make build`, `make test`, and `make test-mcp` reuse the existing npm scripts. The MCP suite uses the locked Playwright version against real bookmark and extension builds, writing screenshots and revision metadata to a temporary directory.
 
 Use Node.js 24 for development and tests (`nvm use`), then run `npm ci`. Browser tests invoke the project's pinned `agent-browser`, never a global installation. Run `npx playwright install chromium`, then set `PI_TAB_TEST_CHROME` to the path printed by `node --input-type=module -e "import {chromium} from 'playwright'; console.log(chromium.executablePath())"`. Commands such as `npm run test:bookmarklet` and `npm run test:extension` then use the same tool and browser versions as CI.
 
