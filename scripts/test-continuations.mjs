@@ -102,13 +102,15 @@ try{
   await worker.evaluate(async tabId=>{for(let i=0;i<100;i++){const [result]=await chrome.scripting.executeScript({target:{tabId},world:'ISOLATED',func:()=>Boolean(window.__releaseNativeView)});if(result.result)return;await new Promise(resolve=>setTimeout(resolve,20));}throw Error('Delayed view fixture did not start');},coldTab);
   const beforeCold=requests.length;await view(cold).locator('#choose-history').click();
   await cold.evaluate(()=>{window.__pickerTrace=[];for(const type of ['pointerdown','pointerup','click'])document.addEventListener(type,event=>window.__pickerTrace.push({type,x:event.clientX,y:event.clientY,target:event.target.tagName}),true);});
-  if(process.env.PI_TAB_ENGINE_DIAGNOSTICS)console.log('ENGINE BEFORE SELECT',JSON.stringify(await engineDiagnostics(cold)));
   const picker=cold.frameLocator('iframe[title="历史对话"]');
   await picker.locator('button[data-ref="'+encodeURIComponent(JSON.stringify(['127.0.0.1',1]))+'"]').evaluate(()=>{
     const send=chrome.runtime.sendMessage.bind(chrome.runtime);window.__pickerTrace=[];
     for(const type of ['pointerdown','pointerup','click'])document.addEventListener(type,event=>window.__pickerTrace.push({type,x:event.clientX,y:event.clientY,target:event.target.tagName,click:event.target.closest('button')?.dataset.ref,trusted:event.isTrusted}),true);
     chrome.runtime.sendMessage=(...args)=>{if(args[0].type!=='picker-select')return send(...args);window.__pickerTrace.push({sent:args[0].type});return send(...args).then(response=>{window.__pickerTrace.push({response});return response;});};
   });
+  // Present the OOPIF surface before input. On Linux a DOM-ready frame can
+  // still route the first pointer event to the parent iframe element.
+  await cold.screenshot({path:join(output,`cold-picker-${round}.png`)});
   await picker.locator('button[data-ref="'+encodeURIComponent(JSON.stringify(['127.0.0.1',1]))+'"]').click();
   await Promise.race([view(cold).locator('#continuation-summary').filter({hasText:'Continuation fixture · 127.0.0.1'}).waitFor(),picker.locator('#error').filter({hasText:/\S/}).waitFor().then(async()=>{throw Error('Cold picker: '+await picker.locator('#error').innerText());}),view(cold).locator('#continuation-error').filter({hasText:/\S/}).waitFor().then(async()=>{throw Error('Cold view: '+await view(cold).locator('#continuation-error').innerText());})]);
   await worker.evaluate(async tabId=>chrome.scripting.executeScript({target:{tabId},world:'ISOLATED',func:async()=>{window.__releaseNativeView();delete window.__releaseNativeView;await new Promise(requestAnimationFrame);}}),coldTab);
