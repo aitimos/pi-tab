@@ -2225,6 +2225,7 @@ async function openChat(initialConfig, options = {}) {
     defaultInstructions = t(runtimePi.defaultPrompt);
     updateComposer();
     syncTheme();
+    if(runtimePi.extension&&agent)void renderContinuation();
   }
   for (const button of root.querySelectorAll('[data-language]')) button.addEventListener('click', () => i18n.setMode(button.dataset.language));
   i18n.onChange(syncLanguage);

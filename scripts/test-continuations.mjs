@@ -55,6 +55,7 @@ try{
   for(const host of ['127.0.0.1','sub.localhost','localhost']){
     const url=`http://${host}:${port}/target-${host}`,b=await browser.newPage();await activate(b,url);
     await view(b).locator('#choose-history').click();const picker=b.frameLocator('iframe[title="历史对话"]');
+    await b.screenshot({path:join(output,`picker-${host}.png`)});
     await picker.getByRole('button',{name:/Continuation fixture.*127\.0\.0\.1/}).first().click();
     await view(b).locator('#continuation-summary').filter({hasText:'Continuation fixture · 127.0.0.1'}).waitFor();
     const before=requests.length;await view(b).locator('#message-input').fill('TOOL_PAGE');await view(b).locator('#send').click();assert.equal(requests.length,before,'viewing must not submit');
@@ -63,6 +64,7 @@ try{
     const observed=await observeRequest(input=>JSON.stringify(input.messages).includes('ORIGINAL_TASK_CONTEXT')&&input.messages.some(message=>message.role==='tool'&&JSON.stringify(message.content).includes(url)));
     assert.ok(observed.messages.some(message=>message.role==='tool'&&JSON.stringify(message.content).includes(url)));
     await b.screenshot({path:join(output,`continue-${host}.png`)});
+    if(host==='localhost'){await worker.evaluate(()=>chrome.storage.local.set({'pi-tab-language':'en'}));await view(b).locator('#continuation-summary').filter({hasText:'Conversation:'}).waitFor();await b.setViewportSize({width:600,height:900});await b.screenshot({path:join(output,'continuation-en-narrow.png')});await b.setViewportSize({width:1280,height:1000});await worker.evaluate(()=>chrome.storage.local.set({'pi-tab-language':'zh-CN'}));}
     // Same-URL reload must revoke the old authorization, while history remains readable.
     await b.reload();await view(b).locator('#continue-here').waitFor();
     const count=requests.length;await view(b).locator('#message-input').fill('TOOL_PAGE');await view(b).locator('#send').click();assert.equal(requests.length,count);
