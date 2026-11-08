@@ -1,3 +1,4 @@
+import {extensionTestRpc} from './extension-test-rpc.mjs';
 // Real built bookmark and unpacked extension, isolated browser profiles and local
 // HTTP fixtures only. Screenshots contain synthetic values with masked secrets.
 import assert from 'node:assert/strict';
@@ -26,8 +27,8 @@ const server=createServer((request,response)=>{
   let body='';request.on('data',chunk=>body+=chunk);request.on('end',()=>{
     const message=body?JSON.parse(body):null;
     if(request.url.endsWith('/chat/completions')){
-      modelInputs.push(message);if(modelHeld){onModelHeld?.();return;}
       const title=JSON.stringify(message.messages).includes('你是会话标题生成器');
+      modelInputs.push(message);if(modelHeld&&!title){onModelHeld?.();return;}
       const answered=message.messages.some(item=>item.role==='tool'||item.role==='toolResult');
       response.writeHead(200,{'Content-Type':'text/event-stream'});
       const choice=title?{delta:{role:'assistant',content:'MCP test'},finish_reason:'stop'}:answered?{delta:{role:'assistant',content:'MCP tool finished'},finish_reason:'stop'}:{delta:{role:'assistant',tool_calls:[{index:0,id:'call_mcp',type:'function',function:{name:'mcp__docs__search',arguments:'{"q":"test"}'}}]},finish_reason:'tool_calls'};
@@ -232,7 +233,11 @@ try{
     },url);assert.equal(result.ok,true,result.error);
     await view(page).locator('#settings:enabled').waitFor();
   }
-  const extCall=async(page,method,args=[],name)=>{const reply=await worker.evaluate(async({url,method,args,name})=>{const [tab]=await chrome.tabs.query({url});const target={target:'engine',site:new URL(url).hostname,tabId:tab.id};const initial=method==='agent'?await chrome.runtime.sendMessage({...target,method:'initialize'}):null;return chrome.runtime.sendMessage({...target,method,args,name,chatId:initial?.value.activeId});},{url:page.url(),method,args,name});assert.equal(reply.ok,true,reply.error);return reply.value;};
+  const extCall=async(page,method,args=[],name)=>{
+    const tab=await worker.evaluate(async url=>(await chrome.tabs.query({url}))[0],page.url());
+    const reply=await worker.evaluate(extensionTestRpc,{site:new URL(page.url()).hostname,tabId:tab.id,method,args,name});
+    assert.equal(reply.ok,true,reply.error);return reply.value;
+  };
   const first=await extensionContext.newPage();await first.addInitScript(()=>localStorage.setItem('pi-tab-size',JSON.stringify({width:600,height:880})));
   await activate(first,base+'/extension');await settings(first);
   const extensionUrl=mcpUrl+'?token=EXTENSION_URL_SENTINEL&encoded=%2F%2b';

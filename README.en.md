@@ -61,7 +61,7 @@ No extension is required. Configure the installer before saving the bookmark to 
 | Conversations and settings | Instructions, models and providers are shared by origin (scheme, hostname and port), independently of conversations; concurrent tabs can keep separate conversation records | Conversations shared by exact hostname; model settings shared across websites |
 | Collaboration | Multiple agents on the current page | Tasks across browser tabs |
 
-Stop cancels the current conversation and its queued messages. In extension mode, closing the task’s tab also stops its tasks; reloading preserves them. Page actions already performed are not undone.
+Stop cancels the current conversation and its queued messages. In extension mode, closing the task’s tab also stops its tasks; background tasks survive reloads, but page operations require explicit authorization for the new document. Page actions already performed are not undone.
 
 The two modes keep separate conversation records. Start from the extension icon for cross-tab tools; installing the extension does not add those tools to bookmark sessions.
 
@@ -109,6 +109,16 @@ Report problems through [Issues](https://github.com/aitimos/pi-tab/issues) or se
 Thanks to the [LINUX DO](https://linux.do/) community for providing a space to exchange ideas and share projects.
 
 Project code is licensed under the [Apache License 2.0](LICENSE). Bundled Linux, BusyBox and linux-wasm runtime code retain their own licenses; see [NOTICE](NOTICE) and the [Linux build guide](linux/README.md).
+
+## Continue a conversation on another page
+
+Enable the extension on the destination page, open **Conversation history**, and select the original conversation. Selecting only opens history; click **Continue on this page** before sending a task. Existing context and model settings remain with the original conversation, while page tools use the selected document. This works on the same hostname, another subdomain, or another hostname.
+
+The conversation source and execution page appear above the chat. While a task runs, wait or choose **Stop task and continue here**. Reloading, navigation, or closing a page revokes its authorization. If the extension background restarts with interrupted tasks, review and explicitly stop the source site's interrupted conversations before continuing. History is retained and tasks are not automatically replayed.
+
+New conversations, new windows, and `tab_open` create independent tasks without inheriting messages. `tab_open` also returns `conversationRef`; `tab_send` and `tab_read` accept `ownerSite` and reject ambiguous numeric IDs.
+
+Bookmark history belongs to the current origin. When another tab owns that history, startup waits at most 1.5 seconds and offers retry or an explicit independent conversation. Pages without Web Locks also require an explicit independent conversation. Use the extension for cross-site continuation.
 
 ## Account sign-in
 

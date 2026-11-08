@@ -1,3 +1,4 @@
+import {extensionTestRpc} from './extension-test-rpc.mjs';
 // Real extension + Durable tool execution, with a deterministic local model server.
 import {agentBrowser} from './browser-cli.mjs';
 import assert from 'node:assert/strict';
@@ -62,7 +63,7 @@ try{
   const sourceTab=await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url)}});await chrome.storage.session.set({['active:'+tab.id]:true});const r=await chrome.tabs.sendMessage(tab.id,{type:'activate'});if(!r.ok)throw new Error(r.error);return tab.id})()`);
   const engine=async(method,args=[],chatId,name,site='127.0.0.1',tabId=sourceTab)=>{
     await browser('tab',controllerPage);
-    const result=await evaluate(`chrome.runtime.sendMessage(${JSON.stringify({target:'engine',site,tabId,method,args,chatId,name})})`);
+    const result=await evaluate(`(${extensionTestRpc.toString()})(${JSON.stringify({site,tabId,method,args,chatId,name})})`);
     assert.equal(result.ok,true,result.error);return result.value;
   };
   const source=(await engine('listChats'))[0].id;
@@ -110,7 +111,7 @@ try{
   const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aDSsAAAAASUVORK5CYII=';
   await call('bash',{command:`printf '%s' '${png}' | base64 -d > pixel.png`});
   result=await call('read',{path:'pixel.png'});assert.equal(result.isError,false);assert.equal(result.content.find(p=>p.type==='image')?.data,png);
-  await evaluate(`globalThis.toolEvents=[];globalThis.pendingLinux=chrome.runtime.sendMessage(${JSON.stringify({target:'engine',site:'127.0.0.1',tabId:sourceTab,method:'agent',chatId:source,name:'prompt',args:[command('bash',{command:'printf before-stop; sleep 30'})]})});true`);
+  await evaluate(`globalThis.toolEvents=[];globalThis.pendingLinux=(${extensionTestRpc.toString()})(${JSON.stringify({target:'engine',site:'127.0.0.1',tabId:sourceTab,method:'agent',chatId:source,name:'prompt',args:[command('bash',{command:'printf before-stop; sleep 30'})]})});true`);
   await browser('wait','--fn',`toolEvents.some(e=>e.type==='tool_execution_update'&&JSON.stringify(e.output).includes('before-stop'))`);
   await engine('agent',[],source,'abort');
   await evaluate('pendingLinux');
@@ -157,13 +158,14 @@ try{
   result=await call('bash',{command:`printf '%s' '${trap}' | base64 -d > crash; chmod +x crash; ./crash`});assert.equal(result.isError,true);assert.match(text(result),/unreachable/);assert.match(text(result),/临时文件已丢失/);
   result=await call('bash',{command:`test ! -e ${quote(path)}; printf recovered`});assert.equal(text(result),'recovered');
   await call('bash',{command:`printf temporary > ${quote(path)}`});
-  await evaluate(`globalThis.toolEvents=[];globalThis.lostRun=chrome.runtime.sendMessage(${JSON.stringify({target:'engine',site:'127.0.0.1',tabId:sourceTab,method:'agent',chatId:source,name:'prompt',args:[command('bash',{command:'printf marker > /workspace/replayed; printf before-reload; sleep 30'})]})}).catch(error=>({error:error.message}));true`);
+  await evaluate(`globalThis.toolEvents=[];globalThis.lostRun=(${extensionTestRpc.toString()})(${JSON.stringify({target:'engine',site:'127.0.0.1',tabId:sourceTab,method:'agent',chatId:source,name:'prompt',args:[command('bash',{command:'printf marker > /workspace/replayed; printf before-reload; sleep 30'})]})}).catch(error=>({error:error.message}));true`);
   await browser('wait','--fn',`toolEvents.some(e=>e.type==='tool_execution_update'&&JSON.stringify(e.output).includes('before-reload'))`);
   // Recreating the offscreen page has the same RAM reset as extension reload.
   await evaluate(`chrome.offscreen.closeDocument()`);
   await evaluate(`chrome.offscreen.createDocument({url:'engine.html',reasons:['WORKERS'],justification:'Verify Linux reset after background recreation'})`);
   await browser('wait','--fn',`(async()=>{try{return (await chrome.runtime.sendMessage({target:'engine',site:'127.0.0.1',method:'listChats'})).ok}catch{return false}})()`);
   await browser('wait','--fn',`(async()=>{const r=await chrome.runtime.sendMessage({target:'engine',site:'127.0.0.1',method:'listChats'});return r.ok&&r.value.some(c=>c.id===${source}&&!c.busy)})()`);
+  await engine('recoverSource',[],source);
   result=await call('bash',{command:`test ! -e ${quote(path)} && test ! -e /workspace/replayed`});assert.equal(result.isError,false);
   console.log('PASS UI/history: image/diff/errors restored after refresh; reset/deletion, Wasm crash recovery, offscreen recreation and no replay of unfinished Linux calls');
 }finally{

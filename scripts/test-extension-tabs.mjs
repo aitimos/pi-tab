@@ -1,3 +1,4 @@
+import {extensionTestRpc} from './extension-test-rpc.mjs';
 // Real extension + Durable tool execution, with a deterministic local model server.
 import {agentBrowser} from './browser-cli.mjs';
 import assert from 'node:assert/strict';
@@ -60,12 +61,12 @@ try{
   const sourceTab=await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url)}});await chrome.storage.session.set({['active:'+tab.id]:true});const r=await chrome.tabs.sendMessage(tab.id,{type:'activate'});if(!r.ok)throw new Error(r.error);return tab.id})()`);
   const engine=async(method,args=[],chatId,name,site='127.0.0.1',tabId=sourceTab)=>{
     await browser('tab',controllerPage);
-    const result=await evaluate(`chrome.runtime.sendMessage(${JSON.stringify({target:'engine',site,tabId,method,args,chatId,name})})`);
+    const result=await evaluate(`(${extensionTestRpc.toString()})(${JSON.stringify({site,tabId,method,args,chatId,name})})`);
     assert.equal(result.ok,true,result.error);return result.value;
   };
   const source=(await engine('listChats'))[0].id;
   await engine('agent',[{api:'openai-completions',baseUrl:new URL('/v1',url).href,apiKey:'test-only',model:'test-model',thinking:'off',reasoning:false}],source,'configure');
-  const call=async(name,args={})=>JSON.parse(await engine('agent',[command(name,args)],source,'prompt'));
+  const call=async(name,args={})=>{const answer=await engine('agent',[command(name,args)],source,'prompt');try{return JSON.parse(answer);}catch{throw Error('Tool '+name+' returned: '+answer);}};
   const page=()=>command('js_eval',{code:'return {url:location.href,title:document.title}'});
   const sourcePage=JSON.parse(await engine('agent',[page()],source,'prompt'));
   assert.equal(sourcePage.url,url);
@@ -85,7 +86,7 @@ try{
     assert.equal((await engine('initialize',[],undefined,undefined,host,opened.tabId)).activeId,targetChat);
     const sent=await call('tab_send',{tabId:opened.tabId,chatId:targetChat,message:page()});
     assert.equal(sent.to,targetChat);
-    await browser('wait','--fn',`(async()=>{const r=await chrome.runtime.sendMessage({target:'engine',site:${JSON.stringify(host)},method:'listChats'});return r.ok&&r.value.some(c=>c.id===${targetChat}&&!c.busy)})()`);
+    await browser('wait','--fn',`(async()=>{const r=await (${extensionTestRpc.toString()})({site:${JSON.stringify(host)},tabId:${opened.tabId},method:'listChats'});return r.ok&&r.value.some(c=>c.id===${targetChat}&&!c.busy)})()`);
     const history=await call('tab_read',{tabId:opened.tabId,chatId:targetChat});
     const answer=history.findLast(entry=>entry.kind==='pi.assistant'&&entry.text)?.text;
     assert.equal(JSON.parse(answer).url,targetUrl.href);

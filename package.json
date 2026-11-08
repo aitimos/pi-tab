@@ -13,7 +13,7 @@
     "start": "node relay.mjs",
     "test": "node --test tests/*.test.mjs",
     "test:extension": "node scripts/test-extension-ui.mjs",
-    "test:tabs": "node scripts/test-extension-tabs.mjs",
+    "test:tabs": "node scripts/test-extension-tabs.mjs && node scripts/test-continuations.mjs && node scripts/test-history-index.mjs && node scripts/test-worker-recovery.mjs",
     "test:bookmarklet": "node scripts/test-bookmarklet-ui.mjs",
     "test:i18n": "node scripts/test-i18n-ui.mjs",
     "test:stop": "node scripts/test-stop-markdown.mjs",
@@ -23,7 +23,10 @@
     "test:management": "node scripts/test-management.mjs",
     "build:linux": "bash scripts/build-linux.sh",
     "test:linux": "node scripts/test-linux-runtime.mjs",
-    "test:linux-tools": "node scripts/test-extension-linux.mjs"
+    "test:linux-tools": "node scripts/test-extension-linux.mjs",
+    "test:continuations": "node scripts/test-continuations.mjs",
+    "test:history": "node scripts/test-history-index.mjs",
+    "test:worker": "node scripts/test-worker-recovery.mjs"
   },
   "dependencies": {
     "@earendil-works/chord": "1.4.0",

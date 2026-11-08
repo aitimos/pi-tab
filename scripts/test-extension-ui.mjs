@@ -1,3 +1,4 @@
+import {extensionTestRpc} from './extension-test-rpc.mjs';
 // Run against the built extension in a separate Chrome for Testing session.
 // Requires agent-browser and PI_TAB_TEST_CHROME pointing to Chrome for Testing.
 import {agentBrowser} from './browser-cli.mjs';
@@ -97,8 +98,10 @@ async function check(name, action) {
   try { await action(); console.log(`PASS ${name}`); }
   catch (error) { failures.push(name); console.error(`FAIL ${name}: ${error.message}`); }
 }
+const chatAttribute=id=>encodeURIComponent(JSON.stringify(['127.0.0.1',id]));
 const root = `document.querySelector('[data-pi-overlay]').shadowRoot`;
 async function click(id) {
+  if(id==='send'||id==='message-input'){await evaluate(`(()=>{const r=${root};const button=r.getElementById('continue-here');if(button&&!button.disabled)button.click();})()`);await browser('wait','--fn',`${root}.getElementById('continuation-panel').dataset.authorized==='true'`);}
   const point = await evaluate(`(()=>{const r=${root}.getElementById(${JSON.stringify(id)}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
   await browser('mouse','move',String(Math.round(point.x)),String(Math.round(point.y)));
   await browser('mouse','down','left');
@@ -144,7 +147,7 @@ try {
   await evaluate(`chrome.storage.local.set({'pi-tab-language':${JSON.stringify(language)}})`);
   async function activate(openWindow=true) {
     await browser('tab',controllerPage);
-    const response = await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});await chrome.storage.session.set({['active:'+tab.id]:true});return chrome.tabs.sendMessage(tab.id,{type:'activate',openWindow:${openWindow}})})()`);
+    const response = await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});await chrome.scripting.executeScript({target:{tabId:tab.id},world:'ISOLATED',func:()=>{if(window.__uiEventEpochRecorder)return;window.__uiEventEpochRecorder=true;chrome.runtime.onMessage.addListener(message=>{if(message.workerEpoch)window.__uiEventEpoch=message.workerEpoch;else if(message.type==='verify-target')window.__uiEventEpoch=message.target.workerEpoch;return false;});}});await chrome.storage.session.set({['active:'+tab.id]:true});return chrome.tabs.sendMessage(tab.id,{type:'activate',openWindow:${openWindow}})})()`);
     assert.equal(response.ok,true,response.error);
     await browser('tab',sourcePage);
     await browser('wait','[data-pi-overlay]');
@@ -618,7 +621,10 @@ try {
   const backgroundChat=afterChats.value.find(chat=>!beforeChats.value.some(old=>old.id===chat.id));
   await browser('tab',controllerPage);
   const currentId=beforeChats.value[0].id;
-  const engine = async (method,args=[],chatId,name) => evaluate(`chrome.runtime.sendMessage(${JSON.stringify({target:'engine',site:'127.0.0.1',method,args,chatId,name})})`);
+  const engine = async (method,args=[],chatId,name) => {
+    await browser('tab',controllerPage);
+    return evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});return (${extensionTestRpc.toString()})({...${JSON.stringify({site:'127.0.0.1',method,args,chatId,name})},tabId:tab.id});})()`);
+  };
   const configuration = await engine('agent',[{api:'openai-completions',baseUrl:url+'v1',apiKey:'test-only',model:'test-model',reasoning:false,thinking:'off',input:['text','image']}],currentId,'configure');
   assert.equal(configuration.ok,true,configuration.error);
   const reply=await engine('agent',['Keep this conversation'],currentId,'prompt');
@@ -626,17 +632,17 @@ try {
   const keptHistory=await engine('agent',[],currentId,'history');
   const keptModels=await engine('listModels');
   holdModel=true;
-  await evaluate(`void chrome.runtime.sendMessage(${JSON.stringify({target:'engine',site:'127.0.0.1',method:'agent',chatId:currentId,name:'prompt',args:['Pending task']})});true`);
+  await evaluate(`void(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});return (${extensionTestRpc.toString()})({...${JSON.stringify({site:'127.0.0.1',method:'agent',chatId:currentId,name:'prompt',args:['Pending task']})},tabId:tab.id});})();true`);
   await browser('wait','--fn',`(async()=>{const r=await chrome.runtime.sendMessage({target:'engine',site:'127.0.0.1',method:'listChats'});return r.value.some(c=>c.id===${currentId}&&c.busy)})()`);
   await check('real background run stays visible when opening and reopening the conversation menu',async()=>{
     await browser('tab',sourcePage);
-    const indicator=`${root}.querySelector('[data-chat-id="${currentId}"] .chat-running')`;
+    const indicator=`${root}.querySelector('[data-chat-id="${chatAttribute(currentId)}"] .chat-running')`;
     await browser('wait','--fn',`${indicator} && !${indicator}.hidden`);
     assert.equal(await evaluate(`getComputedStyle(${indicator}).display`),'flex');
-    await evaluate(`${root}.querySelector('[data-chat-id="${backgroundChat.id}"] .chat-select').click()`);
+    await evaluate(`${root}.querySelector('[data-chat-id="${chatAttribute(backgroundChat.id)}"] .chat-select').click()`);
     await click('chat-switch');
     await browser('wait','--fn',`${indicator} && !${indicator}.hidden`);
-    await evaluate(`${root}.querySelector('[data-chat-id="${currentId}"] .chat-select').click()`);
+    await evaluate(`${root}.querySelector('[data-chat-id="${chatAttribute(currentId)}"] .chat-select').click()`);
     await click('chat-switch');
     await browser('wait','--fn',`${indicator} && !${indicator}.hidden`);
     await browser('screenshot',join(directory,'conversation-running.png'));
@@ -662,14 +668,15 @@ try {
     await click('chat-switch');
     await browser('tab',controllerPage);
   });
+  const deliverEvent=event=>evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});const [proof]=await chrome.scripting.executeScript({target:{tabId:tab.id},world:'ISOLATED',func:()=>window.__uiEventEpoch});if(!proof.result)throw Error('No verified worker epoch observed');await chrome.tabs.sendMessage(tab.id,{type:'engine-event',workerEpoch:proof.result,ref:{ownerSite:'127.0.0.1',conversationId:${currentId}},event:${JSON.stringify({...event,conversationId:currentId})}});})()`);
   await check('Durable snapshot with a live run preserves the running indicator',async()=>{
-    await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});await chrome.tabs.sendMessage(tab.id,{type:'engine-event',event:{type:'snapshot',conversationId:${currentId},run:{inputs:[1]}}});})()`);
+    await deliverEvent({type:'snapshot',run:{inputs:[1]}});
     await browser('tab',sourcePage);
-    assert.equal(await evaluate(`${root}.querySelector('[data-chat-id="${currentId}"] .chat-running').hidden`),false);
+    assert.equal(await evaluate(`${root}.querySelector('[data-chat-id="${chatAttribute(currentId)}"] .chat-running').hidden`),false);
     await browser('tab',controllerPage);
   });
   await check('agent queue and delayed completion preserve a live run and its output',async()=>{
-    const deliver=event=>evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});await chrome.tabs.sendMessage(tab.id,{type:'engine-event',event:${JSON.stringify({...event,conversationId:currentId})}});})()`);
+    const deliver=deliverEvent;
     await deliver({type:'message_start',message:{role:'assistant',content:[{type:'text',text:'Before'}]}});
     await browser('tab',sourcePage);
     try {
@@ -729,11 +736,11 @@ try {
   await browser('tab',sourcePage);
   await check('real run completion clears the conversation indicator',async()=>{
     if(await evaluate(`${root}.getElementById('chat-list').dataset.open!=='true'`))await click('chat-switch');
-    await browser('wait','--fn',`${root}.querySelector('[data-chat-id="${currentId}"] .chat-running')?.hidden===true`);
+    await browser('wait','--fn',`${root}.querySelector('[data-chat-id="${chatAttribute(currentId)}"] .chat-running')?.hidden===true`);
   });
   // Removing the background conversation must not switch the current one.
   if(await evaluate(`${root}.getElementById('chat-list').dataset.open!=='true'`))await click('chat-switch');
-  const removeSelector=`#chat-entries [data-chat-id="${backgroundChat.id}"] .chat-delete`;
+  const removeSelector=`#chat-entries [data-chat-id="${chatAttribute(backgroundChat.id)}"] .chat-delete`;
   await evaluate(`${root}.querySelector(${JSON.stringify(removeSelector)}).click()`);
   await check('delete asks for inline confirmation',async()=>{
     assert.equal(await evaluate(`${root}.querySelector(${JSON.stringify(removeSelector)}).textContent`),en?'Delete':'确认删除');
@@ -753,11 +760,11 @@ try {
   await browser('wait','--fn',`document.querySelectorAll('[data-pi-overlay]')[1].shadowRoot.getElementById('chat-messages').textContent.includes('Test reply')`);
   await check('other window viewing deleted conversation selects the remaining one',async()=>{
     assert.ok(await evaluate(`document.querySelectorAll('[data-pi-overlay]')[1].shadowRoot.getElementById('chat-messages').textContent.includes('Test reply')`));
-    assert.equal(await evaluate(`${root}.querySelector('.chat-select[aria-current=true]').closest('.chat-row').dataset.chatId`),String(currentId));
+    assert.equal(await evaluate(`${root}.querySelector('.chat-select[aria-current=true]').closest('.chat-row').dataset.chatId`),chatAttribute(currentId));
   });
   await check('closing one of two windows on the same conversation preserves restoration',async()=>{
     await evaluate(`document.querySelectorAll('[data-pi-overlay]')[1].shadowRoot.getElementById('close').click()`);
-    assert.deepEqual(await evaluate(`JSON.parse(sessionStorage.getItem('pi-tab-open-chats'))`),[currentId]);
+    assert.deepEqual(await evaluate(`JSON.parse(sessionStorage.getItem('pi-tab-open-chats-v2'))`),[{ownerSite:'127.0.0.1',conversationId:currentId}]);
   });
   await browser('tab',controllerPage);
   await check('deleting the last conversation creates a blank one with the same model',async()=>{

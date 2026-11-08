@@ -67,6 +67,7 @@ try{
     const wait=condition=>browser('wait','--fn',condition);
     const bubbles=()=>evaluate(`[...${root}.querySelectorAll('.message:not([data-queue-id]) .bubble')].map(node=>node.textContent.trim())`);
     async function send(text,steer=false){
+      if(mode==='extension'){await evaluate(`(()=>{const r=${root},b=r.getElementById('continue-here');if(!b.disabled)b.click();})()`);await wait(`${root}.getElementById('continuation-panel').dataset.authorized==='true'`);}
       await evaluate(`(()=>{const r=${root},input=r.getElementById('message-input');input.value=${JSON.stringify(text)};input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
       if(steer){
         await evaluate(`${root}.getElementById('send').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}))`);
