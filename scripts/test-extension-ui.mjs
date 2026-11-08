@@ -147,7 +147,7 @@ try {
   await evaluate(`chrome.storage.local.set({'pi-tab-language':${JSON.stringify(language)}})`);
   async function activate(openWindow=true) {
     await browser('tab',controllerPage);
-    const response = await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});await chrome.storage.session.set({['active:'+tab.id]:true});return chrome.tabs.sendMessage(tab.id,{type:'activate',openWindow:${openWindow}})})()`);
+    const response = await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});await chrome.scripting.executeScript({target:{tabId:tab.id},world:'ISOLATED',func:()=>{if(window.__uiEventEpochRecorder)return;window.__uiEventEpochRecorder=true;chrome.runtime.onMessage.addListener(message=>{if(message.workerEpoch)window.__uiEventEpoch=message.workerEpoch;else if(message.type==='verify-target')window.__uiEventEpoch=message.target.workerEpoch;return false;});}});await chrome.storage.session.set({['active:'+tab.id]:true});return chrome.tabs.sendMessage(tab.id,{type:'activate',openWindow:${openWindow}})})()`);
     assert.equal(response.ok,true,response.error);
     await browser('tab',sourcePage);
     await browser('wait','[data-pi-overlay]');
@@ -668,14 +668,15 @@ try {
     await click('chat-switch');
     await browser('tab',controllerPage);
   });
+  const deliverEvent=event=>evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});const [proof]=await chrome.scripting.executeScript({target:{tabId:tab.id},world:'ISOLATED',func:()=>window.__uiEventEpoch});if(!proof.result)throw Error('No verified worker epoch observed');await chrome.tabs.sendMessage(tab.id,{type:'engine-event',workerEpoch:proof.result,ref:{ownerSite:'127.0.0.1',conversationId:${currentId}},event:${JSON.stringify({...event,conversationId:currentId})}});})()`);
   await check('Durable snapshot with a live run preserves the running indicator',async()=>{
-    await evaluate(`(async()=>{const response=await chrome.runtime.sendMessage({type:'engine-event',ref:{ownerSite:'127.0.0.1',conversationId:${currentId}},event:{type:'snapshot',conversationId:${currentId},run:{inputs:[1]}}});if(!response?.ok)throw Error(response?.error||'Event delivery failed');})()`);
+    await deliverEvent({type:'snapshot',run:{inputs:[1]}});
     await browser('tab',sourcePage);
     assert.equal(await evaluate(`${root}.querySelector('[data-chat-id="${chatAttribute(currentId)}"] .chat-running').hidden`),false);
     await browser('tab',controllerPage);
   });
   await check('agent queue and delayed completion preserve a live run and its output',async()=>{
-    const deliver=event=>evaluate(`(async()=>{const response=await chrome.runtime.sendMessage({type:'engine-event',ref:{ownerSite:'127.0.0.1',conversationId:${currentId}},event:${JSON.stringify({...event,conversationId:currentId})}});if(!response?.ok)throw Error(response?.error||'Event delivery failed');})()`);
+    const deliver=deliverEvent;
     await deliver({type:'message_start',message:{role:'assistant',content:[{type:'text',text:'Before'}]}});
     await browser('tab',sourcePage);
     try {

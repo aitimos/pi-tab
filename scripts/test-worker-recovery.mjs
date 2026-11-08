@@ -107,7 +107,7 @@ try{
   const heldCount=requests.length;
   await restart(()=>ui(b).locator('#choose-history').click());await closePicker(b);
   assert.equal(requests.length,heldCount,'an accepted request was replayed');
-  const busy=await isolated(a,async()=>{try{await window.__piTabAgent.agent(JSON.stringify(['127.0.0.1',1])).continueHere();return {ok:true};}catch(error){return {ok:false,code:error.code};}});assert.equal(busy.value.code,'CONVERSATION_BUSY');
+  const busy=await isolated(a,async()=>{const agent=window.__piTabAgent.agent(JSON.stringify(['127.0.0.1',1]));await agent.ready;try{await agent.continueHere();return {ok:true};}catch(error){return {ok:false,code:error.code};}});assert.equal(busy.value.code,'CONVERSATION_BUSY');
   held.shift()();await ui(a).locator('#abort').waitFor({state:'hidden'});await ui(a).locator('[data-queue-id]').waitFor({state:'detached'});
   const userContains=(input,text)=>input.messages.at(-1).role==='user'&&JSON.stringify(input.messages.at(-1).content).includes(text);
   assert.equal(requests.filter(input=>userContains(input,'HOLD_WORKER')).length,1);assert.equal(requests.filter(input=>userContains(input,'QUEUED_WORKER')).length,1);
