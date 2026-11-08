@@ -494,7 +494,7 @@ async function openChat(initialConfig, options = {}) {
       <p id="chat-menu-error" role="status" hidden></p>
     </div>
     <div id="content">
-        <div id="continuation-panel" hidden style="padding:8px 20px;border-bottom:1px solid var(--line);font-size:12px"><div id="continuation-summary" role="status"></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px"><button id="choose-history" type="button">历史对话</button><button id="continue-here" type="button">在当前页继续</button><button id="stop-continue" type="button">停止当前任务后在本页继续</button><button id="target-return" type="button">回到执行页</button><button id="recover-source" type="button">停止来源站点的中断任务</button></div><div id="continuation-error" role="alert"></div></div>
+        <div id="continuation-panel" hidden style="padding:8px 20px;border-bottom:1px solid var(--line);font-size:12px"><div id="continuation-summary" role="status"></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px"><button id="choose-history" type="button">历史对话</button><button id="continue-here" type="button">在当前页继续</button><button id="stop-continue" type="button">停止当前任务后在本页继续</button><button id="target-return" type="button">回到执行页</button><button id="recover-source" type="button">停止来源站点的中断任务</button></div><ul id="recovery-list" hidden style="max-height:96px;overflow:auto;padding-left:20px"></ul><div id="continuation-error" role="alert"></div></div>
       <form id="setup" autocomplete="off">
         <div class="form-body" id="setup-fields">
           <div class="setup-heading"><h2 id="setup-title">设置模型</h2><button id="setup-manage" class="text-button" type="button">管理模型</button></div>
@@ -661,6 +661,7 @@ async function openChat(initialConfig, options = {}) {
       byId('continue-here').disabled=binding.busy||Boolean(binding.recovery)||agent.authorized;
       byId('stop-continue').hidden=!binding.busy||Boolean(binding.recovery);
       byId('recover-source').hidden=!binding.recovery;
+      const recoveryList=byId('recovery-list');recoveryList.hidden=!binding.recovery;recoveryList.replaceChildren(...(binding.recovery?.chats||[]).map(chat=>{const item=document.createElement('li');item.textContent=chat.title==='来源后台任务'?t(chat.title):chat.title;return item;}));
       byId('target-return').hidden=!binding.target;
     }catch(error){byId('continuation-error').textContent=t(error.message);}
   }
@@ -669,7 +670,7 @@ async function openChat(initialConfig, options = {}) {
   byId('continue-here').onclick=()=>continuationAction(()=>agent.continueHere());
   byId('stop-continue').onclick=()=>continuationAction(async()=>{await agent.abort();await agent.refreshBinding();await agent.continueHere();});
   byId('target-return').onclick=()=>continuationAction(()=>agent.returnToTarget());
-  byId('recover-source').onclick=()=>continuationAction(async()=>{const binding=await agent.refreshBinding();if(window.confirm(t('停止来源站点的 {0} 个中断会话？历史会保留。',binding.recovery.chats.length)))await agent.recoverSource();});
+  byId('recover-source').onclick=()=>continuationAction(async()=>{const binding=await agent.refreshBinding();if(window.confirm(t('停止来源站点的 {0} 个中断会话？历史会保留。',binding.recovery.chats.length)+'\n'+binding.recovery.chats.map(chat=>chat.title).join('\n')))await agent.recoverSource();});
   function sameProvider(a,b) { return Boolean(a && b && a.api === b.api && a.baseUrl?.replace(/\/+$/, '') === b.baseUrl?.replace(/\/+$/, '')); }
   function draftProvider() {
     const config = {nativeProvider:null,api:byId('api').value,baseUrl:byId('base-url').value.trim(),apiKey:byId('api-key').value.trim()};

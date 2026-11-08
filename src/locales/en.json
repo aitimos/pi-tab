@@ -438,5 +438,6 @@
   "历史目录版本不受支持，可继续使用本站对话。": "This history index version is unsupported. Local site history remains available.",
   "重建目录": "Rebuild history",
   "对话已创建，但历史目录暂不可用，可稍后刷新目录。": "Conversation created; the history directory is unavailable. Refresh it later.",
-  "任务正在运行，请先停止或等待任务完成后再切换。": "Task is running. Wait or stop it before switching."
+  "任务正在运行，请先停止或等待任务完成后再切换。": "Task is running. Wait or stop it before switching.",
+  "来源后台任务": "Source background task"
 }

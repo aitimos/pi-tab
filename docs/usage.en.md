@@ -44,6 +44,16 @@ Bookmark mode uses `agent_spawn` to create a conversation on the same page. Inst
 
 The extension provides `tab_list`, `tab_open`, `tab_send`, and `tab_read`. `tab_open` opens a new tab with its own conversation, including on the same hostname, and returns `tabId` and `chatId` for sending tasks and reading results. Conversations are grouped by exact hostname: paths, query parameters, and tabs on `www.bilibili.com` share a list, while `search.bilibili.com` has a separate list. Saved models and providers are shared across websites. The extension supports ordinary HTTP and HTTPS pages, not browser internal pages, extension stores or other pages that prohibit injection, or local `file://` pages.
 
+## Continue a conversation on another page
+
+Enable the extension on the destination page, open **Conversation history**, and select the original conversation. Selecting only opens history; click **Continue on this page** before sending a task. Existing context and model settings remain with the original conversation, while page tools use the selected document. This works on the same hostname, another subdomain, or another hostname.
+
+The conversation source and execution page appear above the chat. While a task runs, wait or choose **Stop task and continue here**. Reloading, navigation, or closing a page revokes its authorization. If the extension background restarts with interrupted tasks, review and explicitly stop the source site's interrupted conversations before continuing. History is retained and tasks are not automatically replayed.
+
+New conversations, new windows, and `tab_open` create independent tasks without inheriting messages. `tab_open` also returns `conversationRef`; `tab_send` and `tab_read` accept `ownerSite` and reject ambiguous numeric IDs.
+
+Bookmark history belongs to the current origin. When another tab owns that history, startup waits at most 1.5 seconds and offers retry or an explicit independent conversation. Pages without Web Locks also require an explicit independent conversation. Use the extension for cross-site continuation.
+
 ## Configure your model
 
 Use a model that supports tool calling. Enter the API address and model name supplied by your provider.
@@ -129,14 +139,3 @@ Configuration example:
 Bookmarks contain the code and configuration saved when you created them. Drag a new bookmark from the installer after an update or a configuration change; existing bookmarks do not update automatically.
 
 For the unpacked extension, replace the files in its original directory, reload it in `chrome://extensions`, and refresh the webpage. GitHub Releases do not automatically update installed extensions.
-
-
-### Continue a conversation on another page
-
-Enable the extension on the destination page, open **Conversation history**, and select the original conversation. Selecting only opens history; click **Continue on this page** before sending a task. Existing context and model settings remain with the original conversation, while page tools use the selected document. This works on the same hostname, another subdomain, or another hostname.
-
-The conversation source and execution page appear above the chat. While a task runs, wait or choose **Stop task and continue here**. Reloading, navigation, or closing a page revokes its authorization. If the extension background restarts with interrupted tasks, review and explicitly stop the source site's interrupted conversations before continuing. History is retained and tasks are not automatically replayed.
-
-New conversations, new windows, and `tab_open` create independent tasks without inheriting messages. `tab_open` also returns `conversationRef`; `tab_send` and `tab_read` accept `ownerSite` and reject ambiguous numeric IDs.
-
-Bookmark history belongs to the current origin. When another tab owns that history, startup waits at most 1.5 seconds and offers retry or an explicit independent conversation. Pages without Web Locks also require an explicit independent conversation. Use the extension for cross-site continuation.

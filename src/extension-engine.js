@@ -112,7 +112,8 @@ async function engineFor(site,{defaults=false}={}) {
     });
     await pi.ready;
     const inspection=await PiConsolePlugin.inspectRuntime(pi);
-    const recovery=inspection.tasks.length||inspection.submissions.length?{version:PiConsolePlugin.createId(),chats:[...new Set([...inspection.tasks.map(item=>item.record.conversationId),...inspection.submissions.map(item=>item.conversationId)])]}:null;
+    const sourceChats=await pi.listChats();
+    const recovery=inspection.tasks.length||inspection.submissions.length?{version:PiConsolePlugin.createId(),chats:[...new Set([...inspection.tasks.map(item=>item.record.conversationId),...inspection.submissions.map(item=>item.conversationId)])].map(id=>({id:id||null,title:sourceChats.find(chat=>chat.id===id)?.title||'来源后台任务'}))}:null;
     const saved = await background({type:'shared-config',operation:'get'});
     pi.replaceModelSettings({profiles:saved.profiles || [],providers:saved.providers || []});
     if (defaults && !pi.config && saved.profiles?.length) await pi.configure({ ...saved.profiles[0], profileId:saved.profiles[0].id });

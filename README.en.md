@@ -110,14 +110,7 @@ Thanks to the [LINUX DO](https://linux.do/) community for providing a space to e
 
 Project code is licensed under the [Apache License 2.0](LICENSE). Bundled Linux, BusyBox and linux-wasm runtime code retain their own licenses; see [NOTICE](NOTICE) and the [Linux build guide](linux/README.md).
 
-## Account sign-in
-
-Uses Pi’s native OAuth login, token refresh, and provider implementations without a local service. Anthropic accepts an authorization code or full callback URL. OpenAI Codex (Pi’s legacy provider) offers pasted callback URLs or device codes; GitHub Copilot, Kimi Coding, Meta, and xAI use device authorization. Pi parses and validates pasted callbacks without a local callback server. Available models depend on account entitlements. Anthropic’s token endpoint currently rejects cross-origin requests from the installation site; use the extension to sign in. Pasting a callback URL does not remove that restriction.
-
-The bookmark loads OAuth and Bedrock code from the installation site on demand and requires the page to allow those scripts and network requests. Bookmark credentials stay on the current origin and are never exported in bookmarks; sign in again on another site. Extension credentials stay in the extension and work across websites. Signing out deletes that provider’s credentials.
-
-
-### Continue a conversation on another page
+## Continue a conversation on another page
 
 Enable the extension on the destination page, open **Conversation history**, and select the original conversation. Selecting only opens history; click **Continue on this page** before sending a task. Existing context and model settings remain with the original conversation, while page tools use the selected document. This works on the same hostname, another subdomain, or another hostname.
 
@@ -126,3 +119,9 @@ The conversation source and execution page appear above the chat. While a task r
 New conversations, new windows, and `tab_open` create independent tasks without inheriting messages. `tab_open` also returns `conversationRef`; `tab_send` and `tab_read` accept `ownerSite` and reject ambiguous numeric IDs.
 
 Bookmark history belongs to the current origin. When another tab owns that history, startup waits at most 1.5 seconds and offers retry or an explicit independent conversation. Pages without Web Locks also require an explicit independent conversation. Use the extension for cross-site continuation.
+
+## Account sign-in
+
+Uses Pi’s native OAuth login, token refresh, and provider implementations without a local service. Anthropic accepts an authorization code or full callback URL. OpenAI Codex (Pi’s legacy provider) offers pasted callback URLs or device codes; GitHub Copilot, Kimi Coding, Meta, and xAI use device authorization. Pi parses and validates pasted callbacks without a local callback server. Available models depend on account entitlements. Anthropic’s token endpoint currently rejects cross-origin requests from the installation site; use the extension to sign in. Pasting a callback URL does not remove that restriction.
+
+The bookmark loads OAuth and Bedrock code from the installation site on demand and requires the page to allow those scripts and network requests. Bookmark credentials stay on the current origin and are never exported in bookmarks; sign in again on another site. Extension credentials stay in the extension and work across websites. Signing out deletes that provider’s credentials.

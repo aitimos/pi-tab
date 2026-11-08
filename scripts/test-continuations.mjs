@@ -94,6 +94,7 @@ try{
   await worker.evaluate(()=>chrome.offscreen.closeDocument());const recoveryCount=requests.length;
   await interrupted.reload();await view(interrupted).locator('#recover-source').waitFor();
   assert.equal(requests.length,recoveryCount,'cold reading resumed a model');
+  await interrupted.screenshot({path:join(output,'recovery-required.png')});
   interrupted.once('dialog',dialog=>dialog.accept());await view(interrupted).locator('#recover-source').click();
   await view(interrupted).locator('#recover-source').waitFor({state:'hidden'});assert.equal(requests.length,recoveryCount,'recovery replayed a model');
   await view(interrupted).locator('#continue-here').click();await send(interrupted,'TOOL_PAGE');
