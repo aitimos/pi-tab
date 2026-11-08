@@ -84,7 +84,9 @@ try{
     await b.close();console.log('PASS continuation',host);
   }
   // Rebuild history without a source tab or a live Harness.
-  await a.close();await worker.evaluate(()=>chrome.offscreen.closeDocument());
+  await a.close();
+  for(let round=0;round<3;round++){
+  await worker.evaluate(()=>chrome.offscreen.closeDocument());
   const cold=await browser.newPage();await activate(cold,`http://localhost:${port}/cold`);
   const coldTab=await worker.evaluate(async url=>(await chrome.tabs.query({url}))[0].id,cold.url());
   await worker.evaluate(async tabId=>{await chrome.scripting.executeScript({target:{tabId},world:'ISOLATED',func:()=>{
@@ -99,7 +101,13 @@ try{
   }});},coldTab);
   await worker.evaluate(async tabId=>{for(let i=0;i<100;i++){const [result]=await chrome.scripting.executeScript({target:{tabId},world:'ISOLATED',func:()=>Boolean(window.__releaseNativeView)});if(result.result)return;await new Promise(resolve=>setTimeout(resolve,20));}throw Error('Delayed view fixture did not start');},coldTab);
   const beforeCold=requests.length;await view(cold).locator('#choose-history').click();
+  if(process.env.PI_TAB_ENGINE_DIAGNOSTICS)console.log('ENGINE BEFORE SELECT',JSON.stringify(await engineDiagnostics(cold)));
   const picker=cold.frameLocator('iframe[title="历史对话"]');
+  await cold.frames().find(frame=>frame.url().includes('/history-picker.html#')).evaluate(()=>{
+    const send=chrome.runtime.sendMessage.bind(chrome.runtime);window.__pickerTrace=[];
+    document.addEventListener('click',event=>window.__pickerTrace.push({click:event.target.closest('button')?.dataset.ref,trusted:event.isTrusted}));
+    chrome.runtime.sendMessage=(...args)=>{if(args[0].type!=='picker-select')return send(...args);window.__pickerTrace.push({sent:args[0].type});return send(...args).then(response=>{window.__pickerTrace.push({response});return response;});};
+  });
   await picker.locator('button[data-ref="'+encodeURIComponent(JSON.stringify(['127.0.0.1',1]))+'"]').click();
   await Promise.race([view(cold).locator('#continuation-summary').filter({hasText:'Continuation fixture · 127.0.0.1'}).waitFor(),picker.locator('#error').filter({hasText:/\S/}).waitFor().then(async()=>{throw Error('Cold picker: '+await picker.locator('#error').innerText());}),view(cold).locator('#continuation-error').filter({hasText:/\S/}).waitFor().then(async()=>{throw Error('Cold view: '+await view(cold).locator('#continuation-error').innerText());})]);
   await worker.evaluate(async tabId=>chrome.scripting.executeScript({target:{tabId},world:'ISOLATED',func:async()=>{window.__releaseNativeView();delete window.__releaseNativeView;await new Promise(requestAnimationFrame);}}),coldTab);
@@ -108,6 +116,7 @@ try{
   await cold.waitForFunction(()=>document.querySelector('[data-pi-overlay]')?.shadowRoot?.getElementById('chat-messages').textContent.includes('/cold'));
   await cold.screenshot({path:join(output,'cold-history.png')});console.log('PASS cold history with source tab closed');
   await cold.close();
+  }
   // Persist two real running conversations, recreate the background, and prove
   // reading/clearing cannot replay either interrupted model request.
   const interrupted=await browser.newPage();await activate(interrupted,base+'/recovery');
