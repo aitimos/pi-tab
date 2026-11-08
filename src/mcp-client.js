@@ -26,13 +26,13 @@ function linkSignals(signal, timeoutMs) {
 }
 
 async function readSseMessage(stream, id, controller) {
-  const reader = stream.getReader();
+  const reader = stream.getReader(), decoder = new TextDecoder();
   let buffer = '';
   try {
     for (;;) {
       const {value, done} = await reader.read();
-      if (done) break;
-      buffer += new TextDecoder().decode(value, {stream: true});
+      if (done) { buffer += decoder.decode(); break; }
+      buffer += decoder.decode(value, {stream: true});
       let boundary;
       while ((boundary = buffer.search(/\r?\n\r?\n/)) >= 0) {
         const block = buffer.slice(0, boundary);

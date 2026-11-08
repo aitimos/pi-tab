@@ -20,6 +20,40 @@ function startServer(handler) {
 
 const initializeResult = {protocolVersion: '2025-06-18', capabilities: {tools: {}}, serverInfo: {name: 'fixture', version: '1.0.0'}, instructions: 'Use search.\nMore.'};
 
+const unicodeText='订单已创建：上海 🧭';
+const unicodeInfo={...initializeResult,serverInfo:{name:'订单服务 🧭',version:'1'},instructions:'查询上海订单 🔎'};
+const unicodeTools=[{name:'search',description:'查询订单 🧭',inputSchema:{type:'object',properties:{q:{type:'string',description:'订单编号 🔎'}}}}];
+
+function unicodeClient(chunkSize,terminated=true){
+  return createMcpHttpClient({url:'https://example.com/mcp',fetch:async(_url,{body})=>{
+    const message=JSON.parse(body);
+    if(message.id===undefined)return new Response(null,{status:202});
+    const result=message.method==='initialize'?unicodeInfo:message.method==='tools/list'?{tools:unicodeTools}:{content:[{type:'text',text:unicodeText}]};
+    const notification='event: message\r\ndata: '+JSON.stringify({jsonrpc:'2.0',method:'notifications/message',params:{data:'前置通知 🔔'}})+'\r\n\r\n';
+    const bytes=new TextEncoder().encode(notification+'data: '+JSON.stringify({jsonrpc:'2.0',id:message.id,result})+(terminated?'\r\n\r\n':''));
+    const size=chunkSize||bytes.length;
+    return new Response(new ReadableStream({start(controller){
+      for(let offset=0;offset<bytes.length;offset+=size)controller.enqueue(bytes.slice(offset,offset+size));
+      controller.close();
+    }}),{headers:{'Content-Type':'text/event-stream'}});
+  }});
+}
+
+for(const size of [0,1,2,7])test(`SSE UTF-8 preserves initialization, tool schema and results with ${size||'whole'}-byte chunks`,async()=>{
+  const client=unicodeClient(size);
+  try{
+    assert.deepEqual(await client.initialize(),unicodeInfo);
+    assert.deepEqual(await client.listTools(),unicodeTools);
+    assert.deepEqual(mcpToolOutput(await client.callTool('search',{})),[{type:'text',text:unicodeText}]);
+  }finally{await client.close();}
+});
+
+test('SSE UTF-8 preserves a bytewise final event without a trailing separator',async()=>{
+  const client=unicodeClient(1,false);
+  try{assert.equal(mcpToolOutput(await client.callTool('search',{}))[0].text,unicodeText);}
+  finally{await client.close();}
+});
+
 test('performs the handshake, lists tools across pages and calls one', async t => {
   const seen = [];
   const {server, url} = await startServer(({request, response, message, reply}) => {
@@ -104,4 +138,20 @@ test('closing a session stays bounded when its DELETE endpoint never responds', 
   const started=Date.now();await client.close();
   assert.equal(deleted,true);assert.ok(Date.now()-started<3500,'close must not wait indefinitely');
   await assert.rejects(client.listTools(),/连接已关闭/);
+});
+
+for(const cancelled of [true,false])test(`partial SSE UTF-8 reads still ${cancelled?'cancel':'time out'}`,{timeout:4000},async t=>{
+  let received;const started=new Promise(resolve=>{received=resolve;});
+  const {server,url}=await startServer(({response})=>{
+    response.writeHead(200,{'Content-Type':'text/event-stream'});
+    const bytes=Buffer.from('data: {"result":"订单');
+    response.write(bytes.subarray(0,bytes.length-1));received();
+  });
+  t.after(()=>{server.closeAllConnections();server.close();});
+  const controller=new AbortController(),client=createMcpHttpClient({url,timeout:1});
+  const result=client.callTool('search',{},controller.signal);
+  await started;
+  if(cancelled)controller.abort(new Error('User cancelled'));
+  await assert.rejects(result,/cancel|abort|超时/i);
+  await client.close();
 });

@@ -9,6 +9,15 @@ export function mountMcpSettings({root,runtimePi,i18n}) {
     const node=el('button',label,className);node.type='button';
     node.addEventListener('click',()=>void attempt(action));return node;
   }
+  function visibilityButton(input){
+    const toggle=button(input.type==='password'?'显示':'隐藏',()=>{
+      const show=input.type==='password';input.type=show?'text':'password';
+      text(toggle,show?'隐藏':'显示');toggle.setAttribute('aria-pressed',String(show));
+    });
+    toggle.setAttribute('aria-pressed',String(input.type!=='password'));
+    if(input.id)toggle.setAttribute('aria-controls',input.id);
+    input.autocomplete='new-password';return toggle;
+  }
   function error(error){
     const messages=[t(error.message||'操作失败，请重试。'),...(error.diagnostics||[]).map(item=>`${item.path}: ${t(item.message)}`)];
     byId('mcp-error').textContent=messages.join('\n');
@@ -76,7 +85,7 @@ export function mountMcpSettings({root,runtimePi,i18n}) {
       const input=el(options?'select':'input');if(!options)input.type=secret?'password':'text';
       if(options)for(const item of options){const option=el('option');option.value=item;option.textContent=item;input.append(option);}
       input.value=value;input.setAttribute('aria-label',t('值'));row.append(name,input);
-      if(secret){const toggle=button('显示',()=>{const show=input.type==='password';input.type=show?'text':'password';text(toggle,show?'隐藏':'显示');toggle.setAttribute('aria-pressed',String(show));});toggle.setAttribute('aria-pressed','false');input.autocomplete='new-password';row.append(toggle);}
+      if(secret)row.append(visibilityButton(input));
       row.append(button('移除',()=>row.remove()));rows.append(row);
     }
     for(const [key,value] of Object.entries(values||{}))add(key,value);
@@ -114,7 +123,12 @@ export function mountMcpSettings({root,runtimePi,i18n}) {
     nameField.autocomplete='off';nameField.required=true;
     const limited=original.command!==undefined||original.type==='stdio'||original.type==='sse'||Object.hasOwn(original,'oauth');
     if(limited)editor.append(el('p','此配置无法在浏览器中连接。原始字段保留，仅可修改名称、说明和启用状态。','mcp-hint'));
-    const url=limited?null:field(editor,'HTTP(S) 地址','mcp-url',original.url||'');if(url)url.required=true;
+    const url=limited?null:field(editor,'HTTP(S) 地址','mcp-url',original.url||'',typeof original.url==='string'&&original.url.includes('?')?'password':'text');
+    if(url){
+      url.required=true;url.spellcheck=false;
+      const label=url.parentElement,row=el('div',null,'mcp-pair'),toggle=visibilityButton(url);
+      label.htmlFor=url.id;toggle.id='mcp-url-visibility';label.after(row);row.append(url,toggle);
+    }
     const description=field(editor,'说明','mcp-description',original.description||'');
     const enabled=field(editor,'启用','mcp-enabled','', 'checkbox');enabled.checked=original.enabled!==false;
     let headers,timeout,exposure,toolExposure;

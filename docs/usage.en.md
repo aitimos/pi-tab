@@ -79,7 +79,7 @@ Deleting a conversation removes its list entry and resets its active context. Sa
 
 ## MCP servers
 
-Open **Pi settings → MCP** to view servers. Use **Add server** or **Edit** to manage one entry, with headers and advanced options. Each entry saves independently; cancel leaves it unchanged. Deletion asks for confirmation and removes its tools. Header and environment values are hidden by default and can be revealed individually.
+Open **Pi settings → MCP** to view servers. Use **Add server** or **Edit** to manage one entry, with headers and advanced options. Each entry saves independently; cancel leaves it unchanged. Deletion asks for confirmation and removes its tools. Header and environment values, and saved URLs containing a query, are hidden by default. Select **Show** to view or edit them.
 
 **Import JSON** accepts pasted text or a file and always previews changes before confirmation. Four strict JSON formats are supported:
 
