@@ -104,3 +104,13 @@ test('a shared configuration update reconnects MCP servers in the running engine
   await broadcast({type:'shared-config-updated',profiles:[],providers:[],mcp:saved});
   assert.equal(JSON.stringify(mcp.at(-1)),JSON.stringify({input:saved,revision:0}));
 });
+
+
+test('credential changes stay in the engine and broadcast only a settings notification',async()=>{
+  const {emit,requests}=await engineFixture();
+  emit({type:'config_saved',profile:{id:'profile',apiKey:'PRIVATE_SENTINEL',headers:{Authorization:'PRIVATE_SENTINEL'}}});
+  emit({type:'provider_saved',provider:{id:'provider',apiKey:'PRIVATE_SENTINEL'}});
+  const events=requests.filter(request=>request.type==='engine-event');
+  assert.equal(events.length,2);assert.ok(!JSON.stringify(events).includes('PRIVATE_SENTINEL'));
+  assert.ok(events.every(request=>request.event.type==='models_changed'));
+});

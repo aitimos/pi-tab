@@ -763,7 +763,7 @@ try {
   });
   await check('closing one of two windows on the same conversation preserves restoration',async()=>{
     await evaluate(`document.querySelectorAll('[data-pi-overlay]')[1].shadowRoot.getElementById('close').click()`);
-    assert.deepEqual(await evaluate(`JSON.parse(sessionStorage.getItem('pi-tab-open-chats'))`),[currentId]);
+    assert.deepEqual(await evaluate(`JSON.parse(sessionStorage.getItem('pi-tab-open-chats-v2'))`),[{ownerSite:'127.0.0.1',conversationId:currentId}]);
   });
   await browser('tab',controllerPage);
   await check('deleting the last conversation creates a blank one with the same model',async()=>{

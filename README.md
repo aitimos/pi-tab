@@ -125,4 +125,3 @@ Pi Tab 基于 Pi Durable，把 Agent 带进你正在浏览的网页。点击书�
 “新对话”“新开窗口”和 `tab_open` 创建独立任务，不继承消息。`tab_open` 另返回 `conversationRef`；`tab_send`/`tab_read` 可传 `ownerSite`，数字 ID 在同一目标页存在歧义时会拒绝。
 
 书签历史限当前 origin。另一标签页占用同一历史时最多等待 1.5 秒，可返回原页或重试；显式“新建独立对话”使用新库。缺少 Web Locks 的网页也需显式新建独立对话。跨站接续请使用扩展。
-

@@ -3,6 +3,7 @@
 export async function extensionTestRpc({tabId,site,method,args=[],chatId,name}) {
   try {
     if(method==='createChat'){
+      await chrome.storage.session.set({['active:'+tabId]:true});
       for(let i=0;i<50;i++){
         try{const response=await chrome.tabs.sendMessage(tabId,{type:'activate'});if(response?.ok)break;}catch{}
         await new Promise(resolve=>setTimeout(resolve,100));

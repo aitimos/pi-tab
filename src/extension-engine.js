@@ -14,7 +14,7 @@ const pageToolNames = new Set(['page_snapshot', 'inspect_dom', 'js_eval', 'click
 
 async function background(request) {
   const response = await chrome.runtime.sendMessage(request);
-  if (!response?.ok) throw Object.assign(new Error(response?.error || '后台没有响应。'),{diagnostics:response?.diagnostics});
+  if (!response?.ok) throw Object.assign(new Error(response?.error || '后台没有响应。'),{diagnostics:response?.diagnostics,code:response?.code});
   return response.value;
 }
 
@@ -44,7 +44,7 @@ const continuations = new Continuations({
 async function sourceState(ref) {
   const engine=await existing(ref);
   const state=await continuations.state(ref);
-  return {...state, config:engine.pi.configFor(ref.conversationId), recovery:engine.recovery};
+  return {...state,title:(await engine.pi.listChats()).find(chat=>chat.id===ref.conversationId)?.title, config:engine.pi.configFor(ref.conversationId), recovery:engine.recovery};
 }
 async function protocol(message) {
   const {operation,ref,args=[],authorization={}}=message;
@@ -71,8 +71,8 @@ async function protocol(message) {
   if(operation==='stop')return continuations.stop(ref,()=>pi.agent(id).abort());
   if(operation==='create')return continuations.serial(ref.ownerSite,async()=>{
     const created=await pi.createChat({inheritFrom:id,activate:false});
-    await historyIndex.reconcile(ref.ownerSite);
-    return conversationRef(ref.ownerSite,created);
+    const createdRef=conversationRef(ref.ownerSite,created);
+    try{await historyIndex.reconcile(ref.ownerSite);return createdRef;}catch{return {...createdRef,directoryError:true};}
   });
   if(operation==='delete')return continuations.serial(ref.ownerSite,async()=>{
     if((await continuations.state(ref)).busy)throw Error('CONVERSATION_BUSY');
@@ -91,7 +91,7 @@ async function protocol(message) {
   throw Error('UNKNOWN_CONTINUATION_OPERATION');
 }
 
-async function engineFor(site) {
+async function engineFor(site,{defaults=false}={}) {
   let createdPi,createdLinux;
   if (!engines.has(site)) engines.set(site, (async () => {
     const linux=createdLinux=createLinuxEnvironments(site);
@@ -108,7 +108,7 @@ async function engineFor(site) {
     const recovery=inspection.tasks.length||inspection.submissions.length?{version:PiConsolePlugin.createId(),chats:[...new Set([...inspection.tasks.map(item=>item.record.conversationId),...inspection.submissions.map(item=>item.conversationId)])]}:null;
     const saved = await background({type:'shared-config',operation:'get'});
     pi.replaceModelSettings({profiles:saved.profiles || [],providers:saved.providers || []});
-    if (!pi.config && saved.profiles?.length) await pi.configure({ ...saved.profiles[0], profileId:saved.profiles[0].id });
+    if (defaults && !pi.config && saved.profiles?.length) await pi.configure({ ...saved.profiles[0], profileId:saved.profiles[0].id });
     // MCP configuration is shared by every site; connecting happens in the background.
     pi.applyMcpConfig(saved.mcp||{mcpServers:{}},saved.mcpRevision||0);
 
@@ -151,6 +151,7 @@ async function engineFor(site) {
       if (event.type === 'provider_saved') {
         void chrome.runtime.sendMessage({type:'shared-config',operation:'provider-save',provider:event.provider}).catch(()=>{});
       }
+      if(['config_saved','provider_saved'].includes(event.type)){void chrome.runtime.sendMessage({type:'engine-event',site,event:{type:'models_changed'}}).catch(()=>{});return;}
       if(event.conversationId)emitRef(conversationRef(site,event.conversationId),event);
       else void chrome.runtime.sendMessage({type:'engine-event',site,event}).catch(()=>{});
     });
@@ -167,10 +168,10 @@ chrome.runtime.onMessage.addListener((message, _sender, respond) => {
     const owned=[...continuations.rows.values()].filter(row=>row.target?.tabId===message.tabId).map(row=>row.ref);
     continuations.invalidate(message.tabId);
     const stopping=message.type==='tab-closed'?Promise.all(owned.map(async ref=>{const e=await existing(ref);if(!e.recovery)await e.pi.agent(ref.conversationId).abort();})):Promise.resolve();
-    stopping.then(()=>respond({ok:true}),error=>respond({ok:false,code:error.message,error:continuationErrorMessage(error)}));return true;
+    stopping.then(()=>respond({ok:true}),error=>respond({ok:false,code:error.code||error.message,error:continuationErrorMessage(error)}));return true;
   }
   if(message.target==='continuations'){
-    protocol(message).then(value=>respond({ok:true,value}),error=>respond({ok:false,code:error.message,error:continuationErrorMessage(error)}));return true;
+    protocol(message).then(value=>respond({ok:true,value}),error=>respond({ok:false,code:error.code||error.message,error:continuationErrorMessage(error)}));return true;
   }
   if(message.type==='mcp-update-guard'){
     sharedMcpGate=message.value;
@@ -195,10 +196,10 @@ chrome.runtime.onMessage.addListener((message, _sender, respond) => {
   }
   if (message.target !== 'engine') return false;
   (async () => {
-    const engine=await engineFor(message.site);
+    const engine=await engineFor(message.site,{defaults:['initialize','createChat'].includes(message.method)});
     const {pi}=engine;
     const {method,chatId,args=[],tabId} = message;
-    if(!['initialize','bind','selectChat','listChats','readAgent','tabCandidates'].includes(method))requireOwner(engine);
+    if(['createChat','deleteChat','receiveFromTab'].includes(method)||(method==='agent'&&!['history','queuedMessages','savedConfig','discoverModels'].includes(message.name)))requireOwner(engine);
     if (method === 'initialize') {
       const activeId=[...continuations.rows.values()].find(row=>row.ref.ownerSite===message.site&&row.target?.tabId===tabId)?.ref.conversationId??pi.conversation.id;
       return {activeId,config:pi.configFor(activeId),defaultPrompt:pi.defaultPrompt,
@@ -269,6 +270,6 @@ chrome.runtime.onMessage.addListener((message, _sender, respond) => {
       return history.entries.slice(-(args[0]||10)).map(entry=>({kind:entry.kind,text:entry.model?.map(item=>typeof item.content==='string'?item.content:item.content?.filter(part=>part.type==='text').map(part=>part.text).join('\n')).filter(Boolean).join('\n')}));
     }
     throw new Error('未知引擎操作。');
-  })().then(value=>respond({ok:true,value}),error=>respond({ok:false,code:error.message,error:continuationErrorMessage(error),diagnostics:error.diagnostics}));
+  })().then(value=>respond({ok:true,value}),error=>respond({ok:false,code:error.code||error.message,error:continuationErrorMessage(error),diagnostics:error.diagnostics}));
   return true;
 });

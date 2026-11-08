@@ -422,7 +422,6 @@
   "这段历史正在另一标签页使用，请返回原页或稍后重试。": "This history is in use in another tab. Return there or retry later.",
   "浏览器不支持历史独占锁，请使用扩展，或显式新建独立对话。": "This browser cannot lock history. Use the extension or create an independent conversation.",
   "另一窗口已切换执行页面，请刷新状态后重试。": "Another window changed the execution page. Refresh and try again.",
-  "任务正在运行，请等待完成或停止后再切换。": "Task is running. Wait or stop it before switching.",
   "正在停止任务，请稍后重试。": "The task is stopping. Try again shortly.",
   "任务尚未完全停止，请等待后重试。": "The task has not stopped completely. Wait and retry.",
   "执行页面已刷新、跳转或关闭，请在本页重新接续。": "The execution document changed or closed. Continue on this page to reconnect.",
@@ -437,5 +436,7 @@
   "对话已删除，请刷新目录以更新列表。": "Conversation deleted; refresh history to update the directory.",
   "连接已重建，请先查看历史和队列，再确认是否重新发送。": "The connection restarted. Review history and the queue before resending.",
   "历史目录版本不受支持，可继续使用本站对话。": "This history index version is unsupported. Local site history remains available.",
-  "重建目录": "Rebuild history"
+  "重建目录": "Rebuild history",
+  "对话已创建，但历史目录暂不可用，可稍后刷新目录。": "Conversation created; the history directory is unavailable. Refresh it later.",
+  "任务正在运行，请先停止或等待任务完成后再切换。": "Task is running. Wait or stop it before switching."
 }

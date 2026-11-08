@@ -23,7 +23,7 @@ const internal=sender=>!sender.tab && sender.id===chrome.runtime.id;
 async function coordinator(request) {
   await ensureEngine();
   const response=await chrome.runtime.sendMessage({...request,target:'continuations',pageTarget:request.target});
-  if(!response?.ok)throw Error(response?.error||'ENGINE_UNAVAILABLE');
+  if(!response?.ok)throw Object.assign(Error(response?.error||'ENGINE_UNAVAILABLE'),{code:response?.code});
   return response.value;
 }
 async function validTarget(target) {
@@ -175,6 +175,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
         authorization:{target,viewId:message.viewId,leaseToken:message.leaseToken},clientRequestId:message.clientRequestId});
       if(message.operation==='continue'){try{await validTarget(target);}catch(error){await chrome.runtime.sendMessage({type:'target-invalidated',tabId:target.tabId});throw error;}}
       if(message.operation==='create')subscribe(value,target,message.viewId);
+      if(message.operation==='delete'&&value.replacementRef)subscribe(value.replacementRef,target,message.viewId);
       return value;
     }
     if(message.type==='shared-config'){
@@ -224,6 +225,10 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
     if(message.type==='engine-event'){
       if(!internal(sender))throw Error('INTERNAL_ONLY');
       const views=message.ref?subscribers.get(refKey(message.ref)):null;
+      if(views&&message.event.type==='chat_deleted'&&message.event.replacementId){
+        const replacement=conversationRef(message.ref.ownerSite,message.event.replacementId);
+        for(const [viewId,view]of views){const target=documents.get(view.tabId);if(!target||target.documentId!==view.documentId)continue;subscribe(replacement,target,viewId);const key=selectedKey(view.tabId,target.origin),saved=await chrome.storage.session.get(key);await chrome.storage.session.set({[key]:[...new Set([...(saved[key]||[]),refKey(replacement)])]});}
+      }
       if(views)await Promise.all([...views.values()].map(view=>chrome.tabs.sendMessage(view.tabId,{type:'engine-event',ref:message.ref,event:message.event,sequence:message.sequence,epoch:message.epoch},{documentId:view.documentId}).catch(()=>{})));
       if(!message.ref)await Promise.all([...documents.values()].map(target=>chrome.tabs.sendMessage(target.tabId,{type:'engine-event',event:message.event},{documentId:target.documentId}).catch(()=>{})));
       return true;
@@ -276,15 +281,14 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
       const ref=matches[0];
       if(message.type==='tabs-send'&&opened&&refKey(opened)===refKey(ref)) {
         const target=documents.get(tab.id);await validTarget(target);
-        if(target.url!==openedRecord.url)throw Error('TARGET_INVALIDATED');
         const state=await coordinator({operation:'view',ref});
-        if(!state.target)await coordinator({operation:'continue',ref,viewId:'tab-agent:'+tab.id,target,expectedVersion:state.version});
+        if(!state.target){if(target.url!==openedRecord.url)throw Error('TARGET_INVALIDATED');await coordinator({operation:'continue',ref,viewId:'tab-agent:'+tab.id,target,expectedVersion:state.version});}
       }
       return engineCall(ref.ownerSite,tab.id,message.type==='tabs-send'?'receiveFromTab':'readAgent',
         message.type==='tabs-send'?[message.text,`agent ${message.fromChatId}`]:[message.limit],ref.conversationId);
     }
     throw new Error('未知扩展消息。');
-  })().then(value=>respond({ok:true,value}),error=>respond({ok:false,code:error.message,error:continuationErrorMessage(error),diagnostics:error.diagnostics}));
+  })().then(value=>respond({ok:true,value}),error=>respond({ok:false,code:error.code||error.message,error:continuationErrorMessage(error),diagnostics:error.diagnostics}));
   return true;
 });
 

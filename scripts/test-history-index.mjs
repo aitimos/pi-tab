@@ -31,6 +31,11 @@ try{
     await index.rebuild();let listed=await index.list();check(listed.rows.length===directory.length,'index source mismatch');check(listed.sourceErrors.some(error=>error.ownerSite==='future.example'),'future source error absent');
     await index.replace('other.example',[{id:directory[0].id,title:'collision'}]);listed=await index.list();check(listed.rows.length===directory.length+1,'numeric identity collision');
     await index.replace('cold.example',[]);listed=await index.list();check(listed.rows.every(row=>row.ref.ownerSite!=='cold.example'),'partition delete failed');
+    const original=index.database.transaction.bind(index.database);
+    index.database.transaction=(...args)=>{const tx=original(...args);if(args[1]==='readwrite')tx.objectStore('rows').put=()=>{throw new DOMException('quota fixture','QuotaExceededError');};return tx;};
+    let quotaRejected=false;try{await index.replace('other.example',[{id:2,title:'must not partially save'}]);}catch{quotaRejected=true;}
+    index.database.transaction=original;check(quotaRejected,'quota failure accepted');
+    check((await index.list()).rows.some(row=>row.ref.ownerSite==='other.example'&&row.ref.conversationId===directory[0].id),'failed transaction lost previous partition');
     await index.reset();
     const sources=Array.from({length:100},(_,i)=>({name:`pi-tab-site-source-${i}.example`,version:1}));
     const fakeFactory={databases:async()=>sources,open:(...args)=>factory.open(...args),deleteDatabase:name=>factory.deleteDatabase(name)};
@@ -41,7 +46,7 @@ try{
     check(rows.length===10000,'large directory pagination missing rows');check(peak===1,'source readers not serial');check(rows.every(row=>Object.keys(row).sort().join(',')==='key,ref,title,version'),'index stored extra data');
     const controller=new AbortController();controller.abort();let cancelled=false;try{await large.rebuild({signal:controller.signal});}catch{cancelled=true;}check(cancelled,'scan cancellation ignored');
     await large.reset();
-    return {realColdRows:directory.length,versionRejected,missingRejected,raceRejected,large:{sources:100,rows:rows.length,durationMs:duration,peakReaders:peak},cancelled};
+    return {realColdRows:directory.length,versionRejected,missingRejected,raceRejected,quotaRejected,large:{sources:100,rows:rows.length,durationMs:duration,peakReaders:peak},cancelled};
   });
   assert.equal(evidence.large.rows,10000);await writeFile(join(output,'history-index.json'),JSON.stringify(evidence,null,2));console.log(JSON.stringify(evidence));
 }finally{await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r));}

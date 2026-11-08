@@ -140,4 +140,3 @@ The conversation source and execution page appear above the chat. While a task r
 New conversations, new windows, and `tab_open` create independent tasks without inheriting messages. `tab_open` also returns `conversationRef`; `tab_send` and `tab_read` accept `ownerSite` and reject ambiguous numeric IDs.
 
 Bookmark history belongs to the current origin. When another tab owns that history, startup waits at most 1.5 seconds and offers retry or an explicit independent conversation. Pages without Web Locks also require an explicit independent conversation. Use the extension for cross-site continuation.
-

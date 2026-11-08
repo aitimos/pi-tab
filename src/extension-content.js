@@ -16,7 +16,7 @@ const documentReady=hello();
 function checkTarget(target){if(!target||target.nonce!==targetNonce||target.routeEpoch!==routeEpoch||target.url!==location.href||target.origin!==location.origin)throw Error('TARGET_INVALIDATED');}
 const continuationCall=(ref,operation,args=[],name,extra={})=>extensionRequest({type:'continuation-call',ref,operation,args,name,viewId,leaseToken:leases.get(refKey(ref)),clientRequestId:PiConsolePlugin.createId(),...extra});
 const emitState=(id,state)=>{states.set(id,state);for(const listener of listeners)listener({type:'binding_state',conversationId:id,state});};
-const refreshState=async ref=>{const id=refKey(ref),state=await continuationCall(ref,'view');emitState(id,state);return state;};
+const refreshState=async ref=>{const id=refKey(ref),state=await continuationCall(ref,'view'),previous=states.get(id);if(!state.target||(previous&&(previous.version.epoch!==state.version.epoch||previous.version.seq!==state.version.seq)))leases.delete(id);emitState(id,state);return state;};
 setInterval(()=>{if(location.href!==lastUrl){lastUrl=location.href;routeEpoch++;leases.clear();void hello().catch(()=>{});}},250);
 const configs = new Map();
 const eventSequences=new Map();
@@ -81,7 +81,7 @@ async function initializeExtension() {
     deleteChat:async id=>{const value=await continuationCall(parseRef(id),'delete');return {replacementId:refKey(value.replacementRef)};},
     async createChat({inheritFrom=activeId}={}){
       const ref=await continuationCall(parseRef(inheritFrom),'create');
-      activeId=refKey(ref);const state=await refreshState(ref);configs.set(activeId,state.config);busy.set(activeId,state.busy);return activeId;
+      activeId=refKey(ref);if(ref.directoryError)for(const listener of listeners)listener({type:'directory_error',conversationId:activeId});const state=await refreshState(ref);configs.set(activeId,state.config);busy.set(activeId,state.busy);return activeId;
     },
     agent(initialId){
       let chatId=initialId;

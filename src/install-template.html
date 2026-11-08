@@ -129,7 +129,7 @@ async function openChat(initialConfig, options = {}) {
     .form-section:last-child { margin-bottom:0; }
     .form-section legend { padding:0; margin-bottom:12px; color:var(--text); font-size:13px; font-weight:600; }
     .field-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
-    #setup .field-grid,#provider-form .field-grid { grid-template-columns:repeat(auto-fit,minmax(min(180px,100%),1fr)); }
+    #setup .field-grid,#provider-form .field-grid { grid-template-columns:repeat(auto-fit,minmax(min(170px,100%),1fr)); }
     .form-footer { flex:none; display:flex; flex-direction:column; gap:8px; padding:12px 20px; border-top:.5px solid var(--line); background:var(--bg); }
     .form-footer .form-buttons { display:flex; gap:8px; }
     .form-footer .form-buttons button { flex:1; margin:0!important; }
@@ -657,7 +657,7 @@ async function openChat(initialConfig, options = {}) {
     const panel=byId('continuation-panel');panel.hidden=false;panel.dataset.authorized=String(agent.authorized);
     try {
       const binding=await agent.refreshBinding(),ref=runtimePi.parseConversationRef(agent.id);
-      byId('continuation-summary').textContent=t('当前对话：{0}；执行页面：{1}',ref.ownerSite+' / '+ref.conversationId,binding.target?.url||t('未绑定，请在本页重新接续'));
+      byId('continuation-summary').textContent=t('当前对话：{0}；执行页面：{1}',(binding.title||t('新对话'))+' · '+ref.ownerSite,binding.target?.url||t('未绑定，请在本页重新接续'));
       byId('continue-here').disabled=binding.busy||Boolean(binding.recovery)||agent.authorized;
       byId('stop-continue').hidden=!binding.busy||Boolean(binding.recovery);
       byId('recover-source').hidden=!binding.recovery;
@@ -1824,6 +1824,7 @@ async function openChat(initialConfig, options = {}) {
     const pi = agent;
     if (!pi || typeof pi.onEvent !== 'function') return;
     state.unsubscribe = runtimePi.onEvent(event => {
+      if(event.type==='directory_error'){byId('continuation-error').textContent=t('对话已创建，但历史目录暂不可用，可稍后刷新目录。');return;}
       if(event.type==='binding_state')return;
       if(event.type==='history_resync'){if(event.conversationId===pi.id)void restoreHistory();return;}
       if(['binding_changed','target_invalidated','recovery_complete'].includes(event.type)){void renderContinuation();return;}

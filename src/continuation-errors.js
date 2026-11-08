@@ -1,7 +1,7 @@
 const messages={
   BINDING_CONFLICT:'另一窗口已切换执行页面，请刷新状态后重试。',
   CONTINUE_HERE_REQUIRED:'请先点击“在当前页继续”，再发送任务。',
-  CONVERSATION_BUSY:'任务正在运行，请等待完成或停止后再切换。',
+  CONVERSATION_BUSY:'任务正在运行，请先停止或等待任务完成后再切换。',
   CONVERSATION_STOPPING:'正在停止任务，请稍后重试。',
   CONVERSATION_NOT_DRAINED:'任务尚未完全停止，请等待后重试。',
   TARGET_INVALIDATED:'执行页面已刷新、跳转或关闭，请在本页重新接续。',
