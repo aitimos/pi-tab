@@ -666,7 +666,7 @@ async function openChat(initialConfig, options = {}) {
     }catch(error){byId('continuation-error').textContent=t(error.message);}
   }
   async function continuationAction(work){try{byId('continuation-error').textContent='';await work();}catch(error){byId('continuation-error').textContent=t(error.message);}finally{await renderContinuation();}}
-  byId('choose-history').onclick=()=>continuationAction(async()=>{const id=await runtimePi.chooseHistory();if(id)await switchConversation(id);});
+  byId('choose-history').onclick=event=>{if(event.isTrusted)void continuationAction(async()=>{const id=await runtimePi.chooseHistory();if(id)await switchConversation(id);});};
   byId('continue-here').onclick=()=>continuationAction(()=>agent.continueHere());
   byId('stop-continue').onclick=()=>continuationAction(async()=>{await agent.abort();await agent.refreshBinding();await agent.continueHere();});
   byId('target-return').onclick=()=>continuationAction(()=>agent.returnToTarget());

@@ -42,6 +42,7 @@ function senderTarget(sender) {
   return target;
 }
 function revoke(tabId) {
+  for(const [requestId,run]of pageTools)if(run.target.tabId===tabId){run.controller.abort();void chrome.tabs.sendMessage(tabId,{type:'cancel-tool',requestId},{documentId:run.target.documentId}).catch(()=>{});}
   documents.delete(tabId);
   for(const [key,grant]of grants)if(grant.target.tabId===tabId)grants.delete(key);
   for(const [key,views]of subscribers){for(const [id,view]of views)if(view.tabId===tabId)views.delete(id);if(!views.size)subscribers.delete(key);}
@@ -207,17 +208,18 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
     }
     if(message.type==='cancel-page-tool'){
       if(!internal(sender))throw Error('INTERNAL_ONLY');
-      pageTools.get(message.requestId)?.abort();
+      pageTools.get(message.requestId)?.controller.abort();
       await chrome.tabs.sendMessage(message.tabId,{type:'cancel-tool',requestId:message.requestId},{documentId:message.documentId}).catch(()=>{});
       return true;
     }
     if(message.type==='page-tool'){
       if(!internal(sender))throw Error('INTERNAL_ONLY');
       const target=message.target;await validTarget(target);
-      const controller=new AbortController();pageTools.set(message.requestId,controller);
+      const controller=new AbortController();pageTools.set(message.requestId,{controller,target});
       try {
         controller.signal.throwIfAborted();
         const response=await chrome.tabs.sendMessage(target.tabId,{type:'execute-tool',target,requestId:message.requestId,name:message.name,args:message.args},{documentId:target.documentId});
+        controller.signal.throwIfAborted();
         if(!response?.ok)throw Error(response?.error||'TARGET_INVALIDATED');
         return response.value;
       }finally {pageTools.delete(message.requestId);}

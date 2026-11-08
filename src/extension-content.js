@@ -17,7 +17,7 @@ function checkTarget(target){if(!target||target.nonce!==targetNonce||target.rout
 const continuationCall=(ref,operation,args=[],name,extra={})=>extensionRequest({type:'continuation-call',ref,operation,args,name,viewId,leaseToken:leases.get(refKey(ref)),clientRequestId:PiConsolePlugin.createId(),...extra});
 const emitState=(id,state)=>{states.set(id,state);for(const listener of listeners)listener({type:'binding_state',conversationId:id,state});};
 const refreshState=async ref=>{const id=refKey(ref),state=await continuationCall(ref,'view'),previous=states.get(id);if(!state.target||(previous&&(previous.version.epoch!==state.version.epoch||previous.version.seq!==state.version.seq)))leases.delete(id);emitState(id,state);return state;};
-setInterval(()=>{if(location.href!==lastUrl){lastUrl=location.href;routeEpoch++;leases.clear();void hello().catch(()=>{});}},250);
+setInterval(()=>{if(location.href!==lastUrl){lastUrl=location.href;routeEpoch++;leases.clear();for(const controller of toolRuns.values())controller.abort();void hello().catch(()=>{});}},250);
 const configs = new Map();
 const eventSequences=new Map();
 const busy = new Map();

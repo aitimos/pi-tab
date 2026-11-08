@@ -9,7 +9,7 @@ import {conversationRef,refKey} from '../src/conversation-ref.js';
 async function fixture(){
   const session=new Map(),calls=[],pageCalls=[];
   const tabs=new Map([[10,{id:10,url:'https://www.example.com/a',title:'A'}],[11,{id:11,url:'https://other.example/b',title:'B'}]]);
-  let onMessage,onUpdated,onRemoved,onClick;
+  let onMessage,onUpdated,onRemoved,onClick;const heldTools=new Map();
   const chrome={runtime:{id:'extension',getURL:path=>'chrome-extension://extension/'+path,onMessage:{addListener:f=>onMessage=f},sendMessage:async message=>{
     calls.push(message);
     if(message.method==='listChats')return {ok:true,value:[{id:1,title:'History'}]};
@@ -19,14 +19,14 @@ async function fixture(){
   }},i18n:{getAcceptLanguages:async()=>['en']},
   action:{onClicked:{addListener:f=>onClick=f},setBadgeText:async()=>{},setTitle:async()=>{}},
   offscreen:{hasDocument:async()=>true},scripting:{executeScript:async()=>{}},
-  tabs:{onUpdated:{addListener:f=>onUpdated=f},onRemoved:{addListener:f=>onRemoved=f},query:async()=>[...tabs.values()],get:async id=>tabs.get(id),update:async(id,change)=>Object.assign(tabs.get(id),change),sendMessage:async(id,message,options)=>{pageCalls.push({id,message,options});return {ok:true,value:'result'};}},
+  tabs:{onUpdated:{addListener:f=>onUpdated=f},onRemoved:{addListener:f=>onRemoved=f},query:async()=>[...tabs.values()],get:async id=>tabs.get(id),update:async(id,change)=>Object.assign(tabs.get(id),change),sendMessage:async(id,message,options)=>{pageCalls.push({id,message,options});if(message.type==='execute-tool'&&message.name==='held')return new Promise(resolve=>heldTools.set(message.requestId,resolve));if(message.type==='cancel-tool')heldTools.get(message.requestId)?.({ok:false,error:'cancelled'});return {ok:true,value:'result'};}},
   storage:{onChanged:{addListener(){}},local:{get:async()=>({})},session:{get:async key=>({[key]:session.get(key)}),set:async values=>{for(const [key,value]of Object.entries(values))session.set(key,value);},remove:async key=>session.delete(key)}}};
   vm.runInNewContext((await readFile('src/extension-worker.js','utf8')).replace(/^import .*;$/gm,''),{continuationErrorMessage,chrome,McpConfigStore,conversationRef,refKey,createI18n,crypto:globalThis.crypto,URL,AbortController,setTimeout,console});
   const sender=id=>({id:'extension',frameId:0,documentId:'doc-'+id,url:tabs.get(id).url,tab:tabs.get(id)});
   const send=(message,from=10)=>new Promise(resolve=>onMessage(message,typeof from==='number'?sender(from):from,resolve));
   const internal={id:'extension',url:'chrome-extension://extension/engine.html'};
   const hello=async id=>(await send({type:'document-hello',nonce:'nonce-'+id,routeEpoch:0},id)).value;
-  return {send,hello,sender,internal,tabs,calls,pageCalls,onClick,onUpdated,onRemoved};
+  return {send,hello,sender,internal,tabs,calls,pageCalls,onClick,onUpdated,onRemoved,heldTools};
 }
 test('native paths share a source engine; document tools use documentId and never follow navigation',async()=>{
   const f=await fixture();const target=await f.hello(10);await f.hello(11);
@@ -59,4 +59,14 @@ test('host pages and ungranted iframes cannot list history or issue privileged t
   assert.equal((await f.send({type:'picker-list',grant},{...f.sender(10),frameId:1,url:'https://example.com/'})).ok,false);
   f.onUpdated(10,{status:'loading'});
   assert.equal((await f.send({type:'picker-list',grant},{...f.sender(10),frameId:1,documentId:'picker',url})).ok,false);
+});
+
+
+test('navigation cancels an in-flight tool on its original document',async()=>{
+  const f=await fixture(),target=await f.hello(10);
+  const running=f.send({type:'page-tool',target,requestId:'held',name:'held',args:{}},f.internal);
+  for(let i=0;i<20&&!f.heldTools.has('held');i++)await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(f.heldTools.has('held'),true);f.onUpdated(10,{status:'loading'});
+  assert.equal((await running).ok,false);
+  const cancelled=f.pageCalls.find(call=>call.message.type==='cancel-tool');assert.equal(cancelled.options.documentId,'doc-10');
 });
