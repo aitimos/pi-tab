@@ -76,6 +76,7 @@ try{
   await control.evaluate(async url=>{const tab=(await chrome.tabs.query({})).find(tab=>tab.url===url);await chrome.storage.session.set({['active:'+tab.id]:false});},a.url());
   await restart(async()=>{await ui(a).locator('#message-input').fill('UNSENT_AFTER_WORKER');await ui(a).locator('#send').click();});
   await ui(a).locator('#continuation-panel[data-authorized="false"]').waitFor();await ui(a).locator('#continue-here:enabled').waitFor();
+  await ui(a).locator('#abort').waitFor({state:'hidden'});
   await b.locator('iframe[title="历史对话"]').waitFor({state:'detached'});
   assert.equal(requests.length,before,'restart blindly resubmitted a message');
   assert.equal(await ui(a).locator('#message-input').inputValue(),'UNSENT_AFTER_WORKER','a definitely rejected input should remain a draft');

@@ -669,13 +669,13 @@ try {
     await browser('tab',controllerPage);
   });
   await check('Durable snapshot with a live run preserves the running indicator',async()=>{
-    await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});await chrome.tabs.sendMessage(tab.id,{type:'engine-event',ref:{ownerSite:'127.0.0.1',conversationId:${currentId}},event:{type:'snapshot',conversationId:${currentId},run:{inputs:[1]}}});})()`);
+    await evaluate(`(async()=>{const response=await chrome.runtime.sendMessage({type:'engine-event',ref:{ownerSite:'127.0.0.1',conversationId:${currentId}},event:{type:'snapshot',conversationId:${currentId},run:{inputs:[1]}}});if(!response?.ok)throw Error(response?.error||'Event delivery failed');})()`);
     await browser('tab',sourcePage);
     assert.equal(await evaluate(`${root}.querySelector('[data-chat-id="${chatAttribute(currentId)}"] .chat-running').hidden`),false);
     await browser('tab',controllerPage);
   });
   await check('agent queue and delayed completion preserve a live run and its output',async()=>{
-    const deliver=event=>evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});await chrome.tabs.sendMessage(tab.id,{type:'engine-event',ref:{ownerSite:'127.0.0.1',conversationId:${currentId}},event:${JSON.stringify({...event,conversationId:currentId})}});})()`);
+    const deliver=event=>evaluate(`(async()=>{const response=await chrome.runtime.sendMessage({type:'engine-event',ref:{ownerSite:'127.0.0.1',conversationId:${currentId}},event:${JSON.stringify({...event,conversationId:currentId})}});if(!response?.ok)throw Error(response?.error||'Event delivery failed');})()`);
     await deliver({type:'message_start',message:{role:'assistant',content:[{type:'text',text:'Before'}]}});
     await browser('tab',sourcePage);
     try {
