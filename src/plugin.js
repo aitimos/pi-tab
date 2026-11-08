@@ -23,6 +23,10 @@ import { mistralConversationsApi } from '@earendil-works/pi-ai/api/mistral-conve
 import { openAICodexResponsesApi } from '@earendil-works/pi-ai/api/openai-codex-responses.lazy';
 import { piMessagesApi } from '@earendil-works/pi-ai/api/pi-messages.lazy';
 import {callTool} from './tool-call.js';
+import {createMcpHttpClient, mcpToolOutput, McpError} from './mcp-client.js';
+import {McpConfigStore} from './mcp-store.js';
+import {mcpPublicSummary,mcpVersion,readMcpJson,mcpVariableReferences,mergeMcpBookmark} from './mcp-config.js';
+import {exposesTool, mcpPromptSection, normalizeMcpServers, parseMcpConfig, uniqueToolName} from './mcp.js';
 import { AssistantEntry, createRegistry, defineDoc, defineExtension, defineTool, Harness, InboxDoc, section, watchEvents } from '@earendil-works/pi-durable';
 import { IndexedDbStorage } from '@earendil-works/pi-durable/storage/indexeddb';
 import { Type } from 'typebox';
@@ -107,7 +111,7 @@ function describe(el) {
 export { createModelConfig } from './model-config.js';
 export { default as loadModelCatalog } from '#model-catalog';
 
-export function install({ globalName = 'pi', log = true, storageName, storageFactory, executionEnv, nativeTools = [], deferResume = false, toolOnly = false, pageContext = () => ({ url: location.href, title: document.title }) } = {}) {
+export function install({ globalName = 'pi', log = true, storageName, storageFactory, executionEnv, nativeTools = [], deferResume = false, toolOnly = false, sharedMcp = false, pageContext = () => ({ url: location.href, title: document.title }) } = {}) {
   if (window[globalName]?.__piConsolePlugin) return window[globalName];
   if (globalName in window) throw new Error(`window.${globalName} 已被网页占用。请用 PiConsolePlugin.install({ globalName: 'piAgent' })。`);
 
@@ -137,6 +141,10 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
   const activeRuns = new Map(), eventStreams = new Map(), configurations = new Map(), durableBusy = new Map();
   const titleJobs = new Map();
   let promptText = DEFAULT_PROMPT;
+  // MCP servers are optional and independent of the model configuration. The
+  // raw mcp.json object is kept so an edit never rewrites fields we ignore.
+  let mcpSettings = {mcpServers: {}}, mcpServers = [], mcpProblems = [], mcpClients = new Map(), mcpToolNames = new Set(), mcpJob = null;
+  let mcpRevision=0,mcpConnecting=0,mcpGate=false,mcpSubmitting=0,mcpEpoch=0;
   const consoleWrappers = new Map();
   const originalConsole = new Map();
   const MAX_LOGS = 300;
@@ -284,7 +292,10 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
   };
   window.addEventListener('pagehide', onPageHide);
 
+  let toolRefreshSuspended = false;
+
   function refreshTools() {
+    if (toolRefreshSuspended) return;
     registry.install(defineExtension({
       name: 'browser-page', tools: [...toolMap.values()],
       sections: [section('page-debugger', () => {
@@ -304,9 +315,107 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
 - 沙箱不能直接读取当前网页的 DOM、JavaScript 变量或用户电脑文件；网页操作使用页面工具。每个会话独立，子 agent 不继承父会话文件。网页刷新保留文件，但浏览器退出、扩展重载、后台重建、会话删除或重置会丢失文件；会话记录不能恢复这些文件。
 - 命令报错时根据错误调整，不把缺失工具或不支持参数当成暂时网络故障反复重试。若 Linux 崩溃或重建，明确告知用户临时文件已丢失；下次操作会启动新实例，不自动重跑失败的修改操作。
 </sandbox_environment>` : '';
-        return `${promptText}\n${environment}${sandbox}${page ? `\n当前页面: ${page.url}\n标题: ${page.title}` : ''}`;
+        const mcp = mcpPromptSection(mcpServers);
+        return `${promptText}\n${environment}${sandbox}${page ? `\n当前页面: ${page.url}\n标题: ${page.title}` : ''}${mcp ? `\n${mcp}` : ''}`;
       }, { tag: false })],
     }));
+  }
+
+  function mcpSummary() {
+    return {...mcpPublicSummary(mcpSettings,mcpServers,mcpVersion(mcpSettings,mcpRevision)),busy:Boolean(pi.mcpBusy()||mcpConnecting||mcpGate)};
+  }
+  const mcpStore=new McpConfigStore({
+    read:()=>siteSettings.read(),
+    write:next=>siteSettings.update(data=>Object.assign(data,next)),
+    guard:()=>{if(pi.mcpBusy()||mcpGate||mcpConnecting)throw Error('请先停止运行中的任务，或等待连接完成。');mcpGate=true;},
+    release:()=>{mcpGate=false;},
+    lock:fn=>navigator.locks?navigator.locks.request(`pi-tab:mcp:${siteSettings.key}`,fn):fn(),
+    onSaved:(value,revision)=>{pi.applyMcpConfig(value,revision);window.dispatchEvent(new StorageEvent('storage',{storageArea:localStorage,key:siteSettings.key}));},
+  });
+
+  function dropMcpTools() {
+    for (const name of mcpToolNames) toolMap.delete(name);
+    mcpToolNames.clear();
+  }
+
+  async function closeMcpClients() {
+    const clients = [...mcpClients.values()];
+    mcpClients.clear();
+    await Promise.allSettled(clients.map(client => client.close()));
+  }
+
+  async function callMcpTool(serverName, toolName, args, context) {
+    const client = mcpClients.get(serverName);
+    if (!client) throw new Error(`MCP 服务器 ${serverName} 未连接，请先在设置中重新连接。`);
+    const result = await client.callTool(toolName, args && typeof args === 'object' ? args : {}, context?.abortSignal);
+    return {output: mcpToolOutput(result)};
+  }
+
+  async function connectMcpServer(server, used, epoch) {
+    server.status = 'connecting';
+    server.error = '';
+    const client = createMcpHttpClient({url: server.url, headers: server.headers, timeout: server.timeout, server: server.name, fetch:nativeFetch});
+    try {
+      mcpClients.set(server.name,client);
+      const info = await client.initialize();
+      const tools = await client.listTools();
+      if (disposed || epoch!==mcpEpoch) { await client.close(); return; }
+      mcpClients.set(server.name, client);
+      if (!server.description && typeof info?.instructions === 'string') server.description = info.instructions.split('\n')[0].slice(0, 160);
+      for (const tool of tools) {
+        if (!exposesTool(server, tool.name)) continue;
+        const name = uniqueToolName(server.name, tool.name, used);
+        used.add(name);
+        mcpToolNames.add(name);
+        registerNativeTool({name, replay: 'unsafe',
+          description: (tool.description || `${server.name} 服务器提供的 ${tool.name} 工具`).slice(0, 1024),
+          parameters: Type.Unsafe(tool.inputSchema && typeof tool.inputSchema === 'object' ? tool.inputSchema : {type: 'object', properties: {}}),
+          execute: (args, _api, context) => callMcpTool(server.name, tool.name, args, context)});
+        server.toolNames.push(name);
+      }
+      server.toolCount = server.toolNames.length;
+      server.status = 'connected';
+    } catch (error) {
+      await client.close();
+      server.status = 'error';
+      const detail=error instanceof McpError?error.message:'MCP 服务器连接失败，请检查地址和配置。';
+      server.error=detail.startsWith(server.name+'：')?detail.slice(server.name.length+1):detail;
+      nativeConsole.warn('[pi] MCP 连接失败', server.error);
+    }
+  }
+
+  // Reconnects every enabled server, replacing the tools the previous config added.
+  function syncMcp() {
+    const snapshot=structuredClone(mcpSettings),epoch=++mcpEpoch;
+    mcpConnecting++;
+    const run = async () => {
+      dropMcpTools();
+      await closeMcpClients();
+      mcpServers = [];
+      mcpProblems = [];
+      if (disposed) return mcpSummary();
+      const {servers, problems} = normalizeMcpServers(snapshot);
+      mcpProblems = problems;
+      mcpServers = servers.map(server => ({...server, status: 'idle', error: '', toolNames: [], toolCount: 0}));
+      const used = new Set(toolMap.keys());
+      const targets = [];
+      for (const server of mcpServers) {
+        if (!server.supported) server.status = 'unsupported';
+        else if (!server.enabled) server.status = 'disabled';
+        else targets.push(server);
+      }
+      emit({type:'mcp_changed',...mcpSummary()});
+      // Register every tool once and refresh the single extension afterwards.
+      toolRefreshSuspended = true;
+      try { await Promise.all(targets.map(server => connectMcpServer(server, used, epoch))); }
+      finally { toolRefreshSuspended = false; }
+      refreshTools();
+      const summary = mcpSummary();
+      emit({type: 'mcp_changed', ...summary});
+      return summary;
+    };
+    mcpJob = (mcpJob ?? Promise.resolve()).catch(() => {}).then(run).finally(()=>{mcpConnecting--;emit({type:'mcp_changed',...mcpSummary()});});
+    return mcpJob;
   }
 
   function registerNativeTool(definition) {
@@ -408,7 +517,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     refreshTools();
   }
   function onSiteSettings(event) {
-    if (event.storageArea === localStorage && event.key === siteSettings.key){syncPreferences();emit({type:'models_changed'});}
+    if (event.storageArea === localStorage && event.key === siteSettings.key){syncPreferences();emit({type:'models_changed'});if(!sharedMcp){const saved=siteSettings.read();pi.applyMcpConfig(saved.mcp||{mcpServers:{}},saved.mcpRevision||0);}}
   }
 
   async function configure(options, chatId = conversation.id, save = true) {
@@ -493,6 +602,9 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
 
   async function submitMessage(text, whenBusy = 'reject', chatId = conversation.id, entry, onAccepted) {
     await pi.ready; ensureOpen();
+    if(mcpGate||mcpConnecting)throw Error('MCP 配置正在更新，请连接完成后重试。');
+    mcpSubmitting++;
+    try {
     if (!configurations.get(chatId)) throw new Error('先配置模型。');
     syncPreferences();
     const current = configurations.get(chatId);
@@ -530,6 +642,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
       runs.delete(task);
       if (!runs.size) activeRuns.delete(chatId);
     }
+    }finally{mcpSubmitting--;}
   }
 
   async function stopConversation(chatId) {
@@ -560,6 +673,37 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     __piConsolePlugin: true, version: '1.1.0', durableVersion: '1.4.0', Type,
     get defaultPrompt() { return DEFAULT_PROMPT; },
     ready: null, configure, prompt, registerTool, registerNativeTool, listChats, selectChat, newChat, createChat,
+    mcpBusy(){return Boolean(activeRuns.size||mcpSubmitting||[...durableBusy.values()].some(Boolean));},
+    setMcpUpdateGate(value){
+      if(value&&(pi.mcpBusy()||mcpConnecting))throw Error('请先停止运行中的任务，或等待连接完成。');
+      mcpGate=value;
+    },
+    async changeMcpConfig(request){await pi.ready;ensureOpen();return {...await mcpStore.change(request),...mcpSummary()};},
+    async previewMcpImport(input,choices){await pi.ready;return mcpStore.preview(input,choices);},
+    async getMcpServer(name){await pi.ready;const state=await mcpStore.snapshot();return {version:state.version,config:structuredClone(state.config.mcpServers[name])};},
+    async getMcpVariables(){await pi.ready;const state=await mcpStore.snapshot();return {version:state.version,env:structuredClone(state.config.env||{}),references:mcpVariableReferences(state.config)};},
+    async exportMcpConfig(){await pi.ready;return structuredClone(mcpSettings);},
+    applyMcpConfig(value,revision=0){
+      if(JSON.stringify(value)===JSON.stringify(mcpSettings)){mcpRevision=revision;return mcpSummary();}
+      mcpSettings=structuredClone(value);mcpRevision=revision;
+      void syncMcp().catch(()=>nativeConsole.warn('[pi] MCP 连接同步失败。'));
+      emit({type:'mcp_changed',...mcpSummary()});return mcpSummary();
+    },
+    async setMcpConfig(input){
+      await pi.ready;ensureOpen();
+      const value=typeof input==='string'?readMcpJson(input):input;
+      return pi.changeMcpConfig({operation:{kind:'replace',value:parseMcpConfig(value).value}});
+    },
+    async mcpConfig(){await pi.ready;return mcpSummary();},
+    async refreshMcp(){await pi.ready;ensureOpen();if(pi.mcpBusy()||mcpGate||mcpConnecting)throw Error('请先停止运行中的任务，或等待连接完成。');return syncMcp();},
+    async importMcpConfig(input){
+      await pi.ready;
+      if(mcpConnecting)await mcpJob;
+      const state=await mcpStore.snapshot(),preview=mergeMcpBookmark(state.config,input);
+      const result=JSON.stringify(preview.value)===JSON.stringify(state.config)?preview:await mcpStore.change({operation:{kind:'bootstrap',input}});
+      const skipped=result.result?.skipped||[];
+      emit({type:'mcp_imported',skipped});return {...mcpSummary(),skipped};
+    },
     get i18n() { return getI18n(); },
     async deleteChat(id) {
       await pi.ready; ensureOpen();
@@ -616,7 +760,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
       emit({ type: 'agent_created', conversationId: from, agentId: id });
       return { id, queued: delivery.queued, status: delivery.status };
     },
-    resume() { if (!harness) throw new Error('Pi Tab 尚未就绪。'); harness.resume(); },
+    resume() { if (!harness) throw new Error('Pi Tab 尚未就绪。');if(mcpConnecting)void mcpJob.then(()=>harness.resume());else harness.resume(); },
     async savedConfig() { await pi.ready; return siteSettings.read().config; },
     async savedConfigFor(chatId) {
       await pi.ready;
@@ -793,6 +937,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
       window.removeEventListener('storage', onSiteSettings);
       emit({type:'disposed'});
       listeners.clear(); toolMap.clear(); configuration = null; models.clearProviders();
+      mcpEpoch++;dropMcpTools(); await closeMcpClients();
       if (window[globalName] === pi) delete window[globalName];
       nativeConsole.info('[pi] 已关闭。');
     },
@@ -846,6 +991,8 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     }
     const state = await harness.snapshot(TabState, ctx);
     siteSettings.initialize(state);
+    mcpSettings = sharedMcp?{mcpServers:{}}:siteSettings.read().mcp??{mcpServers:{}};
+    mcpRevision=sharedMcp?0:siteSettings.read().mcpRevision||0;
     syncPreferences();
     window.addEventListener('storage', onSiteSettings);
     conversation = state?.activeId && await harness.conversation(state.activeId, ctx) || await harness.root(ctx);
@@ -867,7 +1014,9 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
       await watchConversation(chat.id);
     }
     configuration = configurations.get(conversation.id) ?? null;
-    if (!deferResume) harness.resume();
+
+    if(!sharedMcp)void syncMcp().catch(()=>nativeConsole.warn('[pi] MCP 初始化失败。'));
+    if(!deferResume)pi.resume();
     nativeConsole.info(`[pi] 已注入当前网页，pi-durable 1.4.0。${toolMap.size} 个工具已注册。`);
     return pi;
   })();

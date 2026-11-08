@@ -28,6 +28,7 @@ Pi Tab 基于 Pi Durable，把 Agent 带进你正在浏览的网页。点击书�
 | 会话管理 | 自动生成标题、显示运行状态、切换和删除会话，也可在新窗口继续另一项任务 |
 | 多 Agent 协作 | 同页 Agent 互发消息；扩展还可打开其他标签页、发送任务并读取结果 |
 | Linux 工具（仅扩展） | 每个会话独立运行 Linux，使用 `bash/read/grep/edit` 执行命令、读取、搜索和修改文件 |
+| MCP 工具 | 在「Pi 设置 → MCP」管理服务器或导入单条、批量 JSON，让模型使用远程 MCP 服务器提供的工具 |
 | 中英双语 | 默认跟随浏览器语言，也可在设置中切换；切换不影响会话和正在执行的任务 |
 | 界面与偏好 | 跟随网页或系统主题，也可选浅色、深色；支持拖动、缩放、最小化和贴边放置 |
 
@@ -72,6 +73,18 @@ Pi Tab 基于 Pi Durable，把 Agent 带进你正在浏览的网页。点击书�
 
 普通 `npm run build` 校验并复制已构建的 Linux 资源；重编译使用 `npm run build:linux`，需要 Docker。固定版本、补丁、源码导出和验证命令见 [Linux 构建说明](linux/README.md)。
 
+### MCP 服务器
+
+「Pi 设置 → MCP」提供单项添加、编辑、删除，以及单条/批量 JSON 导入。导入先预览冲突，错误整批拒绝；旧 `mcpServers` 文档继续可用。配置远程 MCP 服务器后，服务器提供的工具会以 `mcp__服务器__工具` 的名字交给模型直接调用，连接状态、工具数量和错误显示在同一页。
+
+- 只支持 streamable HTTP 服务器（配置中写 `url`）。用 `command` 启动的 stdio 服务器需要在本机进程中运行，书签和扩展都在浏览器里，无法启动，会标记为不支持。
+- 字段与 Pi 一致：`url`、`headers`、`timeout`、`enabled`、`description`、`exposure`、`toolExposure`。旧版 `sse` 会保留并标记为不支持；需要 OAuth 登录的服务器暂不支持，请改用 `Authorization` 等请求头。
+- 请求头可以用 `${NAME}` 引用变量，值写在同一个配置对象顶层的 `env` 中，例如 `{"mcpServers": {"docs": {"url": "https://example.com/mcp", "headers": {"Authorization": "Bearer ${DOCS_TOKEN}"}}}, "env": {"DOCS_TOKEN": "..."}}`。
+- `toolExposure` 设为 `hidden` 的工具不会注册；其余工具直接提供给模型。
+- 书签模式的 MCP 请求从网页发出，服务器需要允许跨域（CORS）；扩展从扩展后台请求。书签中的配置按网站保存，可随保存的书签带到其他网站；扩展的配置跨网站共享。
+
+`make help` 列出统一入口，`make build` / `make test` / `make test-mcp` 复用现有 npm 脚本。`npm run test:mcp` 使用锁定的 Playwright，验证真实构建的书签与扩展，并在临时目录输出界面截图及提交信息。
+
 开发和测试使用 Node.js 24（可运行 `nvm use`），先执行 `npm ci`。浏览器测试直接使用项目锁定的 `agent-browser`，不使用全局安装版本。运行 `npx playwright install chromium` 后，将 `PI_TAB_TEST_CHROME` 设置为 `node --input-type=module -e "import {chromium} from 'playwright'; console.log(chromium.executablePath())"` 输出的路径，即可运行 `npm run test:bookmarklet`、`npm run test:extension` 等回归，与 CI 使用相同的工具和浏览器版本。
 
 `main` 的构建、单元测试和全部浏览器回归通过后，Actions 自动计算版本并发布 Release：`fix:` / `perf:` 升补丁，`feat:` 升次版本，`类型!:` 或正文中的 `BREAKING CHANGE:` 升主版本；同批提交取最高级别，只有文档、测试或 CI 等修改时不发版。例如 `1.0.99` 的下一个补丁是 `1.0.100`，新增功能则变为 `1.1.0`，不兼容变更变为 `2.0.0`。使用 squash 合并时，请在合并提交标题和正文中保留这些标记。
@@ -82,6 +95,7 @@ Pi Tab 基于 Pi Durable，把 Agent 带进你正在浏览的网页。点击书�
 
 - 模型推理使用你配置的服务，任务所需的页面内容和附件会发送到该接口。书签可能包含 API Key，请勿分享含密钥的书签。
 - 页面安全策略可能限制书签运行或模型连接；扩展适用于普通 HTTP/HTTPS 网页，不支持浏览器内部页等禁止注入的页面。
+- MCP 只支持远程 HTTP 服务器，书签模式还需要服务器允许跨域；MCP 服务器收到的参数和页面内容一样会离开本机。
 - 点击停止会取消当前会话的执行和排队消息；扩展关闭任务所属标签页时也会停止该页任务，刷新仍可继续。已经发生的页面操作不会撤回。
 - 会话保存在本机，没有云端同步。更新书签需从安装页重新拖入；扩展需替换文件并重新加载。
 

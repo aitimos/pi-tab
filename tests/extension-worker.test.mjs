@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {test} from 'node:test';
 import vm from 'node:vm';
+import {McpConfigStore} from '../src/mcp-store.js';
 import {createI18n} from '../src/i18n.js';
 
 test('extension shares one site engine across paths and tabs, routes tasks and page tools', async () => {
@@ -56,7 +57,7 @@ test('extension shares one site engine across paths and tabs, routes tasks and p
       remove:async key=>session.delete(key),
     }},
   };
-  vm.runInNewContext((await readFile('src/extension-worker.js','utf8')).replace(/^import .*;\n/,''),{createI18n,chrome,URL,AbortController,Promise,setTimeout,console:{error(){}}});
+  vm.runInNewContext((await readFile('src/extension-worker.js','utf8')).replace(/^import .*;$/gm,''),{McpConfigStore,createI18n,chrome,URL,AbortController,Promise,setTimeout,console:{error(){}}});
   const send=(message,from=10)=>new Promise(resolve=>onMessage(message,{tab:tabs.get(from)},resolve));
 
   assert.equal((await send({type:'identity'})).value.active,false);

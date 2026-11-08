@@ -2,7 +2,7 @@
 const extensionRequest = message => new Promise((resolve, reject) => {
   chrome.runtime.sendMessage(message, response => {
     if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
-    else if (!response?.ok) reject(new Error(response?.error || '扩展通信失败。'));
+    else if (!response?.ok) reject(Object.assign(new Error(response?.error || '扩展通信失败。'),{diagnostics:response?.diagnostics}));
     else resolve(response.value);
   });
 });
@@ -94,6 +94,13 @@ async function initializeExtension() {
     },
     getPreferences:()=>engineCall('getPreferences'),
     setPreferences:settings=>engineCall('setPreferences',[settings]),
+    mcpConfig:()=>engineCall('mcpConfig'),
+    getMcpServer:name=>engineCall('getMcpServer',[name]),
+    getMcpVariables:()=>engineCall('getMcpVariables'),
+    previewMcpImport:(input,choices)=>engineCall('previewMcpImport',[input,choices]),
+    changeMcpConfig:request=>engineCall('changeMcpConfig',[request]),
+    setMcpConfig:input=>engineCall('setMcpConfig',[input]),
+    refreshMcp:()=>engineCall('refreshMcp'),
   };
   window.pi=remotePi;
   window.__piTabAgent=remotePi;

@@ -28,6 +28,7 @@ Built on Pi Durable, Pi Tab brings an agent into the webpage you are browsing. O
 | Conversation management | Generate titles automatically, see running status, switch or delete conversations, and open another task in a new window |
 | Agent collaboration | Exchange messages between agents on the same page; the extension can also open tabs, send tasks, and read results |
 | Linux tools (extension only) | Each conversation gets its own Linux for `bash/read/grep/edit` command execution and file operations |
+| MCP tools | Manage servers or import single and batch JSON in **Pi settings → MCP** and let the model use tools from remote MCP servers |
 | Chinese and English | Follow your browser language or switch in settings without interrupting conversations or tasks |
 | Appearance and preferences | Follow the page or system theme, or choose light or dark; drag, resize, minimize, and dock windows at the edge |
 
@@ -74,6 +75,18 @@ Built-in `curl` sends HTTP(S) requests through JavaScript fetch in the extension
 
 `npm run build` verifies and copies existing Linux assets. Use `npm run build:linux` with Docker to rebuild them. See the [Linux build guide](linux/README.md) for pinned versions, patches, source export and verification commands.
 
+### MCP servers
+
+**Pi settings → MCP** supports per-server add, edit and delete, plus single and batch JSON imports with conflict previews and atomic validation. Existing `mcpServers` documents remain supported. Their tools reach the model as `mcp__server__tool`, and the same page shows connection state, tool counts, and errors.
+
+- Only streamable HTTP servers are supported (an entry with `url`). stdio servers started with `command` need a local process, which neither the bookmark nor the extension can spawn, so they are listed as unsupported.
+- Fields follow Pi: `url`, `headers`, `timeout`, `enabled`, `description`, `exposure`, `toolExposure`. `sse` is retained as unsupported; servers that require OAuth sign-in are not supported yet, so use headers such as `Authorization` instead.
+- Header values may reference `${NAME}`, defined in an `env` object beside `mcpServers`, for example `{"mcpServers": {"docs": {"url": "https://example.com/mcp", "headers": {"Authorization": "Bearer ${DOCS_TOKEN}"}}}, "env": {"DOCS_TOKEN": "..."}}`.
+- Tools with `toolExposure` set to `hidden` are not registered; the rest are offered to the model directly.
+- Bookmark requests come from the webpage, so the server must allow CORS; the extension requests from its background page. Bookmark configuration is stored per site and travels with a saved bookmark; extension configuration is shared across websites.
+
+Development shortcuts: `make help`, `make build`, `make test`, and `make test-mcp` reuse the existing npm scripts. The MCP suite uses the locked Playwright version against real bookmark and extension builds, writing screenshots and revision metadata to a temporary directory.
+
 Use Node.js 24 for development and tests (`nvm use`), then run `npm ci`. Browser tests invoke the project's pinned `agent-browser`, never a global installation. Run `npx playwright install chromium`, then set `PI_TAB_TEST_CHROME` to the path printed by `node --input-type=module -e "import {chromium} from 'playwright'; console.log(chromium.executablePath())"`. Commands such as `npm run test:bookmarklet` and `npm run test:extension` then use the same tool and browser versions as CI.
 
 After the build, unit tests and all browser regressions pass on `main`, Actions automatically publishes a release. `fix:` / `perf:` increment the patch, `feat:` increments the minor, and `type!:` or a `BREAKING CHANGE:` footer increments the major. The highest level since the previous release wins; documentation, test and CI changes alone do not release. Numbers do not roll over at ten: `1.0.99` becomes `1.0.100` for a patch, `1.1.0` for a feature, or `2.0.0` for a breaking change. Preserve these markers in the final commit message when squash merging.
@@ -84,6 +97,7 @@ The release job commits version files, generated assets and `CHANGELOG.md`, crea
 
 - Inference uses your configured service. Page content and attachments needed for a task are sent to that API. Bookmarks may contain API keys; do not share bookmarks containing credentials.
 - Page security policies may block bookmark execution or model connections. The extension supports ordinary HTTP/HTTPS webpages, not browser internal pages or other pages that prohibit injection.
+- MCP only supports remote HTTP servers, and bookmark requests also need CORS; arguments sent to an MCP server leave your device just like page content.
 - Conversations stay on your device, with no cloud sync. To update, save a new bookmark from the installer or replace and reload the extension files.
 
 See the [user guide](docs/usage.en.md) for detailed controls, attachment formats, storage, and recovery behavior.

@@ -78,6 +78,9 @@ export function createI18n({mode = 'auto', languages = ['en'], save = () => {}} 
     onChange(listener) {listeners.add(listener);return () => listeners.delete(listener);},
     text: (node,value) => bind(node,'textContent',value),
     attr: bind,
+    // Release a closing editor immediately; detached event handlers can capture
+    // credential drafts and should not wait for the next language change.
+    release(root) {for(const node of bindings.keys())if(node===root||root.contains(node))bindings.delete(node);},
     option(label,value) {const option=new Option('',value);bind(option,'textContent',label);return option;},
     html(node,markup) {node.innerHTML=markup;api.mount(node);},
     // Mount only markup authored by Pi Tab, never the host page or user content.

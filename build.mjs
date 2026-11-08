@@ -104,7 +104,8 @@ await writeFile('dist/pi-console.js',optimized.code + '\n/*! Marked license\n' +
 await makeBookmarklet();
 
 const installer = 'pi-bookmarklet-chat-install.html';
-const html = await readFile('src/install-template.html', 'utf8');
+const mcpUi=(await readFile('src/mcp-ui.js','utf8')).replace(/^export /gm,'');
+const html = (await readFile('src/install-template.html','utf8')).replace('/* MCP_MANAGEMENT */',()=>`${mcpUi}\nconst mcpUI=mountMcpSettings({root,runtimePi,i18n});\nconst loadMcpSettings=()=>mcpUI.load(),renderMcpStatus=value=>mcpUI.render(value),closeMcpEditor=focus=>mcpUI.close(focus),mcpSave=()=>mcpUI.save();`);
 const css = html.match(/<style>([\s\S]*?)<\/style>/)?.[1] + html.match(/const chatStyles = `([\s\S]*?)`;/)?.[1];
 const radixValues = new Set(Object.values(radixColors).flatMap(scale => Object.values(scale)).filter(value => typeof value === 'string' && value.startsWith('#')));
 for (const color of css.match(/#[\da-fA-F]{3,8}\b/g) || []) {

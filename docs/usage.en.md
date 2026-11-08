@@ -77,6 +77,45 @@ Continuing page operations requires an available tab on the target website. Task
 
 Deleting a conversation removes its list entry and resets its active context. Saved models and providers remain. Pi Durable's underlying history log is retained in local storage; this is not a disk data erasure feature.
 
+## MCP servers
+
+Open **Pi settings → MCP** to view servers. Use **Add server** or **Edit** to manage one entry, with headers and advanced options. Each entry saves independently; cancel leaves it unchanged. Deletion asks for confirmation and removes its tools. Header and environment values, and saved URLs containing a query, are hidden by default. Select **Show** to view or edit them.
+
+**Import JSON** accepts pasted text or a file and always previews changes before confirmation. Four strict JSON formats are supported:
+
+- One entry: `{"name":"docs","config":{"url":"https://example.com/mcp"}}`.
+- A batch: an array of those named entries.
+- A complete Pi document: the `mcpServers` example below.
+- A legacy server map, retaining top-level `env` and `autoEnableCodemode`.
+
+Existing names are kept by default. Replace explicitly overwrites an entire server entry. Names differing only in case or `-`/`_` must be renamed or skipped. Any JSON, duplicate-key, field, or naming error prevents the entire batch from being written. Global variables and extra fields also have conflict previews; variable changes validate affected existing servers.
+
+Saving and connecting are separate results: connection failure retains saved data for correction or reconnection. Stop running tasks and wait for connections to finish before editing. Changes from another window require a fresh preview. Simultaneous writes from same-origin bookmark windows on plain HTTP do not have a strict mutual-exclusion guarantee. Legacy and unknown fields are preserved; unsupported entries remain visible.
+
+Configuration example:
+
+```json
+{
+  "mcpServers": {
+    "docs": {
+      "url": "https://example.com/mcp",
+      "headers": {"Authorization": "Bearer ${DOCS_TOKEN}"},
+      "description": "Product documentation search",
+      "timeout": 30
+    }
+  },
+  "env": {"DOCS_TOKEN": "..."}
+}
+```
+
+- Only remote streamable HTTP servers are connected (an entry with `url`). stdio servers defined with `command` and `args` need a local process, which neither the bookmark nor the extension can start, so they are listed as unsupported.
+- Fields follow Pi: `url`, `headers`, `timeout` (seconds, default 60), `enabled`, `description`, `exposure`, `toolExposure`. The legacy `type: "sse"` is retained as unsupported; servers that require OAuth sign-in are not supported yet, so use headers such as `Authorization`.
+- `${NAME}` in header values resolves from an `env` object beside `mcpServers`; `!command` values cannot run in the browser.
+- Tool names follow Pi: `mcp__<server>__<tool>`, with any other character replaced by `_`. Tools marked `hidden` in `toolExposure` are not registered and the rest are offered to the model directly; this runtime has no `codemode` or `tool_search`, so `exposure` is accepted for compatibility only.
+- Connection state, tool counts, and errors appear under the field. **Reconnect** drops the current connections and reconnects with the saved configuration; saving changes reconnects and replaces the previous tools.
+- A bookmark stores its configuration for the current site and carries it to other sites when the bookmark is saved; a site that already defines the same server keeps its own entry. Bookmark requests come from the webpage, so the server must allow CORS. The extension stores one configuration for all sites and requests from its background page.
+- Tool results are data, not new instructions; MCP calls go through the same tool pipeline as the built-in page tools.
+
 ## Scope and limitations
 
 - AI works within the current webpage. It can read content and element styles, click, fill out forms, run JavaScript, and inspect Console logs and fetch request summaries recorded after injection.
