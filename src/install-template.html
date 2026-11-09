@@ -1073,14 +1073,14 @@ async function openChat(initialConfig, options = {}) {
     selectSettingsTab(byId('settings-models-tab'));
     byId('settings-models-tab').focus();
     for(const id of ['manual-model-form','provider-form','oauth-form'])byId(id).hidden=true;
-    const list=byId('model-manager-list');list.replaceChildren();
+    const list=byId('model-manager-list');i18n.release(list);list.replaceChildren();
     byId('model-settings-error').hidden=true;byId('model-settings-retry').hidden=true;
     const version=++modelManagerVersion;
     i18n.text(list,()=>t('正在加载…'));
     try{
       const [providers,models]=await Promise.all([agent.listProviders(),agent.listModels()]);
       if(version!==modelManagerVersion)return;
-      list.replaceChildren();
+      i18n.text(list,'');
       const action=(label,run)=>{const b=document.createElement('button');b.type='button';b.className='text-button';i18n.text(b,()=>t(label));b.onclick=run;return b;};
       const remove=(kind,record,row,count)=>{
         row.parentElement.querySelector('.manager-confirm')?.remove();
@@ -1127,7 +1127,7 @@ async function openChat(initialConfig, options = {}) {
       if(!providers.length)i18n.text(list,()=>t('还没有保存的提供商。'));
     }catch(error){
       if(version!==modelManagerVersion)return;
-      list.replaceChildren();
+      i18n.text(list,'');
       i18n.text(byId('model-settings-error'),()=>t(error.message || String(error)));
       byId('model-settings-error').hidden=false;byId('model-settings-retry').hidden=false;
     }

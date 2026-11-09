@@ -33,6 +33,17 @@ source: AIXI-31
 
 ## 测试与交付入口
 
+### 发布门禁返工
+
+PR #9 已合并至 `7e17da3`，但主发布流水线三次在 tabs 套件失败，Release 仍为 v1.4.0；本轮从该合并提交继续实现，不改已有失败断言。
+
+- `continueHere` 原先将 UI 缓存版本用于改绑，worker 重连事件尚未应用时会携带旧 seq，忙碌场景提前返回 `BINDING_CONFLICT`。现为每次显式接续读取当前服务端版本后提交；真正并发改绑仍冲突，写请求不重试。新增实际 content 脚本的 VM 测试，在旧逻辑上稳定失败，在修复后通过。
+- 历史选择测试原先在异步列表绘制前截取父页面，Linux 的跨进程 iframe 首次点击可能未交付到目标行。现先聚焦并截取确切行，再使用原鼠标点击；原选择结果、页面授权、上下文和防重放断言保留。
+- 模型列表从 Loading 渲染为列表或错误时解除容器的文字翻译绑定，新加载时释放旧行绑定。修复另一同源标签页切换语言将列表写回 Loading 的 P3 问题。真实跨标签页语言回归在旧构建上复现，修复后书签/扩展、中英文、空态与错误重试通过。
+- 开发者首轮：140/140 单元、四组模型设置、完整跨站接续与 worker 重启回归、构建及版本/ZIP 校验通过。UI 覆盖率未测量；CAS 两条回归分别验证过期缓存与真正并发，未放宽服务器版本规则。
+
+交付截图、CI 结果和产物哈希绑定本轮新 PR head。独立测试与复审通过后继续 Release → Pages，最终发布版本和线上健康仍需交付阶段核验。
+
 `make test-model-settings` 可在支持 Playwright 的环境执行；使用 `PI_TAB_TEST_CHROME` 指定浏览器，`PI_TAB_MODEL_EVIDENCE` 指定截图及 manifest 输出目录。`npm run test:management` 是 CI 组合入口。
 
 当前版本仍为 1.4.0。待独立测试与复审通过后按仓库现有策略合并；`.github/workflows/extension.yml` 在 main 的构建和浏览器测试通过后自动发版，随后调用 `pages.yml` 部署同一发布提交。安装产物为 `dist/pi-tab-extension.zip` 与 `pi-bookmarklet-chat-install.html`。本阶段不宣称已合并或部署。

@@ -77,6 +77,16 @@ try{
     };
     const settings=async()=>{await ui('#settings').click();await expect(ui('#preferences')).toBeVisible();};
     const models=async()=>{await ui('#settings-models-tab').click();await expect(ui('#settings-models-tab')).toHaveAttribute('aria-selected','true');await ui('[data-model-id="fixture"]').waitFor();};
+    let languagePage;
+    const otherLanguage=language==='en'?'zh-CN':'en';
+    const changeLanguage=async value=>{
+      if(worker)await worker.evaluate(value=>chrome.storage.local.set({'pi-tab-language':value}),value);
+      else{
+        if(!languagePage){languagePage=await context.newPage();await languagePage.goto(base+'/language-preference');}
+        await languagePage.evaluate(value=>localStorage.setItem('pi-tab-language',value),value);
+      }
+      await expect(ui('#settings-models-tab')).toHaveText(value==='en'?'Model':'模型');
+    };
     const send=async text=>{
       if(worker){await ui('#continue-here').click();await expect(ui('#continuation-panel')).toHaveAttribute('data-authorized','true');}
       await ui('#message-input').fill(text);await ui('#send').click();
@@ -93,6 +103,11 @@ try{
     assert.equal(await ui('#preferences .form-footer').isVisible(),false);
     assert.equal(await ui('#settings-models-tab').innerText(),language==='en'?'Model':'模型');
     await shot('02-models');
+    await changeLanguage(otherLanguage);
+    await expect(ui('[data-model-id="fixture"]')).toBeVisible();
+    await shot('11-language-updated');
+    await changeLanguage(language);
+    await expect(ui('[data-model-id="fixture"]')).toBeVisible();
     await ui('#settings-instructions-tab').click();await ui('#setting-prompt').fill('Keep unsaved instructions');await models();
     await ui('.manager-group>.manager-row:first-child button').first().click();
     await expect(ui('#provider-name')).toBeFocused();
@@ -142,7 +157,11 @@ try{
       // A rejected read remains recoverable and never creates an empty config.
       await page.evaluate(()=>{const original=pi.listProviders;pi.listProviders=async()=>{pi.listProviders=original;throw Error('Settings temporarily unavailable');};});
       await ui('#settings-models-tab').click();await expect(ui('#model-settings-error')).toHaveText('Settings temporarily unavailable');
-      await shot('07-load-error');await ui('#model-settings-retry').click();await ui('[data-model-id="fixture"]').waitFor();
+      await shot('07-load-error');
+      await changeLanguage(otherLanguage);await expect(ui('#model-settings-retry')).toBeVisible();
+      await changeLanguage(language);
+      await ui('#model-settings-retry').click();await ui('[data-model-id="fixture"]').waitFor();
+      await changeLanguage(otherLanguage);await expect(ui('[data-model-id="fixture"]')).toBeVisible();await changeLanguage(language);
     }
     // Busy configurations still reject destructive changes through this page.
     await ui('#preferences-back').click();await ui('#chat').waitFor();
@@ -159,6 +178,9 @@ try{
     await expect(ui('[data-model-id="fixture"]')).toHaveCount(0);
     await ui('.manager-group>.manager-row:first-child button').last().click();await ui('.manager-confirm button').last().click();
     await expect(ui('.manager-group')).toHaveCount(0);await shot('09-empty');
+    await changeLanguage(otherLanguage);await expect(ui('.manager-group')).toHaveCount(0);
+    assert.ok(!(await ui('#model-manager-list').innerText()).includes('Loading'));
+    await changeLanguage(language);
     await ui('#preferences-back').click();await expect(ui('#setup')).toBeVisible();
     await ui('#setup-manage').click();await expect(ui('#settings-models-tab')).toHaveAttribute('aria-selected','true');
     // Initial setup can create a provider and model through the same category.
@@ -168,7 +190,7 @@ try{
     await ui('#provider-form [type=submit]').click();await ui('#manual-model-id').fill('test-model');
     await ui('#manual-model-form [type=submit]').click();await expect(ui('#chat-model')).toHaveText('test-model');
     assert.equal((await call('listModels')).length,1);assert.equal((await call('listModels'))[0].baseUrl,base+'/v3');
-    checks.push(`${mode}/${language}: settings, keyboard, edit/validation/save, runtime request, reload, legacy links, add/cancel/delete, busy guard, narrow, empty`);
+    checks.push(`${mode}/${language}: settings, keyboard, edit/validation/save, runtime request, reload, legacy links, add/cancel/delete, busy guard, narrow, empty, cross-tab language updates`);
     console.log('PASS '+checks.at(-1));
     await context.close();context=null;
   }
