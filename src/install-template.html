@@ -64,7 +64,7 @@ body>header,body>main,body>footer{position:relative;z-index:1}
 <section class="help" id="help" aria-labelledby="help-title"><h2 id="help-title">使用帮助</h2><div class="help-grid">
 <details><summary>如何添加和切换模型？</summary><p>首次使用填写服务商提供的接口类型、地址和密钥，获取模型后选择并保存。以后从输入框下方的模型下拉切换；「添加模型」可复用提供商并搜索或手填模型 ID；在提供商旁点击「添加提供商」可保存新的连接信息。请选择支持工具调用的模型。</p></details>
 <details><summary>会话保存在哪里？刷新会怎样？</summary><p>扩展会话保存在本机，按完整域名分组，同域的路径、查询参数和标签页共享列表，模型配置跨网站共享。已启用标签页刷新后自动恢复，页面操作仍需要可用的目标标签页。刷新后重新点击书签默认打开空白会话，有未完成任务时恢复该任务；历史仍保留在会话列表，同源标签页并发使用时可能有独立记录。两种模式的记录不自动合并，也不上传云端同步。</p></details>
-<details><summary>如何管理会话和主题？</summary><p>顶部可新建对话、新开窗口和切换会话，新窗口使用空白会话并继承模型配置。标题在首轮回复后自动概括并保存，圆环表示会话正在运行。删除时点击会话右侧图标并确认，运行中的任务需先停止。「Pi 设置」中的主题可选跟随、浅色、深色，默认跟随网页或浏览器；设置分为常规、指令、执行三类。</p></details>
+<details><summary>如何管理会话和主题？</summary><p>顶部可新建对话、新开窗口和切换会话，新窗口使用空白会话并继承模型配置。标题在首轮回复后自动概括并保存，圆环表示会话正在运行。删除时点击会话右侧图标并确认，运行中的任务需先停止。「Pi 设置」中的主题可选跟随、浅色、深色，默认跟随网页或浏览器；设置分为常规、模型、指令、执行、MCP，可在模型页添加、编辑和删除提供商与模型。</p></details>
 <details><summary>如何跨标签页协作？</summary><p>从 Chrome 工具栏的 Pi Tab 扩展图标启动。Agent 可用 tab_open 打开标签页并创建独立会话，通过 tab_send 发任务、tab_read 读结果。书签中的 agent_spawn 只创建使用当前页面的新会话，不会打开标签页；安装扩展也不会改变已有书签会话的能力。</p></details>
 <details><summary>可以发送文件和图片吗？</summary><p>点击输入框旁的附件图标，或拖入文件、粘贴图片。支持 UTF-8 文本和代码文件，PNG、JPEG、WebP、GIF 图片需模型支持视觉输入。最多 8 个附件，单个 5 MB，总计 10 MB；暂不解析 PDF、Office 文档、音视频和压缩包。附件随消息发送到配置的模型服务并保存到会话。</p></details>
 <details><summary>支持账号登录吗？</summary><p>选择接口类型后，在“认证方式”中选择提供商账号，按提示授权，无需本地服务。书签登录状态仅在当前网站保存，不会随书签导出；扩展登录状态可跨网站复用。书签登录需要网页允许相应脚本和网络请求。</p></details>
@@ -142,7 +142,7 @@ async function openChat(initialConfig, options = {}) {
     .settings-heading h2,#setup h2 { font-size:17px; margin:0; font-weight:600; }
     .setup-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:20px; color:var(--text); }
     #setup .setup-heading h2 { margin:0; line-height:1.5; }
-    .settings-tabs { display:flex; gap:4px; margin:0 20px 16px; padding:3px; background:var(--surface); border:.5px solid var(--line); border-radius:8px; }
+    .settings-tabs { display:flex; flex-wrap:wrap; gap:4px; margin:0 20px 16px; padding:3px; background:var(--surface); border:.5px solid var(--line); border-radius:8px; }
     .settings-tabs button { flex:1; border:0; padding:6px 8px; border-radius:5px; color:var(--muted); background:transparent; }
     .settings-tabs button[aria-selected=true] { background:var(--raised); color:var(--text); }
     .language-options { display:flex; gap:2px; padding:2px; border:.5px solid var(--line); border-radius:7px; }
@@ -540,6 +540,7 @@ async function openChat(initialConfig, options = {}) {
         <div class="settings-heading"><h2>Pi 设置</h2><button class="text-button" id="preferences-back" type="button">返回</button></div>
         <div class="settings-tabs" role="tablist" aria-label="设置分类">
           <button id="settings-general-tab" type="button" role="tab" aria-selected="true" aria-controls="settings-general">常规</button>
+          <button id="settings-models-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-models" tabindex="-1">模型</button>
           <button id="settings-instructions-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-instructions" tabindex="-1">指令</button>
           <button id="settings-execution-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-execution" tabindex="-1">执行</button>
           <button id="settings-mcp-tab" type="button" role="tab" aria-selected="false" aria-controls="settings-mcp" tabindex="-1">MCP</button>
@@ -550,6 +551,12 @@ async function openChat(initialConfig, options = {}) {
             <label class="setting-row"><span>主题</span><select id="theme"><option value="auto">跟随</option><option value="light">浅色</option><option value="dark">深色</option></select></label>
             <label class="setting-row"><span>自动压缩上下文</span><input id="setting-compact" type="checkbox" checked></label>
             <label class="setting-row"><span>失败重试</span><select id="setting-retries"><option value="0">不重试</option><option value="1">1 次</option><option value="2">2 次</option><option value="3">3 次</option></select></label>
+          </section>
+          <section id="settings-models" role="tabpanel" aria-labelledby="settings-models-tab" hidden>
+            <div class="mcp-toolbar"><strong>提供商和模型</strong><button id="settings-model-add" class="text-button" type="button">添加模型</button></div>
+            <div id="model-manager"><div id="model-manager-list"></div></div>
+            <p id="model-settings-error" class="error" role="alert" hidden></p>
+            <button id="model-settings-retry" class="text-button" type="button" hidden>重试</button>
           </section>
           <section id="settings-instructions" role="tabpanel" aria-labelledby="settings-instructions-tab" hidden>
             <div class="field-heading"><label for="setting-prompt">指令</label><button id="restore-prompt" class="text-button" type="button">恢复内置</button></div>
@@ -580,7 +587,6 @@ async function openChat(initialConfig, options = {}) {
     </div>
     <section id="model-dialog" aria-labelledby="model-dialog-title" hidden>
       <div class="dialog-heading"><h2 id="model-dialog-title">选择模型</h2><button id="model-dialog-close" class="text-button" type="button">返回</button></div>
-      <div id="model-manager" hidden><div id="model-manager-list"></div></div>
       <form id="manual-model-form" hidden>
         <div class="form-body">
           <div class="field-heading"><label for="manual-model-provider">提供商</label><button id="manual-add-provider" type="button" class="text-button">添加提供商</button></div><select id="manual-model-provider" aria-label="提供商"></select>
@@ -832,9 +838,9 @@ async function openChat(initialConfig, options = {}) {
     byId('manual-model').hidden=false;
     updateDraftThinking();
   }
-  async function openModelEditor() {
+  async function openModelEditor(fromSettings=false) {
     if(state.busy || state.configuring)return;
-    managing=false;closeModelMenu();
+    managing=fromSettings;closeModelMenu();
     byId('content').hidden=true;
     byId('model-dialog').hidden=false;
     await openManualModelForm();
@@ -913,8 +919,7 @@ async function openChat(initialConfig, options = {}) {
     selectDraftModel(state.candidates.find(model=>model.id===id) || agent.describeModel({...draftProvider(),model:id}));
   });
   byId('model-dialog-close').addEventListener('click',()=>{
-    if(managing && byId('model-manager').hidden){void openModelManager();return;}
-    if(managing){managing=false;closeModelDialog();void switchConversation(agent.id);return;}
+    if(managing){void cancelOAuth();void openModelManager();return;}
     if(!byId('oauth-form').hidden){void cancelOAuth();byId('oauth-form').hidden=true;if(oauthOrigin==='provider'){byId('provider-form').hidden=false;i18n.text(byId('model-dialog-title'),()=>t('添加提供商'));}else if(oauthOrigin==='manager')void openModelManager();else closeModelDialog();return;}
     if (!byId('provider-form').hidden) {
       byId('provider-form').hidden=true;
@@ -997,7 +1002,8 @@ async function openChat(initialConfig, options = {}) {
   });
   byId('manual-model-reasoning').addEventListener('change',updateManualThinking);
   async function openManualModelForm() {
-    editingModel=null;byId('model-manager').hidden=true;byId('manual-model-error').hidden=true;i18n.text(byId('manual-model-form').querySelector('[type=submit]'),()=>t('添加并使用'));
+    editingModel=null;byId('manual-model-error').hidden=true;i18n.text(byId('manual-model-form').querySelector('[type=submit]'),()=>t('添加并使用'));
+    byId('content').hidden=true;byId('model-dialog').hidden=false;
     state.providers=await agent.listProviders();
     const providers=state.providers;
     byId('manual-model-provider').replaceChildren(...providers.map(provider=>new Option(provider.providerName || provider.baseUrl,provider.id)));
@@ -1058,66 +1064,85 @@ async function openChat(initialConfig, options = {}) {
     }
   });
   let editingModel=null,editingProvider=null,managing=false;
+  let modelManagerVersion=0;
   async function openModelManager(){
     closeModelMenu();managing=true;editingModel=null;editingProvider=null;
-    byId('content').hidden=true;byId('model-dialog').hidden=false;
+    manualDiscoveryVersion++;
+    byId('content').hidden=false;byId('model-dialog').hidden=true;
+    byId('setup').style.display='none';byId('chat').style.display='none';byId('preferences').style.display='flex';
+    selectSettingsTab(byId('settings-models-tab'));
+    byId('settings-models-tab').focus();
     for(const id of ['manual-model-form','provider-form','oauth-form'])byId(id).hidden=true;
-    byId('model-manager').hidden=false;
-    i18n.text(byId('model-dialog-title'),()=>t('管理模型'));
-    const [providers,models]=await Promise.all([agent.listProviders(),agent.listModels()]);
     const list=byId('model-manager-list');list.replaceChildren();
-    const action=(label,run)=>{const b=document.createElement('button');b.type='button';b.className='text-button';i18n.text(b,()=>t(label));b.onclick=run;return b;};
-    const remove=(kind,record,row,count)=>{
-      row.parentElement.querySelector('.manager-confirm')?.remove();
-      const confirmation=document.createElement('div');confirmation.className='manager-confirm';
-      const note=document.createElement('span');i18n.text(note,()=>kind==='provider'?t('删除提供商及其 {0} 个模型？会话记录和登录账户会保留。',count):t('删除此模型？会话记录会保留。'));
-      confirmation.append(note,action('取消',()=>confirmation.remove()),action('删除',async()=>{
-        try{await runtimePi.manageModels({action:'delete-'+kind,id:record.id});await openModelManager();}
-        catch(error){i18n.text(note,()=>t(error.message));}
-      }));row.after(confirmation);
-    };
-    for(const provider of providers){
-      const group=document.createElement('section');group.className='manager-group';
-      const related=models.filter(m=>m.providerId===provider.id||(!m.providerId&&m.api===provider.api&&m.baseUrl===provider.baseUrl&&(m.nativeProvider||'')===(provider.nativeProvider||'')));
-      const row=document.createElement('div');row.className='manager-row';
-      const name=document.createElement('strong');name.textContent=provider.providerName||new URL(provider.baseUrl).hostname;
-      row.append(name,action('编辑',()=>{
-        editingProvider=provider;byId('model-manager').hidden=true;byId('provider-form').hidden=false;
-        i18n.text(byId('model-dialog-title'),()=>t('编辑提供商'));
-        byId('provider-api').replaceChildren(...agent.apis().filter(api=>provider.nativeProvider || api.authMethods.some(m=>m.id==='api_key')).map(api=>new Option(api.name,api.id)));
-        byId('provider-api').disabled=false;byId('provider-api').closest('label').hidden=false;
-        for(const [id,value] of [['provider-name',provider.providerName],['provider-api',provider.api],['provider-url',provider.baseUrl],['provider-key',provider.apiKey]])byId(id).value=value||'';
-        connectionAuth('provider',provider.nativeProvider || (provider.apiKey?'api_key':'none'));byId('provider-name').disabled=false;byId('provider-name').closest('label').hidden=false;byId('provider-auth').disabled=!!provider.nativeProvider;byId('provider-auth').closest('label').hidden=!!provider.nativeProvider;
-        for(const id of ['provider-api','provider-url','provider-key']){if(provider.nativeProvider){byId(id).disabled=true;byId(id).closest('label').hidden=true;}}
-        byId('provider-error').hidden=true;i18n.text(byId('provider-form').querySelector('[type=submit]'),()=>t('保存'));
-      }),action('删除',()=>remove('provider',provider,row,related.length)));
-      if(provider.nativeProvider)row.append(action('账户',()=>void openOAuth(provider.api,provider.nativeProvider,'manager')));
-      group.append(row);
-      for(const model of related){
-        const item=document.createElement('div');item.className='manager-row';item.dataset.modelId=model.id;
-        const title=document.createElement('span');title.textContent=model.model;
-        item.append(title,action('编辑',async()=>{
-          await openManualModelForm();editingModel=model;byId('model-manager').hidden=true;
-          manualDiscoveryVersion++;selectedManualModel=null;manualModels=[];
-          byId('manual-model-provider').value=provider.id;byId('manual-model-id').value=model.model;
-          byId('manual-model-reasoning').checked=!!model.reasoning;byId('manual-model-vision').checked=model.input?.includes('image');
-          updateManualThinking();byId('manual-model-thinking').value=model.thinking||'off';renderManualModels();i18n.text(byId('manual-model-status'),'');
-          i18n.text(byId('model-dialog-title'),()=>t('编辑模型'));i18n.text(byId('manual-model-form').querySelector('[type=submit]'),()=>t('保存'));
-        }),action('删除',()=>remove('model',model,item)));
-        group.append(item);
+    byId('model-settings-error').hidden=true;byId('model-settings-retry').hidden=true;
+    const version=++modelManagerVersion;
+    i18n.text(list,()=>t('正在加载…'));
+    try{
+      const [providers,models]=await Promise.all([agent.listProviders(),agent.listModels()]);
+      if(version!==modelManagerVersion)return;
+      list.replaceChildren();
+      const action=(label,run)=>{const b=document.createElement('button');b.type='button';b.className='text-button';i18n.text(b,()=>t(label));b.onclick=run;return b;};
+      const remove=(kind,record,row,count)=>{
+        row.parentElement.querySelector('.manager-confirm')?.remove();
+        const confirmation=document.createElement('div');confirmation.className='manager-confirm';
+        const note=document.createElement('span');i18n.text(note,()=>kind==='provider'?t('删除提供商及其 {0} 个模型？会话记录和登录账户会保留。',count):t('删除此模型？会话记录会保留。'));
+        confirmation.append(note,action('取消',()=>confirmation.remove()),action('删除',async()=>{
+          try{await runtimePi.manageModels({action:'delete-'+kind,id:record.id});await openModelManager();}
+          catch(error){i18n.text(note,()=>t(error.message));}
+        }));row.after(confirmation);
+      };
+      for(const provider of providers){
+        const group=document.createElement('section');group.className='manager-group';
+        const related=models.filter(m=>m.providerId===provider.id||(!m.providerId&&m.api===provider.api&&m.baseUrl===provider.baseUrl&&(m.nativeProvider||'')===(provider.nativeProvider||'')));
+        const row=document.createElement('div');row.className='manager-row';
+        const name=document.createElement('strong');name.textContent=provider.providerName||new URL(provider.baseUrl).hostname;
+        row.append(name,action('编辑',()=>{
+          editingProvider=provider;byId('content').hidden=true;byId('model-dialog').hidden=false;byId('provider-form').hidden=false;
+          i18n.text(byId('model-dialog-title'),()=>t('编辑提供商'));
+          byId('provider-api').replaceChildren(...agent.apis().filter(api=>provider.nativeProvider || api.authMethods.some(m=>m.id==='api_key')).map(api=>new Option(api.name,api.id)));
+          byId('provider-api').disabled=false;byId('provider-api').closest('label').hidden=false;
+          for(const [id,value] of [['provider-name',provider.providerName],['provider-api',provider.api],['provider-url',provider.baseUrl],['provider-key',provider.apiKey]])byId(id).value=value||'';
+          connectionAuth('provider',provider.nativeProvider || (provider.apiKey?'api_key':'none'));byId('provider-name').disabled=false;byId('provider-name').closest('label').hidden=false;byId('provider-auth').disabled=!!provider.nativeProvider;byId('provider-auth').closest('label').hidden=!!provider.nativeProvider;
+          for(const id of ['provider-api','provider-url','provider-key']){if(provider.nativeProvider){byId(id).disabled=true;byId(id).closest('label').hidden=true;}}
+          byId('provider-error').hidden=true;i18n.text(byId('provider-form').querySelector('[type=submit]'),()=>t('保存'));
+          byId('provider-name').focus();
+        }),action('删除',()=>remove('provider',provider,row,related.length)));
+        if(provider.nativeProvider)row.append(action('账户',()=>void openOAuth(provider.api,provider.nativeProvider,'manager')));
+        group.append(row);
+        for(const model of related){
+          const item=document.createElement('div');item.className='manager-row';item.dataset.modelId=model.id;
+          const title=document.createElement('span');title.textContent=model.model;
+          item.append(title,action('编辑',async()=>{
+            await openManualModelForm();editingModel=model;
+            manualDiscoveryVersion++;selectedManualModel=null;manualModels=[];
+            byId('manual-model-provider').value=provider.id;byId('manual-model-id').value=model.model;
+            byId('manual-model-reasoning').checked=!!model.reasoning;byId('manual-model-vision').checked=model.input?.includes('image');
+            updateManualThinking();byId('manual-model-thinking').value=model.thinking||'off';renderManualModels();i18n.text(byId('manual-model-status'),'');
+            i18n.text(byId('model-dialog-title'),()=>t('编辑模型'));i18n.text(byId('manual-model-form').querySelector('[type=submit]'),()=>t('保存'));
+          }),action('删除',()=>remove('model',model,item)));
+          group.append(item);
+        }
+        list.append(group);
       }
-      list.append(group);
+      if(!providers.length)i18n.text(list,()=>t('还没有保存的提供商。'));
+    }catch(error){
+      if(version!==modelManagerVersion)return;
+      list.replaceChildren();
+      i18n.text(byId('model-settings-error'),()=>t(error.message || String(error)));
+      byId('model-settings-error').hidden=false;byId('model-settings-retry').hidden=false;
     }
-    if(!providers.length)i18n.text(list,()=>t('还没有保存的提供商。'));
   }
-  byId('model-manage').onclick=()=>void openModelManager();
-  byId('setup-manage').onclick=()=>void openModelManager();
+  byId('model-manage').onclick=()=>void openPreferences('models');
+  byId('setup-manage').onclick=()=>void openPreferences('models');
+  byId('settings-model-add').onclick=()=>void openModelEditor(true);
+  byId('model-settings-retry').onclick=()=>void openModelManager();
 
   let oauthUI,oauthOrigin;
   async function cancelOAuth(){await oauthUI?.cancel();}
   async function openOAuth(api,providerId,origin){
     oauthOrigin=origin;
-    closeModelMenu();managing=false;byId('model-manager').hidden=true;
+    if(origin==='setup')managing=false;
+    closeModelMenu();
     try{
       oauthUI ??= (await runtimePi.oauthUI())({root,i18n,auth:(action,input)=>runtimePi.auth(action,input),onSelect:async(providerId,name,api)=>{
         const available=await runtimePi.auth('models',{providerId,api});
@@ -1611,7 +1636,7 @@ async function openChat(initialConfig, options = {}) {
     refreshPageContext();
     void restoreHistory();
     updateComposer();
-    const config = agent && agent.config;
+    const config = state.activeConfig;
     i18n.text(byId('chat-model'), () => config?.model || t("模型已设置"));
     if (config) renderThinking(byId('chat-thinking'), agent.describeModel(config), config.thinking);
     reportStatus(t("准备就绪"));
@@ -2294,10 +2319,11 @@ async function openChat(initialConfig, options = {}) {
       shell.style.setProperty('--window-height', `${savedSize.height}px`);
     }
   }
-  byId('settings').addEventListener('click', () => {
+  async function openPreferences(category='general') {
     if (state.configuring) return;
-    closeChatMenu();
-    void runtimePi.getPreferences().then(saved => {
+    closeChatMenu();closeModelMenu();
+    try{
+      const saved=await runtimePi.getPreferences();
       syncTheme();
       byId('setting-prompt').value = saved.systemPrompt || t(runtimePi.defaultPrompt);
       byId('setting-compact').checked = saved.autoCompact ?? true;
@@ -2309,24 +2335,35 @@ async function openChat(initialConfig, options = {}) {
       byId('preferences-error').hidden = true;
       byId('setup').style.display = 'none';
       byId('chat').style.display = 'none';
+      byId('content').hidden=false;byId('model-dialog').hidden=true;
       byId('preferences').style.display = 'flex';
-      byId('settings-general-tab').click();
-      byId('settings-general-tab').focus();
+      byId(`settings-${category}-tab`).click();
+      byId(`settings-${category}-tab`).focus();
       void loadMcpSettings();
-    });
-  });
+    }catch(error){
+      i18n.text(byId('chat-menu-error'),()=>t(error.message || String(error)));
+      byId('chat-menu-error').hidden=false;
+      byId('chat-list').dataset.open='true';
+    }
+  }
+  byId('settings').addEventListener('click',()=>void openPreferences());
   /* MCP_MANAGEMENT */
   const settingsTabs = [...root.querySelectorAll('.settings-tabs [role=tab]')];
+  function selectSettingsTab(tab) {
+    for (const item of settingsTabs) {
+      const selected = item === tab;
+      item.setAttribute('aria-selected', String(selected));
+      item.tabIndex = selected ? 0 : -1;
+      byId(item.getAttribute('aria-controls')).hidden = !selected;
+      if(selected)byId('preferences').querySelector('.form-footer').hidden=['settings-mcp-tab','settings-models-tab'].includes(item.id);
+    }
+    root.querySelector('.settings-body').scrollTop = 0;
+  }
   for (const tab of settingsTabs) {
     tab.addEventListener('click', () => {
-      for (const item of settingsTabs) {
-        const selected = item === tab;
-        item.setAttribute('aria-selected', String(selected));
-        item.tabIndex = selected ? 0 : -1;
-        byId(item.getAttribute('aria-controls')).hidden = !selected;
-        if(selected)byId('preferences').querySelector('.form-footer').hidden=item.id==='settings-mcp-tab';
-      }
-      root.querySelector('.settings-body').scrollTop = 0;
+      modelManagerVersion++;
+      selectSettingsTab(tab);
+      if(tab.id==='settings-models-tab')void openModelManager();
     });
     tab.addEventListener('keydown', event => {
       if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
@@ -2342,10 +2379,21 @@ async function openChat(initialConfig, options = {}) {
     byId('setting-prompt').setSelectionRange(0,0);
     byId('setting-prompt').scrollTop = 0;
   });
-  byId('preferences-back').addEventListener('click', () => {closeMcpEditor(false);state.connected?showChat():showSetup();});
+  byId('preferences-back').addEventListener('click', async () => {
+    modelManagerVersion++;managing=false;closeMcpEditor(false);
+    try{
+      state.activeConfig=await agent.savedConfig();
+      state.connected=!!state.activeConfig;
+      if(state.activeConfig){syncModelControls(state.activeConfig);showChat();}else showSetup();
+    }catch(error){
+      i18n.text(byId('preferences-error'),()=>t(error.message || String(error)));
+      byId('preferences-error').hidden=false;
+    }
+  });
   byId('preferences').addEventListener('submit', async event => {
     event.preventDefault();
     byId('preferences-error').hidden = true;
+    if(!byId('settings-models').hidden)return;
     if(!byId('settings-mcp').hidden){if(mcpSave)await mcpSave();return;}
     try {
       await runtimePi.setPreferences({

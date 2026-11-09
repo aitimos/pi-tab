@@ -83,7 +83,8 @@ try{
   const wait=async expression=>browser('wait','--fn',expression);
   const click=async selector=>{
     if(mode==='extension'&&(selector==='#send'||selector==='#message-input')){await evaluate(`(()=>{const b=${root}.getElementById('continue-here');if(!b.disabled)b.click();})()`);await wait(`${root}.getElementById('continuation-panel').dataset.authorized==='true'`);}
-    const point=await evaluate(`(()=>{const e=${root}.querySelector(${JSON.stringify(selector)});e.scrollIntoView({block:'nearest'});const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2}})()`);
+    const point=await evaluate(`(()=>{const e=${root}.querySelector(${JSON.stringify(selector)});if(!e)return null;e.scrollIntoView({block:'nearest'});const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,visible:r.width>0&&r.height>0&&getComputedStyle(e).visibility!=='hidden'}})()`);
+    assert.ok(point?.visible,`Click target is not visible: ${selector}`);
     await browser('mouse','move',String(Math.round(point.x)),String(Math.round(point.y)));await browser('mouse','down','left');await browser('mouse','up','left');
   };
   const select=async(id,value)=>evaluate(`(()=>{const s=${root}.getElementById(${JSON.stringify(id)});s.value=${JSON.stringify(value)};s.dispatchEvent(new Event('change',{bubbles:true}));})()`);
@@ -157,8 +158,12 @@ try{
     assert.equal(await evaluate(`${root}.getElementById('oauth-logout').hidden`),false);
     await click('#oauth-logout');await wait(`!${root}.getElementById('oauth-submit').disabled`);
     assert.equal((await api('list')).find(p=>p.id==='kimi-coding').connected,false);
-    await click('#model-dialog-close');await click('#model-dialog-close');
+    await click('#model-dialog-close');
+    await wait(`${root}.getElementById('model-dialog').hidden && !${root}.getElementById('settings-models').hidden && ${root}.getElementById('preferences').style.display==='flex'`);
+    await browser('screenshot',join(directory,`${mode}-${language}-account-return-settings.png`));
+    await click('#preferences-back');await wait(`${root}.getElementById('chat').style.display==='flex'`);
     await click('#model-settings');await click('#model-menu-add');await click('#manual-add-provider');
+    await wait(`!${root}.getElementById('provider-form').hidden && ${root}.getElementById('provider-api').options.length>0`);
     await select('provider-api','openai-codex-responses');
     assert.deepEqual(await evaluate(`Array.from(${root}.getElementById('provider-auth').options,o=>o.value)`),['openai-codex']);
     assert.equal(await evaluate(`${root}.getElementById('provider-url').disabled`),true);
