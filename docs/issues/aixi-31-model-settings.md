@@ -1,0 +1,35 @@
+---
+title: 将模型配置集中到 Pi 设置
+status: 待独立测试
+updated: "2026-11-09"
+source: AIXI-31
+---
+
+## 范围与实现
+
+基线 main `df69fa15b488deed7de3b0c9c2cacf943e4fdcbe`，依据 AIXI-31 的 Route Decision 直接实现。
+历史 `4ab844c` 引入现有模型管理。此次将该列表移入「Pi 设置 → 模型」，复用原编辑表单、模型管理 API 和存储，保留快速切换；模型菜单和首次设置页的「管理模型」都导向同一设置分类。
+
+模型项单独保存；分类不显示通用「保存设置」按钮，切换与编辑保留未保存指令。返回对话回读当前配置，显示已读状态，保留对话记录和输入草稿。模型列表读取失败显示错误并提供重试；运行中配置仍由原 owner 拒绝修改。
+
+书签、安装页预览和扩展共用 `src/install-template.html` 的 `openChat`；`build.mjs` 将它分别打入安装页和扩展 content。未变更模型数据、OAuth 凭据、权限或运行时存储契约。
+
+## 开发者验证
+
+- Node 24.22.2、macOS arm64、Playwright 1.57.0、Chromium 143.0.7499.4。
+- `npm ci`、`make build`、`make verify`、`git diff --check`；单元测试 138/138 通过。
+- `make test-model-settings`：真实构建书签与扩展，中英文四组通过。覆盖分类键盘导航、360px 布局、旧入口、提供商与模型编辑、新建、取消和删除、实际请求使用新地址/密钥/模型、刷新回读、空列表、任务占用、指令和输入草稿保留。书签额外注入读取及保存拒绝，验证错误可见、原配置保留并可重试。
+- `make test-mcp`：真实书签与扩展回归通过，包括工具实际调用、Unicode 结果、CRUD、导入、跨站同步、凭据隐藏与刷新回读。
+- 自检复审处理了返回时整段重建对话造成结果暂时消失，以及扩展旧 config 缓存覆盖已回读模型名称的问题；原失败断言保留在回归套件中。
+- UI 覆盖率未测量；以真实浏览器行为断言验证。模型存储逻辑未改，原模型与站点设置单测继续通过。
+- 旧 `scripts/test-management.mjs` 仅允许 Linux，未在本机执行；已更新新路径，CI management 同时运行旧回归与新增可移植套件。未执行真实第三方 OAuth 授权或付费模型调用，HTTP 响应为本地 fixture。
+
+截图及构建文件的 SHA-256 随任务交付附件提供。采集包含 Pi 设置、模型列表、保存、刷新回读、窄屏、校验失败、保存失败、加载失败及运行中删除拦截。
+
+## 测试与交付入口
+
+`make test-model-settings` 可在支持 Playwright 的环境执行；使用 `PI_TAB_TEST_CHROME` 指定浏览器，`PI_TAB_MODEL_EVIDENCE` 指定截图及 manifest 输出目录。`npm run test:management` 是 CI 组合入口。
+
+当前版本仍为 1.4.0。待独立测试与复审通过后按仓库现有策略合并；`.github/workflows/extension.yml` 在 main 的构建和浏览器测试通过后自动发版，随后调用 `pages.yml` 部署同一发布提交。安装产物为 `dist/pi-tab-extension.zip` 与 `pi-bookmarklet-chat-install.html`。本阶段不宣称已合并或部署。
+
+回滚可撤销本功能提交并按既有流水线发布，或恢复上一 Release 的扩展/书签；没有数据迁移，保存的模型继续沿用原格式。

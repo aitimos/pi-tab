@@ -34,7 +34,7 @@ Built on Pi Durable, Pi Tab brings an agent into the webpage you are browsing. O
 
 Try: “Summarize this page,” “Turn this table into CSV,” or “Find out why this page scrolls horizontally.”
 
-Choose **Manage models** in the composer’s model menu to edit or delete saved providers and models. Provider connection changes apply to linked models. Deleting configurations keeps conversations and signed-in accounts; stop tasks that use a configuration before changing it.
+Open **Pi settings → Model** to add, edit, or delete saved providers and models. Provider connection changes apply to linked models. Deleting configurations keeps conversations and signed-in accounts; stop tasks that use a configuration before changing it.
 
 ## Quick start
 
