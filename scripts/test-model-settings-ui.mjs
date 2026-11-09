@@ -76,12 +76,12 @@ try{
       await ui('#settings:enabled').waitFor();
     };
     const settings=async()=>{await ui('#settings').click();await expect(ui('#preferences')).toBeVisible();};
-    const models=async()=>{await ui('#settings-models-tab').click();await ui('[data-model-id="fixture"]').waitFor();};
+    const models=async()=>{await ui('#settings-models-tab').click();await expect(ui('#settings-models-tab')).toHaveAttribute('aria-selected','true');await ui('[data-model-id="fixture"]').waitFor();};
     const send=async text=>{
       if(worker){await ui('#continue-here').click();await expect(ui('#continuation-panel')).toHaveAttribute('data-authorized','true');}
       await ui('#message-input').fill(text);await ui('#send').click();
     };
-    const shot=async name=>{const file=`${mode}-${language}-${name}.png`;await root.screenshot({path:join(directory,file)});screenshots.push(file);};
+    const shot=async name=>{const file=`${mode}-${language}-${name}.png`;await root.screenshot({path:join(directory,file),animations:'disabled'});screenshots.push(file);};
     await activate();await ui('#chat').waitFor();
     await ui('#message-input').fill('Keep composer draft');
     await settings();await shot('01-settings');
