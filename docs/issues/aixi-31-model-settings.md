@@ -44,6 +44,14 @@ PR #9 已合并至 `7e17da3`，但主发布流水线三次在 tabs 套件失败�
 
 交付截图、CI 结果和产物哈希绑定本轮新 PR head。独立测试与复审通过后继续 Release → Pages，最终发布版本和线上健康仍需交付阶段核验。
 
+### 旧式书签双标签编辑返工
+
+独立测试在 `8be33f4` 发现：profiles-only 书签的第二个同源标签使派生 provider ID 从 `qa-one` 变为 `qa-two`，第一标签的模型编辑仍设置旧行闭包 ID，产生空选择并静默返回。原 QA 最小复现与新增浏览器断言均确认此失败。
+
+编辑现在按稳定的模型 ID 重新读取模型，使用存储 owner 返回的当前 providerId 初始化表单，不依赖列表行缓存的提供商 ID；新建模型也复用当前模型关联。未改派生 ID 算法、存储格式、密钥可见范围或导入规则。提供商尚未加载时禁用输入/保存，缺少选择时显示可恢复错误并保留草稿；关闭后的异步响应不再修改编辑页。
+
+新增 `make test-model-providers`，CI management 同时执行：书签/扩展 × 旧式/显式 providers 四组，验证第二标签激活、provider 关联、取消、缺少选择、模型 ID 与能力字段、同地址不同账号、实际请求和刷新回读。书签另测读取未完成时取消。新增原关联断言在旧构建上失败，修复后通过；原 QA 复现脚本也通过。140 项单元和原四组模型设置继续通过；保留此前 busy/CAS、语言与接续断言。最终结果、截图和哈希随 PR head 交接，仍需独立测试、复审与正式发布。
+
 `make test-model-settings` 可在支持 Playwright 的环境执行；使用 `PI_TAB_TEST_CHROME` 指定浏览器，`PI_TAB_MODEL_EVIDENCE` 指定截图及 manifest 输出目录。`npm run test:management` 是 CI 组合入口。
 
 当前版本仍为 1.4.0。待独立测试与复审通过后按仓库现有策略合并；`.github/workflows/extension.yml` 在 main 的构建和浏览器测试通过后自动发版，随后调用 `pages.yml` 部署同一发布提交。安装产物为 `dist/pi-tab-extension.zip` 与 `pi-bookmarklet-chat-install.html`。本阶段不宣称已合并或部署。

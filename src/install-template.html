@@ -992,7 +992,7 @@ async function openChat(initialConfig, options = {}) {
       if (version === manualDiscoveryVersion) byId('manual-model-discover').disabled = false;
     }
   }
-  byId('manual-model-provider').addEventListener('change', () => void discoverManualModels(true));
+  byId('manual-model-provider').addEventListener('change', () => {byId('manual-model-error').hidden=true;void discoverManualModels(true);});
   byId('manual-model-discover').addEventListener('click', () => void discoverManualModels());
   byId('manual-model-id').addEventListener('input', () => {
     selectedManualModel = manualModels.find(model => model.id === byId('manual-model-id').value.trim()) || null;
@@ -1001,22 +1001,41 @@ async function openChat(initialConfig, options = {}) {
     updateManualThinking(); renderManualModels();
   });
   byId('manual-model-reasoning').addEventListener('change',updateManualThinking);
-  async function openManualModelForm() {
-    editingModel=null;byId('manual-model-error').hidden=true;i18n.text(byId('manual-model-form').querySelector('[type=submit]'),()=>t('添加并使用'));
+  async function openManualModelForm(model=null) {
+    editingModel=model;byId('manual-model-error').hidden=true;
+    const version=++manualDiscoveryVersion;selectedManualModel=null;manualModels=[];state.providers=[];
+    byId('manual-model-id').value='';byId('manual-model-id').disabled=true;
+    byId('manual-model-results').replaceChildren();byId('manual-model-provider').disabled=true;
+    byId('manual-model-provider').replaceChildren();byId('manual-model-discover').disabled=true;
     byId('content').hidden=true;byId('model-dialog').hidden=false;
-    state.providers=await agent.listProviders();
-    const providers=state.providers;
-    byId('manual-model-provider').replaceChildren(...providers.map(provider=>new Option(provider.providerName || provider.baseUrl,provider.id)));
-    const current=state.activeConfig;
-    const selected=state.selectedProviderId || providers.find(provider=>provider.api===current?.api && provider.baseUrl===current?.baseUrl)?.id;
-    if(selected)byId('manual-model-provider').value=selected;
-    state.selectedProviderId=null;
     byId('oauth-form').hidden=true;
     byId('provider-form').hidden=true;
     byId('manual-model-form').hidden=false;
-    i18n.text(byId('model-dialog-title'), () => t("添加模型"));
-    byId('manual-model-id').focus();
-    void discoverManualModels(true);
+    const submit=byId('manual-model-form').querySelector('[type=submit]');submit.disabled=true;
+    i18n.text(submit,()=>model?t('保存'):t('添加并使用'));
+    i18n.text(byId('model-dialog-title'),()=>model?t('编辑模型'):t('添加模型'));
+    try{
+      const providers=await agent.listProviders(),current=model||(await agent.listModels()).find(item=>item.id===state.activeConfig?.profileId);
+      if(version!==manualDiscoveryVersion||byId('model-dialog').hidden||byId('manual-model-form').hidden)return;
+      state.providers=providers;
+      byId('manual-model-provider').replaceChildren(...providers.map(provider=>new Option(provider.providerName || provider.baseUrl,provider.id)));
+      byId('manual-model-id').disabled=false;byId('manual-model-provider').disabled=false;
+      const related=current&&providers.find(provider=>provider.id===current.providerId);
+      const selected=(!model&&state.selectedProviderId)||related?.id;
+      if(model||selected)byId('manual-model-provider').value=selected||'';
+      state.selectedProviderId=null;
+      if(model){
+        byId('manual-model-id').value=model.model;
+        byId('manual-model-reasoning').checked=!!model.reasoning;byId('manual-model-vision').checked=model.input?.includes('image');
+        updateManualThinking();byId('manual-model-thinking').value=model.thinking||'off';renderManualModels();i18n.text(byId('manual-model-status'),'');
+        submit.disabled=!related;byId('manual-model-discover').disabled=!related;
+        if(!related)throw Error('请选择提供商。');
+      }else void discoverManualModels(true);
+      byId('manual-model-id').focus();
+    }catch(error){
+      if(version!==manualDiscoveryVersion||byId('model-dialog').hidden||byId('manual-model-form').hidden)return;
+      i18n.text(byId('manual-model-error'),()=>t(error.message||String(error)));byId('manual-model-error').hidden=false;
+    }
   }
   byId('manual-model-form').addEventListener('submit',async event=>{
     event.preventDefault();
@@ -1025,7 +1044,7 @@ async function openChat(initialConfig, options = {}) {
     const reasoning=byId('manual-model-reasoning').checked;
     const input=byId('manual-model-vision').checked ? ['text','image'] : ['text'];
     const provider=manualProvider();
-    if(!provider)return;
+    if(!provider){i18n.text(byId('manual-model-error'),()=>t('请选择提供商。'));byId('manual-model-error').hidden=false;byId('manual-model-provider').focus();return;}
     const {api,baseUrl,apiKey,headers,proxyUrl,proxyToken,providerName,nativeProvider=null}=provider;
     const config=Object.fromEntries(Object.entries({providerId:provider.id,api,baseUrl,apiKey,headers,proxyUrl,proxyToken,providerName,nativeProvider,model,modelInfo:selectedManualModel || undefined,reasoning,input,thinking:byId('manual-model-thinking').value}).filter(([,value])=>value!==undefined));
     if(editingModel){try{await runtimePi.manageModels({action:'update-model',id:editingModel.id,values:config});await openModelManager();}catch(error){i18n.text(byId('manual-model-error'),()=>t(error.message));byId('manual-model-error').hidden=false;}}
@@ -1113,12 +1132,13 @@ async function openChat(initialConfig, options = {}) {
           const item=document.createElement('div');item.className='manager-row';item.dataset.modelId=model.id;
           const title=document.createElement('span');title.textContent=model.model;
           item.append(title,action('编辑',async()=>{
-            await openManualModelForm();editingModel=model;
-            manualDiscoveryVersion++;selectedManualModel=null;manualModels=[];
-            byId('manual-model-provider').value=provider.id;byId('manual-model-id').value=model.model;
-            byId('manual-model-reasoning').checked=!!model.reasoning;byId('manual-model-vision').checked=model.input?.includes('image');
-            updateManualThinking();byId('manual-model-thinking').value=model.thinking||'off';renderManualModels();i18n.text(byId('manual-model-status'),'');
-            i18n.text(byId('model-dialog-title'),()=>t('编辑模型'));i18n.text(byId('manual-model-form').querySelector('[type=submit]'),()=>t('保存'));
+            const version=modelManagerVersion;
+            try{
+              const current=(await agent.listModels()).find(item=>item.id===model.id);
+              if(version!==modelManagerVersion||!byId('model-dialog').hidden||byId('preferences').style.display!=='flex')return;
+              if(!current)throw Error('模型配置不存在。');
+              await openManualModelForm(current);
+            }catch(error){if(version===modelManagerVersion){i18n.text(byId('model-settings-error'),()=>t(error.message||String(error)));byId('model-settings-error').hidden=false;}}
           }),action('删除',()=>remove('model',model,item)));
           group.append(item);
         }
