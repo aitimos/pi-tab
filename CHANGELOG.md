@@ -1,5 +1,16 @@
 # 更新记录
 
+## v1.5.1 — 2026-11-11
+
+### 修复与性能改进
+
+- fix: reopen only one retained chat window from the toolbar (338a45f)
+
+### 其他更新
+
+- test(extension): 等待可见的工具栏恢复窗口 (7d21330)
+
+
 ## v1.5.0 — 2026-11-09
 
 ### 新增功能
