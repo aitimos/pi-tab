@@ -99,7 +99,9 @@ async function check(name, action) {
   catch (error) { failures.push(name); console.error(`FAIL ${name}: ${error.message}`); }
 }
 const chatAttribute=id=>encodeURIComponent(JSON.stringify(['127.0.0.1',id]));
-const root = `document.querySelector('[data-pi-overlay]').shadowRoot`;
+// Hidden overlays retain their agents, so UI actions target a rendered window.
+const visible = `Array.from(document.querySelectorAll('[data-pi-overlay]')).filter(host=>host.getClientRects().length>0)`;
+const root = `${visible}[0].shadowRoot`;
 async function click(id) {
   if(id==='send'||id==='message-input'){await evaluate(`(()=>{const r=${root};const button=r.getElementById('continue-here');if(button&&!button.disabled)button.click();})()`);await browser('wait','--fn',`${root}.getElementById('continuation-panel').dataset.authorized==='true'`);}
   const point = await evaluate(`(()=>{const r=${root}.getElementById(${JSON.stringify(id)}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
@@ -150,7 +152,7 @@ try {
     const response = await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});await chrome.scripting.executeScript({target:{tabId:tab.id},world:'ISOLATED',func:()=>{if(window.__uiEventEpochRecorder)return;window.__uiEventEpochRecorder=true;chrome.runtime.onMessage.addListener(message=>{if(message.workerEpoch)window.__uiEventEpoch=message.workerEpoch;else if(message.type==='verify-target')window.__uiEventEpoch=message.target.workerEpoch;return false;});}});await chrome.storage.session.set({['active:'+tab.id]:true});return chrome.tabs.sendMessage(tab.id,{type:'activate',openWindow:${openWindow}})})()`);
     assert.equal(response.ok,true,response.error);
     await browser('tab',sourcePage);
-    await browser('wait','[data-pi-overlay]');
+    await browser('wait','--fn',`${visible}.length>0`);
     await browser('wait','--fn',`${root}.getElementById('api').options.length>0 || !${root}.getElementById('setup-error').hidden`);
     assert.equal(await evaluate(`${root}.getElementById('setup-error').textContent`),'');
   }
@@ -158,7 +160,7 @@ try {
   await browser('wait','--fn',`${root}.getElementById('api').options.length>0`);
   await check('startup exposes model API choices',async()=>{
     assert.ok(await evaluate(`${root}.getElementById('api').options.length>0`));
-    assert.equal(await evaluate(`Array.from(document.querySelectorAll('[data-pi-overlay]')).filter(host=>host.getClientRects().length>0).length`),1);
+    assert.equal(await evaluate(`${visible}.length`),1);
     assert.equal(await evaluate(`${root}.getElementById('setup-error').hidden`),true);
   });
   await check('theme defaults to following the page and tracks standard CSS changes',async()=>{
@@ -848,8 +850,6 @@ try {
     await browser('tab','close');await browser('tab',sourcePage);
   });
   await check('toolbar reuses one window after closing three or five independent chats',async()=>{
-    // Hidden overlays stay in the DOM. Count rendered hosts, not instances.
-    const visible=`Array.from(document.querySelectorAll('[data-pi-overlay]')).filter(host=>host.getClientRects().length>0)`;
     const count=()=>evaluate(`${visible}.length`);
     const saved=()=>evaluate(`JSON.parse(sessionStorage.getItem('pi-tab-open-chats-v2'))`);
     const closeAll=async()=>{
