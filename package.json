@@ -1,6 +1,6 @@
 {
   "name": "pi-tab",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
   "engines": {
     "node": ">=24.0.0"
@@ -20,7 +20,9 @@
     "test:queue": "node scripts/test-message-queue.mjs",
     "test:oauth": "node scripts/test-oauth.mjs",
     "test:mcp": "node scripts/test-mcp-ui.mjs",
-    "test:management": "node scripts/test-management.mjs",
+    "test:management": "node scripts/test-management.mjs && node scripts/test-model-settings-ui.mjs && node scripts/test-model-provider-ui.mjs",
+    "test:model-settings": "node scripts/test-model-settings-ui.mjs",
+    "test:model-providers": "node scripts/test-model-provider-ui.mjs",
     "build:linux": "bash scripts/build-linux.sh",
     "test:linux": "node scripts/test-linux-runtime.mjs",
     "test:linux-tools": "node scripts/test-extension-linux.mjs",

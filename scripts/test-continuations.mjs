@@ -74,8 +74,12 @@ try{
   for(const host of ['127.0.0.1','sub.localhost','localhost']){
     const url=`http://${host}:${port}/target-${host}`,b=await browser.newPage();await activate(b,url);
     await view(b).locator('#choose-history').click();const picker=b.frameLocator('iframe[title="历史对话"]');
-    await b.screenshot({path:join(output,`picker-${host}.png`)});
-    await picker.locator('button[data-ref="'+encodeURIComponent(JSON.stringify(['127.0.0.1',1]))+'"]').click();
+    const choice=picker.locator('button[data-ref="'+encodeURIComponent(JSON.stringify(['127.0.0.1',1]))+'"]');
+    // Wait for this row's OOPIF surface, rather than capturing the parent
+    // before the asynchronous history list has rendered.
+    await choice.focus();
+    await choice.screenshot({path:join(output,`picker-${host}.png`)});
+    await choice.click();
     await view(b).locator('#continuation-summary').filter({hasText:'Continuation fixture · 127.0.0.1'}).waitFor();
     const before=requests.length;await view(b).locator('#message-input').fill('TOOL_PAGE');await view(b).locator('#send').click();assert.equal(requests.length,before,'viewing must not submit');
     await view(b).locator('#continue-here').click();await view(b).locator('#send').click();
@@ -94,8 +98,10 @@ try{
   // including Chrome's immutable MessageSender.url after pushState.
   const spa=await browser.newPage();await activate(spa,base+'/spa-fixture');
   await view(spa).locator('#choose-history').click();
-  await spa.screenshot({path:join(output,'spa-picker.png')});
-  await spa.frameLocator('iframe[title="历史对话"]').locator('button[data-ref="'+encodeURIComponent(JSON.stringify(['127.0.0.1',1]))+'"]').click();
+  const spaChoice=spa.frameLocator('iframe[title="历史对话"]').locator('button[data-ref="'+encodeURIComponent(JSON.stringify(['127.0.0.1',1]))+'"]');
+  await spaChoice.focus();
+  await spaChoice.screenshot({path:join(output,'spa-picker.png')});
+  await spaChoice.click();
   await view(spa).locator('#continuation-summary').filter({hasText:'Continuation fixture · 127.0.0.1'}).waitFor();
   await view(spa).locator('#continue-here').click();await send(spa,'ORIGINAL_SPA_CONTEXT');
   let routeCase=0;
@@ -158,7 +164,8 @@ try{
   });
   // Present the OOPIF surface before input. On Linux a DOM-ready frame can
   // still route the first pointer event to the parent iframe element.
-  await cold.screenshot({path:join(output,`cold-picker-${round}.png`)});
+  await picker.locator('button[data-ref="'+encodeURIComponent(JSON.stringify(['127.0.0.1',1]))+'"]').focus();
+  await picker.locator('button[data-ref="'+encodeURIComponent(JSON.stringify(['127.0.0.1',1]))+'"]').screenshot({path:join(output,`cold-picker-${round}.png`)});
   await picker.locator('button[data-ref="'+encodeURIComponent(JSON.stringify(['127.0.0.1',1]))+'"]').click();
   await Promise.race([view(cold).locator('#continuation-summary').filter({hasText:'Continuation fixture · 127.0.0.1'}).waitFor(),picker.locator('#error').filter({hasText:/\S/}).waitFor().then(async()=>{throw Error('Cold picker: '+await picker.locator('#error').innerText());}),view(cold).locator('#continuation-error').filter({hasText:/\S/}).waitFor().then(async()=>{throw Error('Cold view: '+await view(cold).locator('#continuation-error').innerText());})]);
   await worker.evaluate(async tabId=>chrome.scripting.executeScript({target:{tabId},world:'ISOLATED',func:async()=>{window.__releaseNativeView();delete window.__releaseNativeView;await new Promise(requestAnimationFrame);}}),coldTab);

@@ -169,7 +169,9 @@ async function initializeExtension() {
         async refreshBinding(){return refreshState(parseRef(chatId));},
         async continueHere(){
           syncRoute();await pageRequest({type:'document-status'},{readOnly:true});await routeSynchronized;
-          const ref=parseRef(chatId),state=states.get(chatId)||await refreshState(ref);
+          // Reconnection broadcasts may still be updating the UI cache. Use
+          // an authoritative read for this action's compare-and-swap version.
+          const ref=parseRef(chatId),state=await continuationCall(ref,'view');
           const value=await continuationCall(ref,'continue',[],undefined,{expectedVersion:state.version});
           const current=states.get(chatId)?.version;
           if(current&&(current.epoch!==value.version.epoch||current.seq>value.version.seq))throw reconnectError(false);

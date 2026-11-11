@@ -88,18 +88,18 @@ try{
     };
     if(mode==='extension')await otherSite('initialize');
     const fill=async(id,value)=>evaluate(`(()=>{const e=${root}.getElementById(${JSON.stringify(id)});e.value=${JSON.stringify(value)};e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
-    const manage=async()=>{await click('#model-settings');await click('#model-manage');await wait(`${root}.querySelector('.manager-row button')`);};
-    await manage();assert.equal(await evaluate(`${root}.getElementById('model-dialog-title').textContent`),language==='en'?'Manage models':'管理模型');
+    const manage=async()=>{await click('#settings');await click('#settings-models-tab');await wait(`${root}.querySelector('.manager-row button')`);};
+    await manage();assert.equal(await evaluate(`${root}.getElementById('settings-models-tab').textContent`),language==='en'?'Model':'模型');
     await click('.manager-group>.manager-row:first-child button');
     await fill('provider-name','Updated provider');await fill('provider-url',base+'/v2');await fill('provider-key','new-key');await click('#provider-form [type=submit]');
-    await wait(`!${root}.getElementById('model-manager').hidden`);
+    await wait(`${root}.getElementById('model-dialog').hidden && ${root}.querySelector('.manager-row button')`);
     let profiles=await call('listModels');assert.equal(profiles.length,1);assert.equal(profiles[0].id,'fixture');assert.equal(profiles[0].baseUrl,base+'/v2');
     await click('[data-model-id="fixture"] button');await fill('manual-model-id','second-model');await click('#manual-model-form [type=submit]');
-    await wait(`!${root}.getElementById('model-manager').hidden`);
+    await wait(`${root}.getElementById('model-dialog').hidden && ${root}.querySelector('.manager-row button')`);
     assert.equal((await call('listModels'))[0].model,'second-model');
     if(mode==='extension'){const shared=await otherSite('listModels');assert.equal(shared[0].model,'second-model');assert.equal(shared[0].baseUrl,base+'/v2');}
     await browser('screenshot',join(directory,`${mode}-${language}-manager.png`));
-    await click('#model-dialog-close');await wait(`${root}.getElementById('chat-model').textContent==='second-model'`);
+    await click('#preferences-back');await wait(`${root}.getElementById('chat-model').textContent==='second-model'`);
     await click('#message-input');await browser('keyboard','inserttext','Test updated configuration');await browser('press','Enter');
     await wait(`${root}.getElementById('chat-messages').textContent.includes('Management reply')`);
     assert.ok(requests.some(r=>r.url==='/v2/chat/completions'&&r.key==='Bearer new-key'&&r.input.model==='second-model'));
