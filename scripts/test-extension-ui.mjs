@@ -99,7 +99,9 @@ async function check(name, action) {
   catch (error) { failures.push(name); console.error(`FAIL ${name}: ${error.message}`); }
 }
 const chatAttribute=id=>encodeURIComponent(JSON.stringify(['127.0.0.1',id]));
-const root = `document.querySelector('[data-pi-overlay]').shadowRoot`;
+// Hidden overlays retain their agents, so UI actions target a rendered window.
+const visible = `Array.from(document.querySelectorAll('[data-pi-overlay]')).filter(host=>host.getClientRects().length>0)`;
+const root = `${visible}[0].shadowRoot`;
 async function click(id) {
   if(id==='send'||id==='message-input'){await evaluate(`(()=>{const r=${root};const button=r.getElementById('continue-here');if(button&&!button.disabled)button.click();})()`);await browser('wait','--fn',`${root}.getElementById('continuation-panel').dataset.authorized==='true'`);}
   const point = await evaluate(`(()=>{const r=${root}.getElementById(${JSON.stringify(id)}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
@@ -150,7 +152,7 @@ try {
     const response = await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});await chrome.scripting.executeScript({target:{tabId:tab.id},world:'ISOLATED',func:()=>{if(window.__uiEventEpochRecorder)return;window.__uiEventEpochRecorder=true;chrome.runtime.onMessage.addListener(message=>{if(message.workerEpoch)window.__uiEventEpoch=message.workerEpoch;else if(message.type==='verify-target')window.__uiEventEpoch=message.target.workerEpoch;return false;});}});await chrome.storage.session.set({['active:'+tab.id]:true});return chrome.tabs.sendMessage(tab.id,{type:'activate',openWindow:${openWindow}})})()`);
     assert.equal(response.ok,true,response.error);
     await browser('tab',sourcePage);
-    await browser('wait','[data-pi-overlay]');
+    await browser('wait','--fn',`${visible}.length>0`);
     await browser('wait','--fn',`${root}.getElementById('api').options.length>0 || !${root}.getElementById('setup-error').hidden`);
     assert.equal(await evaluate(`${root}.getElementById('setup-error').textContent`),'');
   }
@@ -158,6 +160,7 @@ try {
   await browser('wait','--fn',`${root}.getElementById('api').options.length>0`);
   await check('startup exposes model API choices',async()=>{
     assert.ok(await evaluate(`${root}.getElementById('api').options.length>0`));
+    assert.equal(await evaluate(`${visible}.length`),1);
     assert.equal(await evaluate(`${root}.getElementById('setup-error').hidden`),true);
   });
   await check('theme defaults to following the page and tracks standard CSS changes',async()=>{
@@ -845,6 +848,57 @@ try {
     assert.equal(await evaluate(`document.querySelector('[data-pi-overlay]').lang`),language);
     assert.equal(await evaluate(`${root}.getElementById('message-input').placeholder`),en?'Message':'输入消息');
     await browser('tab','close');await browser('tab',sourcePage);
+  });
+  await check('toolbar reuses one window after closing three or five independent chats',async()=>{
+    const count=()=>evaluate(`${visible}.length`);
+    const saved=()=>evaluate(`JSON.parse(sessionStorage.getItem('pi-tab-open-chats-v2'))`);
+    const closeAll=async()=>{
+      await evaluate(`${visible}.forEach(host=>host.shadowRoot.getElementById('close').click())`);
+      assert.equal(await count(),0);assert.deepEqual(await saved(),[]);
+    };
+    for(const total of [3,5]) {
+      await browser('reload');await activate();
+      assert.equal(await count(),1);
+      for(let i=1;i<total;i++) {
+        await evaluate(`${root}.getElementById('new-agent').click()`);
+        await browser('wait','--fn',`${visible}.length===${i+1} && JSON.parse(sessionStorage.getItem('pi-tab-open-chats-v2')).length===${i+1}`);
+      }
+      const refs=await saved();
+      const originalId=refs[0].conversationId;
+      const history=await engine('agent',[],originalId,'history');
+      const config=await engine('agent',[],originalId,'savedConfig');
+      assert.equal(history.ok,true);assert.equal(config.ok,true);
+      await browser('tab',sourcePage);
+      assert.equal(refs.length,total);
+      assert.equal(new Set(refs.map(ref=>JSON.stringify(ref))).size,total);
+      // A visible (including minimized) window takes priority over hidden ones.
+      await evaluate(`${visible}.slice(1).forEach(host=>host.shadowRoot.getElementById('close').click())`);
+      await activate();assert.equal(await count(),1);
+      assert.equal((await saved()).length,1);
+      await closeAll();
+      for(let i=0;i<10;i++) {
+        await activate();assert.equal(await count(),1);
+        assert.equal((await saved()).length,1);
+        assert.equal(await evaluate(`document.querySelectorAll('[data-pi-overlay]').length`),total);
+        await closeAll();
+      }
+      await browser('tab',controllerPage);
+      const responses=await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url+'*')}});return Promise.all(Array.from({length:10},()=>chrome.tabs.sendMessage(tab.id,{type:'activate',openWindow:true})))})()`);
+      assert.ok(responses.every(response=>response.ok));
+      await browser('tab',sourcePage);
+      assert.equal(await count(),1);
+      assert.equal(await evaluate(`document.querySelectorAll('[data-pi-overlay]').length`),total);
+      const reopened=await saved();assert.equal(reopened.length,1);
+      assert.ok(refs.some(ref=>JSON.stringify(ref)===JSON.stringify(reopened[0])));
+      assert.deepEqual(await engine('agent',[],originalId,'history'),history);
+      assert.deepEqual(await engine('agent',[],originalId,'savedConfig'),config);
+      await browser('tab',sourcePage);
+      await browser('reload');await activate(false);
+      assert.equal(await count(),1);assert.deepEqual(await saved(),reopened);
+      // Reload with every window closed must not resurrect the hidden set.
+      await closeAll();await browser('reload');await activate();
+      assert.equal(await count(),1);
+    }
   });
   if(process.env.PI_TAB_TEST_LIVE==='1') {
     for(const page of ['https://github.com/aitimos/pi-tab','https://www.bilibili.com/']) {

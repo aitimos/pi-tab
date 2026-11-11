@@ -271,9 +271,12 @@ chrome.runtime.onMessage.addListener((message,_sender,respond)=>{
       if(!extensionStarted)await startExtension();
       if(message.openWindow){
         const windows=window.__piQuickChatOverlay?.instances;
-        if(windows?.size){
-          for(const instance of windows.values())instance.open();
-        }else await openChat(undefined,{forceNew:true,chatId:activeId});
+        // Hidden windows retain their agents. Toolbar activation is a single
+        // window entry point, not a request to restore every retained instance.
+        const instances=[...(windows?.values()||[])];
+        const instance=instances.find(instance=>instance.visible)||instances.find(instance=>instance.id===activeId)||instances[0];
+        if(instance)instance.open();
+        else await openChat(undefined,{forceNew:true,chatId:activeId});
       }
       return {active:true};
     }
