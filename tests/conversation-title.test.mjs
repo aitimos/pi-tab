@@ -58,3 +58,11 @@ test('stopping a conversation cancels its title request and interrupted runs do 
   await assert.rejects(pending,{name:'AbortError'});
   assert.equal(await generateConversationTitle({completeSimple:()=>{throw Error('must not run');}},{},[...entries,user('second'),{kind:'pi.assistant',model:[{role:'assistant',stopReason:'aborted',content:[]}]}]),null);
 });
+
+test('a title response arriving after cancellation cannot be published',async()=>{
+  const controller=new AbortController();let finish;
+  const pending=generateConversationTitle({completeSimple:()=>new Promise(resolve=>{finish=resolve;})},{},[user('hello'),answer([{type:'text',text:'Hello'}])],controller.signal);
+  controller.abort();
+  finish({stopReason:'stop',content:[{type:'text',text:'Stale title'}]});
+  await assert.rejects(pending,{name:'AbortError'});
+});

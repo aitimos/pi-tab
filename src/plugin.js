@@ -203,7 +203,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
       if (!title || disposed) return;
       const saved = await harness.commit(async tx => {
         const item = (await tx.doc(TabState)).chats.find(chat => chat.id === id);
-        if (!item || item.titleGenerated) return false;
+        if (controller.signal.aborted || !item || item.titleGenerated) return false;
         item.title = title;
         item.titleGenerated = true;
         return true;
@@ -814,7 +814,7 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
     importProfiles(profiles) {
       siteSettings.importModels('profiles',profiles);
     },
-    modelUsage(){return [...configurations].filter(([id])=>pi.busyFor(id)||titleJobs.has(id)).map(([,config])=>config.profileId);},
+    modelUsage(){return [...configurations].filter(([id])=>pi.busyFor(id)).map(([,config])=>config.profileId);},
     async manageModels(change, busyIds=pi.modelUsage()) {
       await pi.ready; ensureOpen();
       const state=siteSettings.read();
@@ -827,8 +827,16 @@ export function install({ globalName = 'pi', log = true, storageName, storageFac
       return true;
     },
     replaceModelSettings(settings){
+      const previous=siteSettings.read().profiles;
       siteSettings.update(data=>{Object.assign(data,settings);if(data.config)data.config=data.profiles.find(p=>p.id===data.config.profileId)||null;});
       const profiles=siteSettings.read().profiles;
+      // A cosmetic title request must not lock settings after the task is idle.
+      // Cancel only titles using a changed/deleted profile, including updates
+      // received from another extension engine.
+      for(const [id,controller] of titleJobs){
+        const profileId=configurations.get(id)?.profileId;
+        if(JSON.stringify(previous.find(p=>p.id===profileId))!==JSON.stringify(profiles.find(p=>p.id===profileId)))controller.abort();
+      }
       for(const [id,config] of configurations)if(!profiles.some(p=>p.id===config.profileId)&&!pi.busyFor(id)){configurations.delete(id);if(id===conversation.id)configuration=null;}
       emit({type:'models_changed'});
     },

@@ -26,6 +26,7 @@ export async function generateConversationTitle(models, model, entries, signal) 
     systemPrompt: TITLE_PROMPT,
     messages: [{role:'user',content:`用户：\n${user.slice(0,4096)}\n\n助手：\n${answer.slice(0,4096)}`,timestamp:Date.now()}],
   }, {maxTokens:1024,signal:signal ? AbortSignal.any([signal,AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000)});
+  signal?.throwIfAborted();
   if (response.stopReason === 'error' || response.stopReason === 'aborted') throw new Error(response.errorMessage || '标题生成失败');
   const title = response.content.filter(part => part.type === 'text').map(part => part.text).join('')
     .trim().split(/[\r\n]/)[0].replace(/^(?:标题|Title)\s*[:：]\s*/i,'')
