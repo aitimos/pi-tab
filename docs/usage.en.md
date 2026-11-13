@@ -46,9 +46,9 @@ The extension provides `tab_list`, `tab_open`, `tab_send`, and `tab_read`. `tab_
 
 ## Continue a conversation on another page
 
-Enable the extension on the destination page, open **Conversation history**, and select the original conversation. Selecting only opens history; click **Continue on this page** before sending a task. Existing context and model settings remain with the original conversation, while page tools use the selected document. This works on the same hostname, another subdomain, or another hostname.
+Enable the extension on the destination page, open **Conversation history** from the conversation menu, and select the original conversation. Selecting only opens history; send a new message to use the current page. Existing context and model settings remain with the original conversation, while page tools use the selected document. This works on the same hostname, another subdomain, or another hostname.
 
-The conversation source and execution page appear above the chat. While a task runs, wait or choose **Stop task and continue here**. Reloading, navigation, or closing a page revokes its authorization. If the extension background restarts with interrupted tasks, review and explicitly stop the source site's interrupted conversations before continuing. History is retained and tasks are not automatically replayed.
+While a task runs, wait or use Stop, then send a new message. Reloading, navigation, and closing revoke the old document's authorization without replaying tasks. A new message uses the current page. After a background restart, interrupted tasks stay paused. Choose **Stop interrupted tasks for source site** from the conversation menu and confirm the affected conversations to clear them. Cancel leaves them unchanged; history is retained. **Go to execution page**, in the same menu, focuses the existing tab and window.
 
 New conversations, new windows, and `tab_open` create independent tasks without inheriting messages. `tab_open` also returns `conversationRef`; `tab_send` and `tab_read` accept `ownerSite` and reject ambiguous numeric IDs.
 
@@ -73,6 +73,8 @@ The bookmark contains all the code and does not download external scripts at run
 Use the attachment button, drop files into the composer, or paste images. Supported formats are UTF-8 text, source code, Markdown, JSON, CSV, and PNG/JPEG/WebP/GIF images. Images require a vision-capable model; custom models can enable image input in the model configuration when the service supports it. PDF, Word, Excel, audio/video, and archives are not parsed.
 
 Up to 8 attachments are allowed, with 5 MB per file and 10 MB total. Attachments are sent to the configured model service and saved with sent messages. Editing a queued message preserves its attachments. Switching conversations within a window retains separate drafts and pending attachments; unsent drafts do not survive a page reload.
+
+If a send is definitely rejected, its original text and attachments return to the composer. If you have already started editing another message, the original appears under **Saved drafts**. Choose **Move to composer** to retrieve it while keeping your current edit as another saved draft. This does not send a message. Accepted submissions and submissions with an unknown result do not enter this list; check history and the queue first. Saved drafts last only within the current window.
 
 ## Conversation storage and recovery
 

@@ -14,7 +14,7 @@ const pageToolNames = new Set(['page_snapshot', 'inspect_dom', 'js_eval', 'click
 
 async function background(request) {
   const response = await chrome.runtime.sendMessage(request);
-  if (!response?.ok) throw Object.assign(new Error(response?.error || '后台没有响应。'),{diagnostics:response?.diagnostics,code:response?.code});
+  if (!response?.ok) throw Object.assign(new Error(response?.error || '后台没有响应。'),{diagnostics:response?.diagnostics,code:response?.code,notSubmitted:response?.notSubmitted});
   return response.value;
 }
 
@@ -32,7 +32,7 @@ async function existing(ref) {
   if (!(await engine.pi.listChats()).some(chat=>chat.id===ref.conversationId)) throw Error('CONVERSATION_DELETED');
   return engine;
 }
-function requireOwner(engine) { if(engine.recovery)throw Error('OWNER_RECOVERY_REQUIRED'); }
+function requireOwner(engine) { if(engine.recovery)throw Object.assign(Error('OWNER_RECOVERY_REQUIRED'),{notSubmitted:true}); }
 const continuations = new Continuations({
   validateTarget:target=>background({type:'validate-target',target}),
   exists:async ref=>{requireOwner(await existing(ref));},
@@ -55,7 +55,9 @@ async function protocol(message) {
   }
   if(!ref)throw Error('INVALID_CONVERSATION_REF');
   refKey(ref);
-  const engine=await existing(ref), {pi}=engine, id=ref.conversationId;
+  let engine;
+  try{engine=await existing(ref);}catch(error){error.notSubmitted=true;throw error;}
+  const {pi}=engine, id=ref.conversationId;
   if(operation==='view')return sourceState(ref);
   if(operation==='recover')return continuations.serial(ref.ownerSite,async()=>{
     if(!engine.recovery || args[0]!==engine.recovery.version)throw Error('RECOVERY_VERSION_CHANGED');
@@ -176,10 +178,10 @@ chrome.runtime.onMessage.addListener((message, _sender, respond) => {
     const owned=[...continuations.rows.values()].filter(row=>row.ownerTabId===message.tabId).map(row=>row.ref);
     continuations.invalidate(message.tabId);
     const stopping=message.type==='tab-closed'?Promise.all(owned.map(async ref=>{const e=await existing(ref);if(!e.recovery)await e.pi.agent(ref.conversationId).abort();})):Promise.resolve();
-    stopping.then(()=>respond({ok:true}),error=>respond({ok:false,code:error.code||error.message,error:continuationErrorMessage(error)}));return true;
+    stopping.then(()=>respond({ok:true}),error=>respond({ok:false,code:error.code||error.message,notSubmitted:error.notSubmitted,error:continuationErrorMessage(error)}));return true;
   }
   if(message.target==='continuations'){
-    protocol(message).then(value=>respond({ok:true,value}),error=>respond({ok:false,code:error.code||error.message,error:continuationErrorMessage(error)}));return true;
+    protocol(message).then(value=>respond({ok:true,value}),error=>respond({ok:false,code:error.code||error.message,notSubmitted:error.notSubmitted,error:continuationErrorMessage(error)}));return true;
   }
   if(message.type==='mcp-update-guard'){
     sharedMcpGate=message.value;
@@ -278,6 +280,6 @@ chrome.runtime.onMessage.addListener((message, _sender, respond) => {
       return history.entries.slice(-(args[0]||10)).map(entry=>({kind:entry.kind,text:entry.model?.map(item=>typeof item.content==='string'?item.content:item.content?.filter(part=>part.type==='text').map(part=>part.text).join('\n')).filter(Boolean).join('\n')}));
     }
     throw new Error('未知引擎操作。');
-  })().then(value=>respond({ok:true,value}),error=>respond({ok:false,code:error.code||error.message,error:continuationErrorMessage(error),diagnostics:error.diagnostics}));
+  })().then(value=>respond({ok:true,value}),error=>respond({ok:false,code:error.code||error.message,notSubmitted:error.notSubmitted,error:continuationErrorMessage(error),diagnostics:error.diagnostics}));
   return true;
 });

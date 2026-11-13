@@ -10,7 +10,7 @@ const request=async(type,extra={})=>{
 };
 byId('rebuild').textContent=t('重建目录');
 byId('heading').textContent=t('历史对话');byId('close').textContent=t('关闭');byId('refresh').textContent=t('刷新目录');
-byId('help').textContent=t('选择后仅查看历史。点击“在当前页继续”才会切换执行页面。');
+byId('help').textContent=t('选择后仅查看历史。发送新消息时使用当前页面。');
 byId('search').placeholder=t('搜索标题或来源站点');byId('search').setAttribute('aria-label',t('搜索标题或来源站点'));byId('more').textContent=t('加载更多');
 let cursor=null,rows=[];
 function render(){

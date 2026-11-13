@@ -249,7 +249,7 @@ try{
   await extCall(first,'agent',[{api:'openai-completions',baseUrl:base+'/v1',apiKey:'test-only',model:'test-model'}],'configure');
   const modelInputsBefore=modelInputs.length;
   const callsBefore=requests.filter(item=>item.message?.method==='tools/call').length;
-  await extCall(first,'agent',['Use docs search'],'prompt');
+  await view(first).locator('#preferences-back').click();await first.reload();await view(first).locator('#message-input').fill('Use docs search');await view(first).locator('#send').click();await view(first).locator('#abort').waitFor({state:'hidden'});
   assert.ok(requests.filter(item=>item.message?.method==='tools/call').length>callsBefore,'the extension model uses its registered MCP tool');
   assert.ok(modelInputs.slice(modelInputsBefore).some(input=>JSON.stringify(input.messages).includes(unicodeText)),'extension tool results preserve split UTF-8');
   modelHeld=true;

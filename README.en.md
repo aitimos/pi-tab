@@ -112,9 +112,9 @@ Project code is licensed under the [Apache License 2.0](LICENSE). Bundled Linux,
 
 ## Continue a conversation on another page
 
-Enable the extension on the destination page, open **Conversation history**, and select the original conversation. Selecting only opens history; click **Continue on this page** before sending a task. Existing context and model settings remain with the original conversation, while page tools use the selected document. This works on the same hostname, another subdomain, or another hostname.
+Enable the extension on the destination page, open **Conversation history** from the conversation menu, and select the original conversation. Selecting only opens history; send a new message to use the current page. Existing context and model settings remain with the original conversation, while page tools use the selected document. This works on the same hostname, another subdomain, or another hostname.
 
-The conversation source and execution page appear above the chat. While a task runs, wait or choose **Stop task and continue here**. Reloading, navigation, or closing a page revokes its authorization. If the extension background restarts with interrupted tasks, review and explicitly stop the source site's interrupted conversations before continuing. History is retained and tasks are not automatically replayed.
+While a task runs, wait or use Stop, then send a new message. Reloading, navigation, and closing revoke the old document's authorization without replaying tasks. A new message uses the current page. After a background restart, interrupted tasks stay paused. Choose **Stop interrupted tasks for source site** from the conversation menu and confirm the affected conversations to clear them. Cancel leaves them unchanged; history is retained. **Go to execution page**, in the same menu, focuses the existing tab and window.
 
 New conversations, new windows, and `tab_open` create independent tasks without inheriting messages. `tab_open` also returns `conversationRef`; `tab_send` and `tab_read` accept `ownerSite` and reject ambiguous numeric IDs.
 

@@ -1,6 +1,6 @@
 import {extensionTestRpc} from './extension-test-rpc.mjs';
 // Real extension + Durable tool execution, with a deterministic local model server.
-import {agentBrowser} from './browser-cli.mjs';
+import {agentBrowser,sendFromOverlay} from './browser-cli.mjs';
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {createHash,generateKeyPairSync} from 'node:crypto';
@@ -85,9 +85,9 @@ try{
   const source=(await engine('listChats'))[0].id;
   await engine('agent',[{api:'openai-completions',baseUrl:new URL('/v1',url).href,apiKey:'test-only',model:'test-model',thinking:'off',reasoning:false}],source,'configure');
   const root=`document.querySelector('[data-pi-overlay]').shadowRoot`;
+  let otherPage;
   async function start(chatId,text,tabId=sourceTab){
-    await browser('tab',controllerPage);
-    await evaluate(`void (${extensionTestRpc.toString()})(${JSON.stringify({target:'engine',site:'127.0.0.1',tabId,method:'agent',args:[text],chatId,name:'prompt'})})`);
+    await browser('tab',tabId===sourceTab?sourcePage:otherPage);await sendFromOverlay(browser,evaluate,text,{chatId,wait:false});
   }
   async function idle(chatId){for(let i=0;i<30;i++){if(!(await engine('listChats')).find(c=>c.id===chatId)?.busy)return;await new Promise(resolve=>setTimeout(resolve,100));}throw Error('Conversation did not stop');}
   async function waitServer(predicate){for(let i=0;i<100;i++){if(predicate())return;await new Promise(resolve=>setTimeout(resolve,50));}assert.ok(predicate(),'server state reached');}
@@ -154,7 +154,9 @@ try{
   }
   // Controller owns extension APIs; page JavaScript intentionally does not.
   await browser('tab',controllerPage);
-  const otherTab=await evaluate(`(async()=>{const t=await chrome.tabs.create({url:${JSON.stringify(new URL('/other',url).href)},active:false});return t.id})()`);
+  otherPage=(await browser('tab','new',new URL('/other',url).href)).targetId;
+  await browser('tab',controllerPage);
+  const otherTab=await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(new URL('/other',url).href)}});return tab.id})()`);
   const otherChat=await engine('createChat',[source],undefined,undefined,'127.0.0.1',otherTab);
   await start(source,'HOLD_CLOSE');await start(otherChat,'HOLD_OTHER',otherTab);
   await waitServer(()=>pending.has('HOLD_CLOSE')&&pending.has('HOLD_OTHER'));

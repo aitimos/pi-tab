@@ -93,7 +93,7 @@ try{
       await expect(ui('#settings-models-tab')).toHaveText(value==='en'?'Model':'模型');
     };
     const send=async text=>{
-      if(worker){if(await ui('#continuation-panel').getAttribute('data-authorized')!=='true')await ui('#continue-here').click();await expect(ui('#continuation-panel')).toHaveAttribute('data-authorized','true');}
+
       await ui('#message-input').fill(text);await ui('#send').click();
     };
     const shot=async name=>{const file=`${mode}-${language}-${name}.png`;await root.screenshot({path:join(directory,file),animations:'disabled'});screenshots.push(file);};

@@ -1,4 +1,5 @@
 export {createId} from './id.js';
+export {ComposerDrafts} from './composer-drafts.js';
 export {conversationRef, refKey, parseRef} from './conversation-ref.js';
 export {readSourceDirectory, inspectRuntime, stopColdRuntime} from './source-directory.js';
 import {acquireStorage} from './storage-lock.js';

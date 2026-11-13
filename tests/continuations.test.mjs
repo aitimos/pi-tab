@@ -54,3 +54,11 @@ test('lock acquisition timeout aborts queued writer; held lock survives acquisit
   await new Promise(r=>setTimeout(r,20));assert.equal(held,true);assert.deepEqual(acquired.value.messages,['old']);acquired.release();await acquired.done;assert.equal(held,false);
   await assert.rejects(()=>acquireStorage(null,'history',()=>{}),e=>e.code==='STORAGE_LOCK_UNAVAILABLE');
 });
+
+test('admission rejection restores drafts while an accepted task failure does not',async()=>{
+  const c=new Continuations({epoch:'test',exists:async()=>{},busy:async()=>false,validateTarget:async()=>{},emit:()=>{}});
+  const ref={ownerSite:'example.com',conversationId:1},target={tabId:1,url:'https://example.com/'};
+  await assert.rejects(()=>c.submit(ref,{target,viewId:'v',leaseToken:'bad'},'not-accepted',()=>{throw Error('must not run');}),e=>e.notSubmitted);
+  const binding=await c.bind(ref,c.version(ref),'v',target);
+  await assert.rejects(()=>c.submit(ref,{target,viewId:'v',leaseToken:binding.leaseToken},'accepted',()=>{throw Error('failed during execution');}),e=>!e.notSubmitted);
+});

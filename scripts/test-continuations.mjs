@@ -55,10 +55,13 @@ async function activate(page,url){
   const result=await worker.evaluate(async url=>{const [tab]=await chrome.tabs.query({url});await chrome.storage.session.set({['active:'+tab.id]:true});return chrome.tabs.sendMessage(tab.id,{type:'activate',openWindow:true});},url);
   assert.equal(result.ok,true,result.error);await view(page).locator('#settings:enabled').waitFor();
 }
+async function menu(page){await view(page).locator('#chat-switch').click();}
+async function history(page){await menu(page);await view(page).locator('#choose-history').click();}
+async function selected(page){await page.locator('iframe[title="历史对话"]').waitFor({state:'detached'});await view(page).locator('#chat-messages').filter({hasText:'ORIGINAL_TASK_CONTEXT'}).waitFor();}
 async function send(page,text){await view(page).locator('#message-input').fill(text);await view(page).locator('#send').click();await view(page).locator('#abort').waitFor({state:'hidden'});}
 try{
   await worker.evaluate(async base=>{await chrome.storage.local.set({profiles:[{id:'fixture',api:'openai-completions',baseUrl:base+'/v1',apiKey:'test-only',model:'fixture',thinking:'off',reasoning:false}],providers:[]});},base);
-  const a=await browser.newPage();await activate(a,base+'/source');await view(a).locator('#continue-here').click();await send(a,'ORIGINAL_TASK_CONTEXT');
+  const a=await browser.newPage();await activate(a,base+'/source');await send(a,'ORIGINAL_TASK_CONTEXT');
   await a.waitForFunction(()=>document.querySelector('[data-pi-overlay]')?.shadowRoot?.getElementById('chat-messages').textContent.includes('REMEMBERED_ORIGINAL_CONTEXT'));
   await a.screenshot({path:join(output,'source.png')});
   const sourceTab=await worker.evaluate(async url=>(await chrome.tabs.query({url}))[0].id,base+'/source');
@@ -73,47 +76,54 @@ try{
   console.log('PASS cross-site and same-site tab_open independent agents, legacy tab_send and tab_read');
   for(const host of ['127.0.0.1','sub.localhost','localhost']){
     const url=`http://${host}:${port}/target-${host}`,b=await browser.newPage();await activate(b,url);
-    await view(b).locator('#choose-history').click();const picker=b.frameLocator('iframe[title="历史对话"]');
+    await history(b);const picker=b.frameLocator('iframe[title="历史对话"]');
     const choice=picker.locator('button[data-ref="'+encodeURIComponent(JSON.stringify(['127.0.0.1',1]))+'"]');
     // Wait for this row's OOPIF surface, rather than capturing the parent
     // before the asynchronous history list has rendered.
     await choice.focus();
     await choice.screenshot({path:join(output,`picker-${host}.png`)});
     await choice.click();
-    await view(b).locator('#continuation-summary').filter({hasText:'Continuation fixture · 127.0.0.1'}).waitFor();
-    const before=requests.length;await view(b).locator('#message-input').fill('TOOL_PAGE');await view(b).locator('#send').click();assert.equal(requests.length,before,'viewing must not submit');
-    await view(b).locator('#continue-here').click();await view(b).locator('#send').click();
+    await selected(b);
+    const before=requests.length;assert.equal(await view(b).locator('#continuation-panel').count(),0);
+    await view(b).locator('#message-input').fill('TOOL_PAGE');
+    await view(b).locator('#send').evaluate(button=>button.click());assert.equal(requests.length,before,'synthetic send must not submit');
+    await view(b).locator('#message-input').press('Enter');
     await b.waitForFunction(url=>document.querySelector('[data-pi-overlay]')?.shadowRoot?.getElementById('chat-messages').textContent.includes(url),url);
     const observed=await observeRequest(input=>JSON.stringify(input.messages).includes('ORIGINAL_TASK_CONTEXT')&&input.messages.some(message=>message.role==='tool'&&JSON.stringify(message.content).includes(url)));
     assert.ok(observed.messages.some(message=>message.role==='tool'&&JSON.stringify(message.content).includes(url)));
     await b.screenshot({path:join(output,`continue-${host}.png`)});
-    if(host==='localhost'){await worker.evaluate(()=>chrome.storage.local.set({'pi-tab-language':'en'}));await view(b).locator('#continuation-summary').filter({hasText:'Conversation:'}).waitFor();await b.setViewportSize({width:600,height:900});await b.screenshot({path:join(output,'continuation-en-narrow.png')});await b.setViewportSize({width:1280,height:1000});await worker.evaluate(()=>chrome.storage.local.set({'pi-tab-language':'zh-CN'}));}
+    if(host==='localhost'){
+      const targetWindow=await worker.evaluate(async url=>{const tab=(await chrome.tabs.query({url}))[0];const moved=await chrome.windows.create({tabId:tab.id,focused:false});return {windowId:moved.id,tabId:tab.id};},url);
+      const count=requests.length;await menu(a);await view(a).locator('#target-return').waitFor();await a.screenshot({path:join(output,'conversation-menu.png')});
+      await view(a).locator('#target-return').click();await view(a).locator('#chat-list').waitFor({state:'hidden'});
+      const focused=await worker.evaluate(async ({windowId,tabId})=>({window:(await chrome.windows.get(windowId)).focused,tab:(await chrome.tabs.get(tabId)).active}),targetWindow);
+      assert.deepEqual(focused,{window:true,tab:true});assert.equal(requests.length,count,'return only focuses existing tab and window');
+      console.log('PASS return to executor in a second real browser window without bind or send');
+    }
+    if(host==='localhost'){await worker.evaluate(()=>chrome.storage.local.set({'pi-tab-language':'en'}));await b.locator('[data-pi-overlay][lang="en"]').waitFor();await b.setViewportSize({width:600,height:900});await b.screenshot({path:join(output,'continuation-en-narrow.png')});await b.setViewportSize({width:1280,height:1000});await worker.evaluate(()=>chrome.storage.local.set({'pi-tab-language':'zh-CN'}));}
     // Same-URL reload must revoke the old authorization, while history remains readable.
-    await b.reload();await view(b).locator('#continue-here').waitFor();
-    const count=requests.length;await view(b).locator('#message-input').fill('TOOL_PAGE');await view(b).locator('#send').click();assert.equal(requests.length,count);
+    const count=requests.length;await b.reload();await view(b).locator('#settings:enabled').waitFor();assert.equal(requests.length,count,'reload must not replay');
+    await send(b,'TOOL_PAGE');await observeRequest(input=>input.messages.some(m=>m.role==='tool'&&JSON.stringify(m.content).includes(url)));
     await b.screenshot({path:join(output,`reload-${host}.png`)});
     await b.close();console.log('PASS continuation',host);
   }
   // Same-document navigation must revoke locally and allow explicit recovery,
   // including Chrome's immutable MessageSender.url after pushState.
   const spa=await browser.newPage();await activate(spa,base+'/spa-fixture');
-  await view(spa).locator('#choose-history').click();
+  await history(spa);
   const spaChoice=spa.frameLocator('iframe[title="历史对话"]').locator('button[data-ref="'+encodeURIComponent(JSON.stringify(['127.0.0.1',1]))+'"]');
   await spaChoice.focus();
   await spaChoice.screenshot({path:join(output,'spa-picker.png')});
   await spaChoice.click();
-  await view(spa).locator('#continuation-summary').filter({hasText:'Continuation fixture · 127.0.0.1'}).waitFor();
-  await view(spa).locator('#continue-here').click();await send(spa,'ORIGINAL_SPA_CONTEXT');
+  await selected(spa);
+  await send(spa,'ORIGINAL_SPA_CONTEXT');
   let routeCase=0;
   for(const [button,path]of [['push','/spa-push'],['replace','/spa-replace'],['hash','/spa-replace#details'],['back','/spa-replace'],['back','/spa-fixture'],['forward','/spa-replace'],['forward','/spa-replace#details']]){
     const url=base+path;await spa.locator('#spa-'+button).click();await spa.waitForURL(url);
     // No send/refresh action may be needed to reveal the invalidation.
-    await view(spa).locator('#continuation-summary').filter({hasText:'未绑定，请在本页重新接续'}).waitFor({timeout:4000});
-    await view(spa).locator('#continue-here:enabled').waitFor();
+    await menu(spa);await view(spa).locator('#target-return').waitFor({state:'hidden'});await view(spa).locator('#chat-switch').click();
     if(routeCase===0)await spa.screenshot({path:join(output,'spa-invalidated.png')});
-    const before=requests.length;await send(spa,'TOOL_PAGE');assert.equal(requests.length,before,'old route lease must not submit');assert.equal(await spa.locator('#target').innerText(),'untouched');
-    await view(spa).locator('#continue-here').click();
-    await view(spa).locator('#continuation-panel[data-authorized="true"]').waitFor();
+    assert.equal(await spa.locator('#target').innerText(),'untouched','navigation alone cannot replay old work');
     await send(spa,'PI_TAB_TOOL '+JSON.stringify({name:'js_eval',args:{code:'document.querySelector("#target").textContent=location.href;return {url:location.href,h1:document.querySelector("h1").textContent}'}}));
     await spa.locator('#target').filter({hasText:url}).waitFor();
     await observeRequest(input=>JSON.stringify(input.messages).includes('ORIGINAL_SPA_CONTEXT')&&input.messages.some(message=>message.role==='tool'&&JSON.stringify(message.content).includes(url)));
@@ -129,11 +139,11 @@ try{
   await view(spa).locator('#message-input').fill('PI_TAB_TOOL '+JSON.stringify({name:'js_eval',args:{code:pendingCode,timeoutMs:60000}}));await view(spa).locator('#send').click();
   await spa.waitForFunction(()=>document.documentElement.dataset.waitingTool==='INFLIGHT_SPA');
   await spa.locator('#spa-push').click();
-  await view(spa).locator('#continuation-summary').filter({hasText:'未绑定，请在本页重新接续'}).waitFor({timeout:4000});
+  await menu(spa);await view(spa).locator('#target-return').waitFor({state:'hidden'});await view(spa).locator('#chat-switch').click();
   await view(spa).locator('#abort').waitFor({state:'hidden'});
   await observeRequest(input=>JSON.stringify(input.messages).includes('INFLIGHT_SPA')&&input.messages.some(message=>message.role==='tool'&&/取消|abort|TARGET_INVALIDATED/i.test(JSON.stringify(message.content))));
   assert.equal(await spa.locator('#target').innerText(),'untouched');
-  await view(spa).locator('#continue-here:enabled').click();await send(spa,'TOOL_PAGE');
+  await send(spa,'TOOL_PAGE');
   await view(spa).locator('#chat-messages').filter({hasText:base+'/spa-push'}).waitFor();
   console.log('PASS SPA cancels an in-flight tool and rejects an unverified document nonce');
   await spa.screenshot({path:join(output,'spa-rebound.png')});await spa.close();
@@ -154,7 +164,7 @@ try{
     const locale=window.__piTabAgent.i18n;locale.setMode(locale.mode,false);
   }});},coldTab);
   await worker.evaluate(async tabId=>{for(let i=0;i<100;i++){const [result]=await chrome.scripting.executeScript({target:{tabId},world:'ISOLATED',func:()=>Boolean(window.__releaseNativeView)});if(result.result)return;await new Promise(resolve=>setTimeout(resolve,20));}throw Error('Delayed view fixture did not start');},coldTab);
-  const beforeCold=requests.length;await view(cold).locator('#choose-history').click();
+  const beforeCold=requests.length;await history(cold);
   await cold.evaluate(()=>{window.__pickerTrace=[];for(const type of ['pointerdown','pointerup','click'])document.addEventListener(type,event=>window.__pickerTrace.push({type,x:event.clientX,y:event.clientY,target:event.target.tagName}),true);});
   const picker=cold.frameLocator('iframe[title="历史对话"]');
   await picker.locator('button[data-ref="'+encodeURIComponent(JSON.stringify(['127.0.0.1',1]))+'"]').evaluate(()=>{
@@ -167,10 +177,10 @@ try{
   await picker.locator('button[data-ref="'+encodeURIComponent(JSON.stringify(['127.0.0.1',1]))+'"]').focus();
   await picker.locator('button[data-ref="'+encodeURIComponent(JSON.stringify(['127.0.0.1',1]))+'"]').screenshot({path:join(output,`cold-picker-${round}.png`)});
   await picker.locator('button[data-ref="'+encodeURIComponent(JSON.stringify(['127.0.0.1',1]))+'"]').click();
-  await Promise.race([view(cold).locator('#continuation-summary').filter({hasText:'Continuation fixture · 127.0.0.1'}).waitFor(),picker.locator('#error').filter({hasText:/\S/}).waitFor().then(async()=>{throw Error('Cold picker: '+await picker.locator('#error').innerText());}),view(cold).locator('#continuation-error').filter({hasText:/\S/}).waitFor().then(async()=>{throw Error('Cold view: '+await view(cold).locator('#continuation-error').innerText());})]);
+  await Promise.race([selected(cold),picker.locator('#error').filter({hasText:/\S/}).waitFor().then(async()=>{throw Error('Cold picker: '+await picker.locator('#error').innerText());}),view(cold).locator('#chat-menu-error').filter({hasText:/\S/}).waitFor().then(async()=>{throw Error('Cold view: '+await view(cold).locator('#chat-menu-error').innerText());})]);
   await worker.evaluate(async tabId=>chrome.scripting.executeScript({target:{tabId},world:'ISOLATED',func:async()=>{window.__releaseNativeView();delete window.__releaseNativeView;await new Promise(requestAnimationFrame);}}),coldTab);
-  assert.ok(!(await view(cold).locator('#continuation-summary').innerText()).includes('STALE_NATIVE_TITLE'),'late native view must not replace the selected conversation');
-  assert.equal(requests.length,beforeCold);await view(cold).locator('#continue-here').click();await send(cold,'TOOL_PAGE');
+  assert.ok((await view(cold).locator('#chat-messages').innerText()).includes('ORIGINAL_TASK_CONTEXT'),'late native view must not replace the selected conversation');
+  assert.equal(requests.length,beforeCold);await send(cold,'TOOL_PAGE');
   await cold.waitForFunction(()=>document.querySelector('[data-pi-overlay]')?.shadowRoot?.getElementById('chat-messages').textContent.includes('/cold'));
   await cold.screenshot({path:join(output,'cold-history.png')});console.log('PASS cold history with source tab closed');
   await cold.close();
@@ -178,19 +188,26 @@ try{
   // Persist two real running conversations, recreate the background, and prove
   // reading/clearing cannot replay either interrupted model request.
   const interrupted=await browser.newPage();await activate(interrupted,base+'/recovery');
-  let recoveryView=view(interrupted);await recoveryView.locator('#continue-here').click();
+  let recoveryView=view(interrupted);
   await recoveryView.locator('#message-input').fill('HOLD_RECOVERY_1');await recoveryView.locator('#send').click();
   while(heldRequests<1)await interrupted.waitForTimeout(25);
   await recoveryView.locator('#new-agent').click();await interrupted.locator('[data-pi-overlay]').nth(1).waitFor();
-  recoveryView=interrupted.locator('[data-pi-overlay]').nth(1);await recoveryView.locator('#continue-here').click();await recoveryView.locator('#message-input').fill('HOLD_RECOVERY_2');await recoveryView.locator('#send').click();
+  recoveryView=interrupted.locator('[data-pi-overlay]').nth(1);await recoveryView.locator('#message-input').fill('HOLD_RECOVERY_2');await recoveryView.locator('#send').click();
   while(heldRequests<2)await interrupted.waitForTimeout(25);
   await worker.evaluate(()=>chrome.offscreen.closeDocument());const recoveryCount=requests.length;
-  await interrupted.reload();await view(interrupted).locator('#recover-source').waitFor();
+  await interrupted.reload();await view(interrupted).locator('#settings:enabled').waitFor();await menu(interrupted);await view(interrupted).locator('#recover-source').waitFor();
   assert.equal(requests.length,recoveryCount,'cold reading resumed a model');
   await interrupted.screenshot({path:join(output,'recovery-required.png')});
+  interrupted.once('dialog',dialog=>dialog.dismiss());await view(interrupted).locator('#recover-source').click();assert.equal(requests.length,recoveryCount);await menu(interrupted);await view(interrupted).locator('#recover-source').waitFor();
+  await worker.evaluate(async url=>{const tab=(await chrome.tabs.query({url}))[0];await chrome.scripting.executeScript({target:{tabId:tab.id},world:'ISOLATED',func:()=>{
+    const send=chrome.runtime.sendMessage.bind(chrome.runtime);
+    chrome.runtime.sendMessage=(message,callback)=>{if(message.operation==='recover'){chrome.runtime.sendMessage=send;callback({ok:false,code:'RECOVERY_NOT_DRAINED',error:'来源任务尚未清理完成，请重试恢复操作。'});return;}return send(message,callback);};
+  }});},interrupted.url());
+  interrupted.once('dialog',dialog=>dialog.accept());await view(interrupted).locator('#recover-source').click();
+  await view(interrupted).locator('#chat-menu-error').filter({hasText:'尚未清理'}).waitFor();assert.equal(requests.length,recoveryCount);await interrupted.screenshot({path:join(output,'recovery-failure.png')});
   interrupted.once('dialog',dialog=>dialog.accept());await view(interrupted).locator('#recover-source').click();
   await view(interrupted).locator('#recover-source').waitFor({state:'hidden'});assert.equal(requests.length,recoveryCount,'recovery replayed a model');
-  await view(interrupted).locator('#continue-here').click();await send(interrupted,'TOOL_PAGE');
+  await send(interrupted,'TOOL_PAGE');
   await view(interrupted).locator('#chat-messages').filter({hasText:'/recovery'}).waitFor();
   await interrupted.screenshot({path:join(output,'recovery-cleared.png')});await interrupted.close();console.log('PASS two interrupted conversations remain paused and clear without model replay');
 
@@ -215,4 +232,4 @@ try{
   await unsupported.getByRole('alert').waitFor();assert.ok((await unsupported.getByRole('alert').innerText()).includes('独占锁'));
   await unsupported.getByRole('button',{name:'新建独立对话'}).click();await unsupported.waitForFunction(()=>window.pi?.__piConsolePlugin);await unsupported.evaluate(()=>pi.ready);await unsupported.close();console.log('PASS no-Web-Locks explicit independent storage');
   assert.deepEqual(errors,[]);await writeFile(join(output,'continuations.json'),JSON.stringify({browser:browser.browser()?.version(),requests,errors},null,2));
-}catch(error){console.log('ENGINE',JSON.stringify(await engineDiagnostics(browser.pages().at(-1)).catch(error=>({error:error.message}))));for(const [i,page]of browser.pages().entries()){await page.screenshot({path:join(output,'failure-'+i+'.png')}).catch(()=>{});console.log(JSON.stringify({url:page.url(),views:await page.locator('[data-pi-overlay]').evaluateAll(hosts=>hosts.map(host=>Object.fromEntries(['continuation-summary','continuation-error','status','setup-error'].map(id=>[id,host.shadowRoot?.getElementById(id)?.textContent])))).catch(()=>[]),frames:await Promise.all(page.frames().map(async frame=>({url:frame.url(),trace:await frame.evaluate(()=>window.__pickerTrace||null).catch(()=>null),error:await frame.locator('#error').innerText({timeout:250}).catch(()=>null)})))}));}throw error;}finally{await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r));await rm(directory,{recursive:true,force:true});}
+}catch(error){console.log('ENGINE',JSON.stringify(await engineDiagnostics(browser.pages().at(-1)).catch(error=>({error:error.message}))));for(const [i,page]of browser.pages().entries()){await page.screenshot({path:join(output,'failure-'+i+'.png')}).catch(()=>{});console.log(JSON.stringify({url:page.url(),views:await page.locator('[data-pi-overlay]').evaluateAll(hosts=>hosts.map(host=>Object.fromEntries(['chat-messages','chat-menu-error','status','setup-error'].map(id=>[id,host.shadowRoot?.getElementById(id)?.textContent])))).catch(()=>[]),frames:await Promise.all(page.frames().map(async frame=>({url:frame.url(),trace:await frame.evaluate(()=>window.__pickerTrace||null).catch(()=>null),error:await frame.locator('#error').innerText({timeout:250}).catch(()=>null)})))}));}throw error;}finally{await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r));await rm(directory,{recursive:true,force:true});}

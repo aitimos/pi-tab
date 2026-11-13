@@ -1,7 +1,7 @@
 import {extensionTestRpc} from './extension-test-rpc.mjs';
 // Run against the built extension in a separate Chrome for Testing session.
 // Requires agent-browser and PI_TAB_TEST_CHROME pointing to Chrome for Testing.
-import {agentBrowser} from './browser-cli.mjs';
+import {agentBrowser,sendFromOverlay} from './browser-cli.mjs';
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {createHash, generateKeyPairSync} from 'node:crypto';
@@ -103,7 +103,6 @@ const chatAttribute=id=>encodeURIComponent(JSON.stringify(['127.0.0.1',id]));
 const visible = `Array.from(document.querySelectorAll('[data-pi-overlay]')).filter(host=>host.getClientRects().length>0)`;
 const root = `${visible}[0].shadowRoot`;
 async function click(id) {
-  if(id==='send'||id==='message-input'){await evaluate(`(()=>{const r=${root};const button=r.getElementById('continue-here');if(button&&!button.disabled)button.click();})()`);await browser('wait','--fn',`${root}.getElementById('continuation-panel').dataset.authorized==='true'`);}
   const point = await evaluate(`(()=>{const r=${root}.getElementById(${JSON.stringify(id)}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
   await browser('mouse','move',String(Math.round(point.x)),String(Math.round(point.y)));
   await browser('mouse','down','left');
@@ -617,7 +616,7 @@ try {
     failModels=false;
   });
   await click('chat-switch');
-  await check('conversation menu contains only conversations',async()=>{
+  await check('conversation menu separates history actions from conversation rows',async()=>{
     assert.equal(await evaluate(`${root}.getElementById('chat-menu-error').hidden`),true);
     assert.equal(await evaluate(`${root}.getElementById('chat-entries').children.length`),afterChats.value.length);
   });
@@ -630,8 +629,7 @@ try {
   };
   const configuration = await engine('agent',[{api:'openai-completions',baseUrl:url+'v1',apiKey:'test-only',model:'test-model',reasoning:false,thinking:'off',input:['text','image']}],currentId,'configure');
   assert.equal(configuration.ok,true,configuration.error);
-  const reply=await engine('agent',['Keep this conversation'],currentId,'prompt');
-  assert.equal(reply.ok,true,reply.error);
+  await browser('tab',sourcePage);await sendFromOverlay(browser,evaluate,'Keep this conversation',{chatId:currentId});
   const keptHistory=await engine('agent',[],currentId,'history');
   const keptModels=await engine('listModels');
   holdModel=true;

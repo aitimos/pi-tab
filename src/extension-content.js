@@ -2,7 +2,7 @@
 const extensionRequest = message => new Promise((resolve, reject) => {
   chrome.runtime.sendMessage(message, response => {
     if (chrome.runtime.lastError) reject(Object.assign(new Error(chrome.runtime.lastError.message),{code:'EXTENSION_TRANSPORT_ERROR'}));
-    else if (!response?.ok) reject(Object.assign(new Error(response?.error || '扩展通信失败。'),{diagnostics:response?.diagnostics,code:response?.code}));
+    else if (!response?.ok) reject(Object.assign(new Error(response?.error || '扩展通信失败。'),{diagnostics:response?.diagnostics,code:response?.code,notSubmitted:response?.notSubmitted}));
     else resolve(response.value);
   });
 });
@@ -44,7 +44,7 @@ function checkTarget(target){syncRoute();if(!target||target.nonce!==targetNonce|
 const continuationCall=async(ref,operation,args=[],name,extra={})=>{
   syncRoute();const epoch=routeEpoch;
   const value=await pageRequest({type:'continuation-call',ref,operation,args,name,viewId,leaseToken:leases.get(refKey(ref)),clientRequestId:PiConsolePlugin.createId(),...extra},{readOnly:operation==='view'||(operation==='agent'&&['history','queuedMessages','savedConfig','discoverModels'].includes(name))});
-  syncRoute();if(epoch!==routeEpoch)throw Object.assign(Error('执行页面已刷新、跳转或关闭，请在本页重新接续。'),{code:'TARGET_INVALIDATED'});
+  syncRoute();if(epoch!==routeEpoch)throw Object.assign(Error('页面已变化，请查看历史和队列后再发送。'),{code:'TARGET_INVALIDATED'});
   return value;
 };
 const emitState=(id,value)=>{const state={...states.get(id),...value};states.set(id,state);for(const listener of listeners)listener({type:'binding_state',conversationId:id,state});};
@@ -160,25 +160,49 @@ async function initializeExtension() {
       activeId=refKey(ref);if(ref.directoryError)for(const listener of listeners)listener({type:'directory_error',conversationId:activeId});const state=await refreshState(ref);configs.set(activeId,state.config);busy.set(activeId,state.busy);return activeId;
     },
     agent(initialId){
-      let chatId=initialId;
-      const invoke=async(name,...args)=>{const lease=leases.get(chatId);try{return await continuationCall(parseRef(chatId),name==='abort'?'stop':'agent',args,name);}catch(error){if(['CONTINUE_HERE_REQUIRED','TARGET_INVALIDATED','RECONNECT_REVIEW_HISTORY'].includes(error.code)){if(leases.get(chatId)===lease)leases.delete(chatId);void refreshState(parseRef(chatId)).catch(()=>{});}throw error;}};
+      let chatId=initialId,selectionGeneration=0,preparing=false;
+      const invoke=async(name,...args)=>{const id=chatId,lease=leases.get(id);try{return await continuationCall(parseRef(id),name==='abort'?'stop':'agent',args,name);}catch(error){if(['CONTINUE_HERE_REQUIRED','TARGET_INVALIDATED','RECONNECT_REVIEW_HISTORY'].includes(error.code)){if(leases.get(id)===lease)leases.delete(id);void refreshState(parseRef(id)).catch(()=>{});}throw error;}};
       const bound=refreshState(parseRef(chatId)).then(state=>{configs.set(chatId,state.config);busy.set(chatId,state.busy);});
       return {
         get id(){return chatId;},get config(){return configs.get(chatId);},get busy(){return busy.get(chatId)===true;},get ready(){return bound;},
         get bindingState(){return states.get(chatId);},get authorized(){return leases.has(chatId);},
         async refreshBinding(){return refreshState(parseRef(chatId));},
-        async continueHere(){
-          syncRoute();await pageRequest({type:'document-status'},{readOnly:true});await routeSynchronized;
-          // Reconnection broadcasts may still be updating the UI cache. Use
-          // an authoritative read for this action's compare-and-swap version.
-          const ref=parseRef(chatId),state=await continuationCall(ref,'view');
-          const value=await continuationCall(ref,'continue',[],undefined,{expectedVersion:state.version});
-          const current=states.get(chatId)?.version;
-          if(current&&(current.epoch!==value.version.epoch||current.seq>value.version.seq))throw reconnectError(false);
-          beginStateRead(chatId);
-          leases.set(chatId,value.leaseToken);emitState(chatId,value);return value;
+        async prepareSubmission(event){
+          const rejected=()=>Object.assign(Error('页面状态已变化，本次未发送，请重试。'),{code:'SUBMISSION_INTENT_CHANGED',notSubmitted:true});
+          if(!event?.isTrusted||!['click','keydown'].includes(event.type)||preparing)throw rejected();
+          // Capture before any await. Read retries must never move this user's
+          // intent to a new document, selection, route, or worker connection.
+          syncRoute();
+          const intent={id:chatId,generation:selectionGeneration,target:documentTarget,ready:documentReady,epoch:routeEpoch,url:location.href};
+          const check=()=>{
+            syncRoute();
+            if(!intent.target||intent.id!==chatId||intent.generation!==selectionGeneration||intent.target!==documentTarget||intent.ready!==documentReady||intent.epoch!==routeEpoch||intent.url!==location.href)throw rejected();
+          };
+          preparing=true;
+          try{
+            check();await pageRequest({type:'document-status'},{readOnly:true});check();
+            await routeSynchronized;check();
+            const ref=parseRef(intent.id);
+            if(!leases.has(intent.id)){
+              const state=await continuationCall(ref,'view');check();
+              const value=await continuationCall(ref,'continue',[],undefined,{expectedVersion:state.version});check();
+              const current=states.get(intent.id)?.version;
+              if(current&&(current.epoch!==value.version.epoch||current.seq>value.version.seq))throw rejected();
+              beginStateRead(intent.id);
+              leases.set(intent.id,value.leaseToken);emitState(intent.id,value);
+            }
+            const lease=leases.get(intent.id);
+            let used=false;
+            return (name,content)=>{
+              check();
+              if(used||!['prompt','followUp','steer'].includes(name)||leases.get(intent.id)!==lease)throw rejected();
+              used=true;
+              return invoke(name,content);
+            };
+          }catch(error){error.notSubmitted=true;throw error;}
+          finally{preparing=false;}
         },
-        async recoverSource(){const state=await refreshState(parseRef(chatId));return continuationCall(parseRef(chatId),'recover',[state.recovery?.version]);},
+        async recoverSource(version){return continuationCall(parseRef(chatId),'recover',[version]);},
         async returnToTarget(){syncRoute();return pageRequest({type:'focus-target',ref:parseRef(chatId),viewId});},
         apis:remotePi.apis,describeModel:remotePi.describeModel,
         onEvent(listener){return remotePi.onEvent(event=>{if(event.conversationId===chatId)listener(event);});},
@@ -194,9 +218,10 @@ async function initializeExtension() {
           return chats.map(chat=>({...chat,active:chat.id===chatId}));
         },
         async selectChat(id){
-          const state=await refreshState(parseRef(id));chatId=id;activeId=id;configs.set(id,state.config);busy.set(id,state.busy);return this.listChats();
+          const generation=++selectionGeneration;
+          const state=await refreshState(parseRef(id));if(generation!==selectionGeneration)return this.listChats();chatId=id;activeId=id;configs.set(id,state.config);busy.set(id,state.busy);return this.listChats();
         },
-        async newChat(){chatId=await remotePi.createChat({inheritFrom:chatId});return this.listChats();},
+        async newChat(){const generation=++selectionGeneration,id=await remotePi.createChat({inheritFrom:chatId});if(generation===selectionGeneration)chatId=id;return this.listChats();},
       };
     },
     getPreferences:()=>engineCall('getPreferences'),
