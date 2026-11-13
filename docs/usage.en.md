@@ -44,6 +44,12 @@ Bookmark mode uses `agent_spawn` to create a conversation on the same page. Inst
 
 The extension provides `tab_list`, `tab_open`, `tab_send`, and `tab_read`. `tab_open` opens a new tab with its own conversation, including on the same hostname, and returns `tabId` and `chatId` for sending tasks and reading results. Conversations are grouped by exact hostname: paths, query parameters, and tabs on `www.bilibili.com` share a list, while `search.bilibili.com` has a separate list. Saved models and providers are shared across websites. The extension supports ordinary HTTP and HTTPS pages, not browser internal pages, extension stores or other pages that prohibit injection, or local `file://` pages.
 
+### Update the extension or bookmark
+
+To update the extension, download the latest release, replace the files in the original `pi-tab-extension` folder, click **Reload** for that extension in `chrome://extensions`, and refresh the webpages using Pi Tab. Keep the original loaded folder and extension entry to preserve its ID and history; removing the extension or clearing data is unnecessary.
+
+A saved bookmark contains the full runtime code. Visiting a newer installer does not update an existing bookmark. Open the [installer](https://aitimos.si/pi-tab/), confirm the model configuration, generate a new bookmark, and replace the old bookmark URL. Existing settings and history retain their original scope.
+
 ## Continue a conversation on another page
 
 Enable the extension on the destination page, open **Conversation history** from the conversation menu, and select the original conversation. Selecting only opens history; send a new message to use the current page. Existing context and model settings remain with the original conversation, while page tools use the selected document. This works on the same hostname, another subdomain, or another hostname.

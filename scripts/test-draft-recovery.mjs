@@ -8,11 +8,14 @@ import {join,resolve} from 'node:path';
 const directory=await mkdtemp(join(tmpdir(),'pi-tab-drafts-'));
 const output=process.env.PI_TAB_DRAFT_EVIDENCE?resolve(process.env.PI_TAB_DRAFT_EVIDENCE):await mkdtemp(join(tmpdir(),'pi-tab-drafts-evidence-'));
 await mkdir(output,{recursive:true});
-const requests=[],cases=[],errors=[];
+const requests=[],cases=[],errors=[],navigations=[],navigationBarriers=[];
 const server=createServer((request,response)=>{
+  if(request.url==='/navigation-barrier'){
+    navigationBarriers.push(()=>response.end('ready'));return;
+  }
   if(!request.url.endsWith('/chat/completions')){
     response.setHeader('Content-Type','text/html;charset=utf-8');
-    response.end('<title>Draft recovery</title><h1>Draft recovery</h1><button id="navigate" onclick="history.pushState({},\'\',\'/route-\'+(++window.route))">Navigate</button><script>window.route=0</script>');return;
+    response.end('<title>Draft recovery</title><h1>Draft recovery</h1><button id="navigate" onclick="fetch(\'/navigation-barrier\').then(()=>history.pushState({},\'\',\'/route-\'+(++window.route)))">Navigate</button><script>window.route=0</script>');return;
   }
   let body='';request.on('data',chunk=>body+=chunk);request.on('end',()=>{
     const input=JSON.parse(body),title=input.messages.some(m=>['system','developer'].includes(m.role)&&JSON.stringify(m.content).includes('你是会话标题生成器'));
@@ -52,19 +55,47 @@ try{
   };
   const delayPreparation=()=>isolated(()=>{
     const send=chrome.runtime.sendMessage.bind(chrome.runtime);
+    const gate=window.__draftGate={pending:[],released:false};
+    window.__draftRelease=()=>{
+      gate.released=true;chrome.runtime.sendMessage=send;delete window.__draftRelease;
+      for(const release of gate.pending)release();gate.pending=[];
+    };
     chrome.runtime.sendMessage=(message,callback)=>{
       if(message.type==='document-status'){
-        chrome.runtime.sendMessage=send;
-        return send(message,response=>{window.__draftRelease=()=>{delete window.__draftRelease;callback(response);};});
+        // Activation also reads document-status. Keep every concurrent read
+        // behind this gate so an unrelated callback cannot release the send.
+        return send(message,response=>{
+          if(chrome.runtime.lastError||gate.released)callback(response);
+          else gate.pending.push(()=>callback(response));
+        });
       }
       return send(message,callback);
     };
   });
   const startRejected=async(text,file)=>{
-    await delayPreparation();await input.fill(text);if(file)await attach(file.name,file.content);
-    await ui.locator('#send').click();await expect.poll(()=>isolated(()=>Boolean(window.__draftRelease))).toBe(true);
+    await input.fill(text);if(file)await attach(file.name,file.content);
+    await delayPreparation();
+    // Deliberately make the first status callback belong to activation, not
+    // preparation. A one-callback trap lets the real submission escape here.
+    await worker.evaluate(tabId=>{globalThis.__draftActivation=chrome.tabs.sendMessage(tabId,{type:'activate',openWindow:false});void globalThis.__draftActivation.catch(()=>{});},tabId);
+    await expect.poll(()=>isolated(()=>window.__draftGate.pending.length)).toBeGreaterThan(0);
+    await ui.locator('#send').click();
+    await expect(input).toHaveValue('');
+    await expect.poll(()=>isolated(()=>window.__draftGate.pending.length)).toBeGreaterThan(1);
   };
-  const reject=async()=>{await page.locator('#navigate').click();await isolated(()=>window.__draftRelease());};
+  const reject=async()=>{
+    const before=page.url();assert.equal(requests.length,0,'submission must still be held before navigation');
+    await page.locator('#navigate').click();
+    await expect.poll(()=>navigationBarriers.length).toBe(1);
+    assert.equal(page.url(),before,'a click alone must not be treated as committed navigation');
+    const changed=page.waitForURL(url=>url.href!==before);
+    navigationBarriers.shift()();await changed;
+    navigations.push({before,after:page.url(),requests:requests.length});
+    await isolated(()=>window.__draftRelease());
+    const activation=await worker.evaluate(()=>globalThis.__draftActivation);assert.equal(activation.ok,true);
+    await expect(ui.locator('#abort')).toBeHidden();
+    assert.equal(requests.length,0,'a definitely rejected submission must never reach the model');
+  };
   const retained=text=>ui.locator('.retained-draft').filter({has:page.locator('pre').filter({hasText:text})});
   const recover=async text=>{
     const button=retained(text).locator('button');
@@ -128,7 +159,7 @@ try{
   await newChat();
   await startRejected('REPEATED_FIRST',{name:'first.txt',content:'first bytes'});await input.fill('REPEATED_SECOND');await attach('second.txt','second bytes');await reject();
   await expect(retained('REPEATED_FIRST')).toHaveCount(1);
-  await delayPreparation();await ui.locator('#send').click();await expect.poll(()=>isolated(()=>Boolean(window.__draftRelease))).toBe(true);
+  await startRejected('REPEATED_SECOND');
   await input.fill('REPEATED_THIRD');await attach('third.txt','third bytes');await reject();
   await expect(ui.locator('.retained-draft')).toHaveCount(2);await expect(retained('REPEATED_SECOND')).toContainText('second.txt');
   await recover('REPEATED_FIRST');await expect(retained('REPEATED_THIRD')).toContainText('third.txt');
@@ -165,7 +196,7 @@ try{
     record(outcome+' result preserves later editing without restoring or replaying the submitted input');
   }
   assert.deepEqual(errors,[]);
-  await writeFile(join(output,'result.json'),JSON.stringify({browser:browser.browser()?.version(),cases,businessRequests:requests.length,errors},null,2));
+  await writeFile(join(output,'result.json'),JSON.stringify({browser:browser.browser()?.version(),cases,navigations,businessRequests:requests.length,errors},null,2));
 }catch(error){
   await page?.screenshot({path:join(output,'failure.png')}).catch(()=>{});
   throw error;
