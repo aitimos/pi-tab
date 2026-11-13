@@ -28,13 +28,14 @@ const server=createServer((request,response)=>{
 await new Promise(done=>server.listen(0,'0.0.0.0',done));
 const base=`http://127.0.0.1:${server.address().port}`,extension=join(directory,'extension');
 await cp(resolve(process.env.PI_TAB_TEST_EXTENSION||'dist/extension'),extension,{recursive:true});
+await writeFile(join(extension,'test-worker-controller.html'),'<!doctype html><title>Worker test controller</title>');
 const browser=await chromium.launchPersistentContext(join(directory,'profile'),{headless:true,executablePath:process.env.PI_TAB_TEST_CHROME||chromium.executablePath(),viewport:{width:1400,height:1000},locale:'zh-CN',args:['--no-sandbox','--no-proxy-server',`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
 browser.setDefaultTimeout(10000);
-browser.on('page',page=>page.on('pageerror',error=>errors.push(error.message)));
+browser.on('page',page=>page.on('pageerror',error=>errors.push({message:error.message,stack:error.stack,page:page.url()})));
 const worker=browser.serviceWorkers()[0]||await browser.waitForEvent('serviceworker'),workerUrl=worker.url();
-// Use a shipped extension page as the test controller. Chromium may retain the
-// worker target ID while replacing its execution context after stopWorker.
-const control=await browser.newPage();await control.goto(workerUrl.replace(/worker\.js$/,'history-picker.html#test-controller'));
+// The controller has no picker initialization or pending grant requests.
+// Chromium may retain the worker target ID across execution-context replacement.
+const control=await browser.newPage();await control.goto(workerUrl.replace(/worker\.js$/,'test-worker-controller.html'));
 const ui=page=>page.locator('[data-pi-overlay]').last(),versions=[];
 const record=name=>{cases.push(name);console.log('PASS',name);};
 async function send(page,text){await ui(page).locator('#message-input').fill(text);await ui(page).locator('#send').click();await ui(page).locator('#abort').waitFor({state:'hidden'});}

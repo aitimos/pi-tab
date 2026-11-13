@@ -15,9 +15,11 @@ export async function sendFromOverlay(browser,evaluate,text,{chatId,wait=true}={
   }
   await evaluate(`(()=>{const input=(${root}).getElementById('message-input');input.value=${JSON.stringify(text)};input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
   await browser('wait','--fn',`!(${root}).getElementById('send').disabled`);
-  const point=await evaluate(`(()=>{const r=(${root}).getElementById('send').getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
-  await browser('mouse','move',String(Math.round(point.x)),String(Math.round(point.y)));
-  await browser('mouse','down','left');await browser('mouse','up','left');
+  // Separate CLI mouse-down/up processes can exceed the UI's 500ms hold
+  // threshold under load. Activate the native button with a trusted key instead.
+  await evaluate(`(${root}).getElementById('send').focus({preventScroll:true})`);
+  await browser('wait','--fn',`(${root}).activeElement?.id==='send'`);
+  await browser('press','Enter');
   await browser('wait','--fn',`(${root}).getElementById('message-input').value===''`);
   if(wait)await browser('wait','--fn',`(${root}).getElementById('abort').hidden`);
 }
