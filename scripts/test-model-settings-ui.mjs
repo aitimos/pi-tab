@@ -24,8 +24,13 @@ const server=createServer((req,res)=>{
   if(req.url.endsWith('/models')){res.setHeader('Content-Type','application/json');res.end(JSON.stringify({data:[{id:'test-model'},{id:'second-model'}]}));return;}
   if(req.url.endsWith('/chat/completions')){
     let body='';req.on('data',chunk=>body+=chunk);req.on('end',()=>{
-      const input=JSON.parse(body);requests.push({url:req.url,key:req.headers.authorization,model:input.model});
+      const input=JSON.parse(body),title=JSON.stringify(input.messages).includes('你是会话标题生成器');requests.push({url:req.url,key:req.headers.authorization,model:input.model,title});
+      if(req.headers.authorization==='Bearer fixture-key'){
+        res.writeHead(401,{'Content-Type':'application/json'});
+        res.end(JSON.stringify({error:{message:'Invalid API key',type:'authentication_error',code:'invalid_api_key'}}));return;
+      }
       if(held&&!JSON.stringify(input.messages).includes('你是会话标题生成器'))return;
+      if(title)return;
       res.writeHead(200,{'Content-Type':'text/event-stream'});
       res.end('data: '+JSON.stringify({id:'fixture',object:'chat.completion.chunk',choices:[{index:0,delta:{role:'assistant',content:'Settings saved and read back'},finish_reason:'stop'}]})+'\n\ndata: [DONE]\n\n');
     });return;
@@ -88,10 +93,14 @@ try{
       await expect(ui('#settings-models-tab')).toHaveText(value==='en'?'Model':'模型');
     };
     const send=async text=>{
+
       await ui('#message-input').fill(text);await ui('#send').click();
     };
     const shot=async name=>{const file=`${mode}-${language}-${name}.png`;await root.screenshot({path:join(directory,file),animations:'disabled'});screenshots.push(file);};
     await activate();await ui('#chat').waitFor();
+    await send('Check the invalid initial key');
+    await expect(ui('#chat-messages')).toContainText('401');
+    await expect(ui('#abort')).toBeHidden();
     await ui('#message-input').fill('Keep composer draft');
     await settings();await shot('01-settings');
     // The new category participates in the existing roving keyboard focus.
@@ -130,10 +139,17 @@ try{
     await ui('#preferences-back').click();await ui('#chat').waitFor();
     assert.equal(await ui('#message-input').inputValue(),'Keep composer draft');
     await expect(ui('#chat-model')).toHaveText('second-model');
+    const titlesBefore=requests.filter(r=>r.title).length;
     await send('Read updated model settings');
     await expect(ui('#chat-messages')).toContainText('Settings saved and read back');
     await expect(ui('#abort')).toBeHidden();
     assert.ok(requests.some(r=>r.url==='/v2/chat/completions'&&r.key==='Bearer updated-fixture-key'&&r.model==='second-model'));
+    await expect.poll(()=>requests.filter(r=>r.title).length).toBeGreaterThan(titlesBefore);
+    await settings();await models();
+    await ui('.manager-group>.manager-row:first-child button').first().click();
+    await ui('#provider-name').fill('Renamed while title is pending');
+    await ui('#provider-form [type=submit]').click();await expect(ui('#model-dialog')).toBeHidden();
+    await ui('#preferences-back').click();
     await page.reload();if(!worker)await activate();
     await ui('#settings:enabled').waitFor();await settings();await models();
     assert.equal((await call('listModels'))[0].baseUrl,base+'/v2');
