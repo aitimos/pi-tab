@@ -441,6 +441,5 @@
   "来源站点有中断任务，可从对话菜单停止中断任务后再发送。": "The source site has interrupted tasks. Stop them from the conversation menu before sending.",
   "选择后仅查看历史。发送新消息时使用当前页面。": "Selecting only opens history. New messages use the current page.",
   "保留的草稿（{0}）": "Saved drafts ({0})",
-  "放入输入框": "Move to composer",
-  "取回草稿 {0}": "Restore draft {0}"
+  "放入输入框": "Move to composer"
 }

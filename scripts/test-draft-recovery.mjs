@@ -66,7 +66,12 @@ try{
   };
   const reject=async()=>{await page.locator('#navigate').click();await isolated(()=>window.__draftRelease());};
   const retained=text=>ui.locator('.retained-draft').filter({has:page.locator('pre').filter({hasText:text})});
-  const recover=async text=>{await retained(text).locator('button').click();await expect(input).toHaveValue(text);};
+  const recover=async text=>{
+    const button=retained(text).locator('button');
+    await expect(button).toHaveAccessibleName(new RegExp(await button.innerText()));
+    await button.focus();await button.press('Enter');
+    await expect(input).toHaveValue(text);await expect(input).toBeFocused();
+  };
   await expect(input).toBeVisible();
 
   // The review's original no-edit control still restores automatically.

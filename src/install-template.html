@@ -1208,7 +1208,7 @@ async function openChat(initialConfig, options = {}) {
       preview.textContent=draft.text;preview.hidden=!draft.text;
       files.textContent=draft.attachments.map(file=>file.name).join(', ');files.hidden=!draft.attachments.length;
       restore.type='button';restore.className='text-button';restore.disabled=readingAttachments>0;
-      i18n.text(restore,()=>t('放入输入框'));i18n.attr(restore,'aria-label',()=>t('取回草稿 {0}',index+1));
+      i18n.text(restore,()=>t('放入输入框'));i18n.attr(restore,'aria-label',()=>t('放入输入框')+' '+(index+1));
       restore.onclick=()=>{
         if(readingAttachments)return;
         saveComposerDraft();
