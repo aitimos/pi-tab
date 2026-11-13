@@ -39,15 +39,26 @@ const control=await browser.newPage();await control.goto(workerUrl.replace(/work
 const ui=page=>page.locator('[data-pi-overlay]').last(),versions=[];
 const record=name=>{cases.push(name);console.log('PASS',name);};
 async function send(page,text){await ui(page).locator('#message-input').fill(text);await ui(page).locator('#send').click();await ui(page).locator('#abort').waitFor({state:'hidden'});}
-async function openHistory(page){await ui(page).locator('#chat-switch').click();await ui(page).locator('#choose-history').click();}
-async function waitUnbound(page){await ui(page).locator('#chat-switch').click();await ui(page).locator('#target-return').waitFor({state:'hidden'});await ui(page).locator('#chat-switch').click();}
+async function openChatMenu(page){const menu=ui(page).locator('#chat-list');if(await menu.getAttribute('data-open')!=='true')await ui(page).locator('#chat-switch').click();await menu.waitFor({state:'visible'});}
+async function historyClosed(page){await page.locator('iframe[title="历史对话"]').waitFor({state:'detached'});await ui(page).locator('#chat-list').waitFor({state:'hidden'});}
+async function openHistory(page){await openChatMenu(page);await ui(page).locator('#choose-history').click();}
+async function waitUnbound(page){await openChatMenu(page);await ui(page).locator('#target-return').waitFor({state:'hidden'});await ui(page).locator('#chat-switch').click();await ui(page).locator('#chat-list').waitFor({state:'hidden'});}
 async function activate(page,url){await page.goto(url);const result=await control.evaluate(async url=>{const tab=(await chrome.tabs.query({})).find(tab=>tab.url===url);await chrome.storage.session.set({['active:'+tab.id]:true});return chrome.tabs.sendMessage(tab.id,{type:'activate',openWindow:true});},url);assert.equal(result.ok,true,result.error);await ui(page).locator('#settings:enabled').waitFor();}
 async function isolated(page,func,args){
   const tabId=await control.evaluate(async url=>(await chrome.tabs.query({})).find(tab=>tab.url===url).id,page.url());
   return control.evaluate('(async()=>{const [result]=await chrome.scripting.executeScript({target:{tabId:'+tabId+'},world:"ISOLATED",func:'+func.toString()+',args:['+JSON.stringify(args??null)+']});return {value:result.result,documentId:result.documentId};})()');
 }
-async function choose(page,close=true){await openHistory(page);const picker=page.frameLocator('iframe[title="历史对话"]');await picker.locator('button[data-ref]').first().waitFor();await page.screenshot({path:join(output,'picker-'+cases.length+'.png')});if(close){await picker.locator('button[data-ref="'+encodeURIComponent(JSON.stringify(['127.0.0.1',1]))+'"]').click();await page.locator('iframe[title="历史对话"]').waitFor({state:'detached'});}}
-async function closePicker(page){if(await page.locator('iframe[title="历史对话"]').count()){const close=page.frameLocator('iframe[title="历史对话"]').locator('#close');await close.focus();await close.screenshot({path:join(output,'picker-close-'+cases.length+'.png')});await close.press('Enter');await page.locator('iframe[title="历史对话"]').waitFor({state:'detached'});}}
+// Wake and reconnect through the shipped read-only content API. These restart
+// cases verify execution ownership, independently of transient menu rendering.
+async function readView(page){
+  const result=await isolated(page,async()=>{
+    const pi=window.__piTabAgent,agent=pi.agent(pi.conversation.id);
+    await agent.ready;await agent.refreshBinding();return {authorized:agent.authorized};
+  });
+  assert.equal(result.value.authorized,false,'a reconnecting read cannot acquire execution authority');
+}
+async function choose(page,close=true){await openHistory(page);const picker=page.frameLocator('iframe[title="历史对话"]');await picker.locator('button[data-ref]').first().waitFor();await page.screenshot({path:join(output,'picker-'+cases.length+'.png')});if(close){await picker.locator('button[data-ref="'+encodeURIComponent(JSON.stringify(['127.0.0.1',1]))+'"]').click();await historyClosed(page);}}
+async function closePicker(page){if(await page.locator('iframe[title="历史对话"]').count()){const close=page.frameLocator('iframe[title="历史对话"]').locator('#close');await close.focus();await close.screenshot({path:join(output,'picker-close-'+cases.length+'.png')});await close.press('Enter');await historyClosed(page);}}
 let cdp;
 async function restart(action,{closeEngine=false}={}){
   const before=(await cdp.send('Target.getTargets')).targetInfos,engine=before.find(target=>target.url.endsWith('/engine.html'));
@@ -71,6 +82,7 @@ try{
   await a.evaluate(()=>document.documentElement.dataset.businessState='kept');
   const identity=await isolated(a,()=>{window.__workerOriginalPi=window.__piTabAgent;const send=chrome.runtime.sendMessage.bind(chrome.runtime);chrome.runtime.sendMessage=(message,callback)=>{if(message.workerEpoch)window.__workerCurrentEpoch=message.workerEpoch;if(!window.__workerOldMessage&&message.type==='continuation-call'&&message.name==='prompt')window.__workerOldMessage=structuredClone(message);return send(message,callback);};return true;});
   await send(a,'WORKER_ORIGINAL_CONTEXT');await choose(b);
+  await choose(b,false);await closePicker(b);
   cdp=await browser.newCDPSession(a);cdp.on('ServiceWorker.workerVersionUpdated',event=>versions.push(...event.versions));await cdp.send('ServiceWorker.enable');
   // A picker open during restart must be closed; its grant cannot be revived.
   await choose(b,false);const before=requests.length;
@@ -79,7 +91,7 @@ try{
   await restart(async()=>{await ui(a).locator('#message-input').fill('UNSENT_AFTER_WORKER');await ui(a).locator('#send').click();});
   await waitUnbound(a);
   await ui(a).locator('#abort').waitFor({state:'hidden'});
-  await b.locator('iframe[title="历史对话"]').waitFor({state:'detached'});
+  await historyClosed(b);
   assert.equal(requests.length,before,'restart blindly resubmitted a message');
   assert.equal(await ui(a).locator('#message-input').inputValue(),'UNSENT_AFTER_WORKER','a definitely rejected input should remain a draft');
   const retained=await isolated(a,()=>window.__workerOriginalPi===window.__piTabAgent);assert.equal(retained.documentId,identity.documentId);assert.equal(retained.value,true);assert.equal(await a.evaluate(()=>document.documentElement.dataset.businessState),'kept');
@@ -108,7 +120,7 @@ try{
   await ui(a).locator('#message-input').fill('QUEUED_WORKER accepted once');await ui(a).locator('#send').click();
   await ui(a).locator('[data-queue-id]').first().waitFor();
   const heldCount=requests.length;
-  await restart(()=>openHistory(b));await closePicker(b);
+  await restart(()=>readView(b));
   assert.equal(requests.length,heldCount,'an accepted request was replayed');
   await ui(a).locator('#message-input').fill('BUSY_MUST_NOT_SEND');await ui(a).locator('#send').click();await ui(a).locator('#chat-messages').filter({hasText:'任务正在运行'}).waitFor();assert.equal(await ui(a).locator('#message-input').inputValue(),'BUSY_MUST_NOT_SEND');assert.equal(requests.length,heldCount);await a.screenshot({path:join(output,'busy-draft-preserved.png')});
   held.shift()();await ui(a).locator('#abort').waitFor({state:'hidden'});await ui(a).locator('[data-queue-id]').waitFor({state:'detached'});
@@ -117,10 +129,10 @@ try{
   record('accepted prompt and queue survive worker restart without replay or busy-target switching');
 
   await ui(a).locator('#message-input').fill('WAIT_TOOL');await ui(a).locator('#send').click();await a.waitForFunction(()=>document.documentElement.dataset.waiting==='yes');
-  await restart(()=>openHistory(b));await closePicker(b);await ui(a).locator('#abort').waitFor({state:'hidden'});await waitUnbound(a);
+  await restart(()=>readView(b));await ui(a).locator('#abort').waitFor({state:'hidden'});await waitUnbound(a);
   record('in-flight tool wait and UI busy state recover after worker termination');
 
-  await restart(()=>openHistory(a),{closeEngine:true});await closePicker(a);
+  await restart(()=>readView(a),{closeEngine:true});
   await send(a,'WRITE_TARGET AFTER_BOTH_RESTART');await a.locator('#target').filter({hasText:a.url()}).waitFor();
   assert.ok(requests.some(input=>input.messages.at(-1).role==='user'&&JSON.stringify(input.messages.at(-1).content).includes('AFTER_BOTH_RESTART')&&JSON.stringify(input.messages).includes('WORKER_ORIGINAL_CONTEXT')));
   const same=await isolated(a,()=>window.__workerOriginalPi===window.__piTabAgent);assert.equal(same.documentId,identity.documentId);assert.equal(same.value,true);

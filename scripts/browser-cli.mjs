@@ -15,8 +15,8 @@ export async function sendFromOverlay(browser,evaluate,text,{chatId,wait=true}={
   }
   await evaluate(`(()=>{const input=(${root}).getElementById('message-input');input.value=${JSON.stringify(text)};input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
   await browser('wait','--fn',`!(${root}).getElementById('send').disabled`);
-  // Separate CLI mouse-down/up processes can exceed the UI's 500ms hold
-  // threshold under load. Activate the native button with a trusted key instead.
+  // Spawned agents can cover this window. Focus this window's native button
+  // and use a trusted key so coordinates cannot activate a different overlay.
   await evaluate(`(${root}).getElementById('send').focus({preventScroll:true})`);
   await browser('wait','--fn',`(${root}).activeElement?.id==='send'`);
   await browser('press','Enter');
