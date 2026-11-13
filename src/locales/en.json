@@ -439,5 +439,8 @@
   "页面已变化，请查看历史和队列后再发送。": "The page changed. Review history and the queue before sending again.",
   "目标页面无法访问，请在支持的普通网页重试。": "The target is unavailable. Try again on a supported web page.",
   "来源站点有中断任务，可从对话菜单停止中断任务后再发送。": "The source site has interrupted tasks. Stop them from the conversation menu before sending.",
-  "选择后仅查看历史。发送新消息时使用当前页面。": "Selecting only opens history. New messages use the current page."
+  "选择后仅查看历史。发送新消息时使用当前页面。": "Selecting only opens history. New messages use the current page.",
+  "保留的草稿（{0}）": "Saved drafts ({0})",
+  "放入输入框": "Move to composer",
+  "取回草稿 {0}": "Restore draft {0}"
 }

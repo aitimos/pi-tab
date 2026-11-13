@@ -372,6 +372,11 @@ async function openChat(initialConfig, options = {}) {
     .attachment button svg { width:12px; height:12px; }
     .attachment:hover button,.attachment:focus-within button { opacity:1; }
     @media(hover:none) { .attachment button { opacity:1; } }
+    #retained-drafts { margin:0 18px 8px;font-size:12px;color:var(--muted); }
+    #retained-draft-list { max-height:180px;overflow:auto;overscroll-behavior:contain; }
+    .retained-draft { padding:8px 0;border-bottom:1px solid var(--line); }
+    .retained-draft pre { margin:0 0 6px;max-height:80px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;color:var(--text); }
+    .retained-draft p { overflow-wrap:anywhere;margin:0 0 6px; }
     #attachment-error { margin:0 18px 6px; font-size:12px; color:var(--muted); }
     #attachment-error:empty { display:none; }
     .bubble .message-image { display:block; max-width:100%; max-height:200px; margin:6px 0; border-radius:4px; }
@@ -527,6 +532,7 @@ async function openChat(initialConfig, options = {}) {
         <div id="composer">
           <div id="attachments" aria-label="待发送附件"></div><p id="attachment-error" role="status"></p>
           <input id="attachment-input" type="file" multiple hidden />
+          <details id="retained-drafts" hidden><summary id="retained-draft-summary"></summary><div id="retained-draft-list"></div></details>
           <textarea id="message-input" rows="1" placeholder="输入消息" aria-label="输入消息"></textarea>
           <div class="composer-tools">
             <button id="attach" class="icon-button" type="button" title="添加文件或图片" aria-label="添加文件或图片">${icon('attach')}</button>
@@ -1185,8 +1191,34 @@ async function openChat(initialConfig, options = {}) {
   });
   let attachments = [];
   let readingAttachments = 0;
-  const composerDrafts = new Map();
+  const composerDrafts = new PiConsolePlugin.ComposerDrafts();
+  function saveComposerDraft() {
+    if(agent?.id!=null)composerDrafts.save(agent.id,{text:byId('message-input').value,attachments});
+  }
+  function renderRetainedDrafts() {
+    if(!agent)return;
+    const drafts=composerDrafts.retained(agent.id),list=byId('retained-draft-list');
+    byId('retained-drafts').hidden=!drafts.length;
+    i18n.text(byId('retained-draft-summary'),()=>t('保留的草稿（{0}）',drafts.length));
+    i18n.release(list);
+    list.replaceChildren();
+    for(const [index,draft] of drafts.entries()){
+      const row=document.createElement('div'),preview=document.createElement('pre'),files=document.createElement('p'),restore=document.createElement('button');
+      row.className='retained-draft';row.dataset.draftId=String(draft.id);
+      preview.textContent=draft.text;preview.hidden=!draft.text;
+      files.textContent=draft.attachments.map(file=>file.name).join(', ');files.hidden=!draft.attachments.length;
+      restore.type='button';restore.className='text-button';restore.disabled=readingAttachments>0;
+      i18n.text(restore,()=>t('放入输入框'));i18n.attr(restore,'aria-label',()=>t('取回草稿 {0}',index+1));
+      restore.onclick=()=>{
+        if(readingAttachments)return;
+        saveComposerDraft();
+        if(composerDrafts.restore(agent.id,draft.id)){restoreComposerDraft();byId('message-input').focus();}
+      };
+      row.append(preview,files,restore);list.append(row);
+    }
+  }
   function renderAttachments() {
+    saveComposerDraft();renderRetainedDrafts();
     byId('attachments').replaceChildren();
     for (const file of attachments) {
       const row = document.createElement('div'); row.className = 'attachment'; row.title = file.name;
@@ -1206,13 +1238,13 @@ async function openChat(initialConfig, options = {}) {
     updateComposer();
   }
   async function addAttachments(files) {
-    const target = attachments;
+    const targetRef=agent.id;saveComposerDraft();
     const config = state.activeConfig;
-    readingAttachments++; updateComposer();
+    readingAttachments++; renderRetainedDrafts();updateComposer();
     i18n.text(byId('attachment-error'), '');
     try {
       for (const file of files) {
-        if (target.length >= 8 || file.size > 5*1024*1024 || target.reduce((size,item) => size+item.size,0)+file.size > 10*1024*1024) throw new Error(t("最多 8 个附件，单个不超过 5 MB，总计不超过 10 MB。"));
+        if(file.size>5*1024*1024)throw new Error(t("最多 8 个附件，单个不超过 5 MB，总计不超过 10 MB。"));
         let part;
         if (['image/png','image/jpeg','image/webp','image/gif'].includes(file.type)) {
           if (!agent.describeModel(config || {}).input.includes('image')) throw new Error(t("当前模型不支持图片，请先切换支持图片的模型。"));
@@ -1226,10 +1258,14 @@ async function openChat(initialConfig, options = {}) {
           if (text.includes('\0')) throw new Error(t("{0} 不是文本文件。", file.name));
           part = {type:'text',text:`文件：${file.name}\n${text}`};
         }
-        target.push({name:file.name,size:file.size,part});
+        if(agent.id===targetRef)saveComposerDraft();
+        const draft=composerDrafts.current(targetRef);
+        if(draft.attachments.length>=8||draft.attachments.reduce((size,item)=>size+item.size,0)+file.size>10*1024*1024)throw new Error(t("最多 8 个附件，单个不超过 5 MB，总计不超过 10 MB。"));
+        draft.attachments.push({name:file.name,size:file.size,part});composerDrafts.save(targetRef,draft);
+        if(agent.id===targetRef)restoreComposerDraft();
       }
-    } catch (error) { if (target === attachments) i18n.text(byId('attachment-error'), () => t(error.message)); }
-    finally { readingAttachments--; renderAttachments(); }
+    } catch (error) { if (agent.id===targetRef) i18n.text(byId('attachment-error'), () => t(error.message)); }
+    finally { readingAttachments--;renderAttachments(); }
   }
   byId('attach').addEventListener('click', () => byId('attachment-input').click());
   byId('attachment-input').addEventListener('change', event => { void addAttachments([...event.target.files]); event.target.value = ''; });
@@ -1240,9 +1276,9 @@ async function openChat(initialConfig, options = {}) {
   byId('composer').addEventListener('dragover', event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); });
   byId('composer').addEventListener('drop', event => { if (!event.dataTransfer.files.length) return; event.preventDefault(); event.stopPropagation(); void addAttachments([...event.dataTransfer.files]); });
   function restoreComposerDraft() {
-    const draft = composerDrafts.get(agent.id);
-    byId('message-input').value = draft?.text || '';
-    attachments = draft?.attachments || [];
+    const draft = composerDrafts.current(agent.id);
+    if(byId('message-input').value!==draft.text)byId('message-input').value=draft.text;
+    attachments=draft.attachments;
     i18n.text(byId('attachment-error'), '');
     renderAttachments();
   }
@@ -1943,7 +1979,7 @@ async function openChat(initialConfig, options = {}) {
     const pi = agent;
     const chatId = pi?.id;
     if (!pi?.prompt) { message('system',t("Pi Tab 不可用，请重新点击书签。")); return; }
-    const submittedAttachments=attachments;
+    const submission=composerDrafts.begin(chatId,{text:input.value,attachments});
     input.value = '';
     attachments = []; renderAttachments();
     i18n.text(byId('attachment-error'), '');
@@ -1960,8 +1996,9 @@ async function openChat(initialConfig, options = {}) {
       await request;
     } catch (error) {
       if(error.notSubmitted){
-        if(agent.id===chatId&&!input.value&&!attachments.length){input.value=text;attachments=submittedAttachments;renderAttachments();updateComposer();}
-        else if(agent.id!==chatId&&!composerDrafts.get(chatId)?.text&&!composerDrafts.get(chatId)?.attachments?.length)composerDrafts.set(chatId,{text,attachments:submittedAttachments});
+        if(agent.id===chatId)saveComposerDraft();
+        composerDrafts.reject(submission);
+        if(agent.id===chatId){restoreComposerDraft();if(composerDrafts.retained(chatId).length)byId('retained-drafts').open=true;}
       }
       const detail = error instanceof Error ? error.message : String(error);
       if (!/agent 未完成: aborted/.test(detail)) {
@@ -1970,6 +2007,7 @@ async function openChat(initialConfig, options = {}) {
         console.error('[Pi Tab]', text);
       }
     } finally {
+      composerDrafts.finish(submission);
       if(state.preparing===preparation)state.preparing=false;
       const remaining = state.pendingByChat.get(chatId) - 1;
       if (remaining) state.pendingByChat.set(chatId, remaining);
@@ -2135,7 +2173,7 @@ async function openChat(initialConfig, options = {}) {
   byId('send-steer').addEventListener('click', event => { closeSendMenu(); send(event,'steer'); });
   root.addEventListener('pointerdown', event => { if (!event.target.closest('#send-menu,#send')) closeSendMenu(); });
   root.addEventListener('keydown', event => { if (event.key === 'Escape' && !byId('send-menu').hidden) { closeSendMenu(); byId('send').focus(); } });
-  byId('message-input').addEventListener('input', updateComposer);
+  byId('message-input').addEventListener('input',()=>{saveComposerDraft();updateComposer();});
   byId('model-settings').addEventListener('click', () => void toggleModelMenu());
   byId('model-menu-add').addEventListener('click',()=>void openModelEditor());
   root.addEventListener('pointerdown',event=>{if(!event.target.closest('#model-menu,#model-settings'))closeModelMenu();});
@@ -2156,7 +2194,7 @@ async function openChat(initialConfig, options = {}) {
     closeChatMenu();
     byId('new-chat').disabled = true;
     try {
-      composerDrafts.set(agent.id,{text:byId('message-input').value,attachments});
+      saveComposerDraft();
       await agent.newChat();
       restoreComposerDraft();
       rememberWindow();
@@ -2187,7 +2225,7 @@ async function openChat(initialConfig, options = {}) {
     byId('chat-switch').setAttribute('aria-expanded', 'false');
   }
   async function switchConversation(id) {
-    composerDrafts.set(agent.id,{text:byId('message-input').value,attachments});
+    saveComposerDraft();
     await agent.selectChat(id);
     restoreComposerDraft();
     rememberWindow();

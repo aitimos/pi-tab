@@ -74,6 +74,8 @@ Use the attachment button, drop files into the composer, or paste images. Suppor
 
 Up to 8 attachments are allowed, with 5 MB per file and 10 MB total. Attachments are sent to the configured model service and saved with sent messages. Editing a queued message preserves its attachments. Switching conversations within a window retains separate drafts and pending attachments; unsent drafts do not survive a page reload.
 
+If a send is definitely rejected, its original text and attachments return to the composer. If you have already started editing another message, the original appears under **Saved drafts**. Choose **Move to composer** to retrieve it while keeping your current edit as another saved draft. This does not send a message. Accepted submissions and submissions with an unknown result do not enter this list; check history and the queue first. Saved drafts last only within the current window.
+
 ## Conversation storage and recovery
 
 | | Bookmark | Chrome extension |
