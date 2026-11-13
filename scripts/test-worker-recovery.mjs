@@ -7,7 +7,7 @@ import {join,resolve} from 'node:path';
 
 const output=process.env.PI_TAB_EVIDENCE?resolve(process.env.PI_TAB_EVIDENCE):await mkdtemp(join(tmpdir(),'pi-tab-worker-evidence-'));
 await mkdir(output,{recursive:true});
-const directory=await mkdtemp(join(tmpdir(),'pi-tab-worker-')),requests=[],held=[],cases=[],errors=[];
+const directory=await mkdtemp(join(tmpdir(),'pi-tab-worker-')),requests=[],held=[],cases=[],errors=[],readAttempts=[];
 let callId=0;
 function answer(response,input,title){
   const last=input.messages.at(-1),text=JSON.stringify(last.content);
@@ -46,16 +46,31 @@ async function waitUnbound(page){await openChatMenu(page);await ui(page).locator
 async function activate(page,url){await page.goto(url);const result=await control.evaluate(async url=>{const tab=(await chrome.tabs.query({})).find(tab=>tab.url===url);await chrome.storage.session.set({['active:'+tab.id]:true});return chrome.tabs.sendMessage(tab.id,{type:'activate',openWindow:true});},url);assert.equal(result.ok,true,result.error);await ui(page).locator('#settings:enabled').waitFor();}
 async function isolated(page,func,args){
   const tabId=await control.evaluate(async url=>(await chrome.tabs.query({})).find(tab=>tab.url===url).id,page.url());
-  return control.evaluate('(async()=>{const [result]=await chrome.scripting.executeScript({target:{tabId:'+tabId+'},world:"ISOLATED",func:'+func.toString()+',args:['+JSON.stringify(args??null)+']});return {value:result.result,documentId:result.documentId};})()');
+  // Chrome may serialize a rejected injected promise as a null result without
+  // an error field. Settle it inside the isolated world before crossing IPC.
+  const result=await control.evaluate('(async()=>{const [result]=await chrome.scripting.executeScript({target:{tabId:'+tabId+'},world:"ISOLATED",func:async()=>{try{return {ok:true,value:await ('+func.toString()+')('+JSON.stringify(args??null)+')};}catch(error){return {ok:false,error:{message:error?.message??String(error),code:error?.code,stack:error?.stack}};}}});return result;})()');
+  assert.ok(result&&!result.error&&typeof result.result?.ok==='boolean','isolated script did not return a settled result: '+JSON.stringify(result));
+  if(!result.result.ok)throw Object.assign(Error(result.result.error.message),{code:result.result.error.code,injectedStack:result.result.error.stack});
+  return {value:result.result.value,documentId:result.documentId};
 }
 // Wake and reconnect through the shipped read-only content API. These restart
 // cases verify execution ownership, independently of transient menu rendering.
 async function readView(page){
-  const result=await isolated(page,async()=>{
-    const pi=window.__piTabAgent,agent=pi.agent(pi.conversation.id);
-    await agent.ready;await agent.refreshBinding();return {authorized:agent.authorized};
-  });
-  assert.equal(result.value.authorized,false,'a reconnecting read cannot acquire execution authority');
+  for(let attempt=1;attempt<=2;attempt++){
+    try{
+      const result=await isolated(page,async()=>{
+        const pi=window.__piTabAgent,agent=pi.agent(pi.conversation.id);
+        await agent.ready;await agent.refreshBinding();return {authorized:agent.authorized};
+      });
+      assert.equal(result.value?.authorized,false,'a reconnecting read must finish without acquiring execution authority');
+      readAttempts.push({attempt,authorized:result.value.authorized});return;
+    }catch(error){
+      readAttempts.push({attempt,code:error.code,message:error.message,injectedStack:error.injectedStack});
+      // Only this pure read can be retried, once. Writes, assertion failures,
+      // malformed results and unrelated errors must propagate immediately.
+      if(attempt===2||!['RECONNECT_REVIEW_HISTORY','EXTENSION_TRANSPORT_ERROR','DOCUMENT_RECONNECT_REQUIRED'].includes(error.code))throw error;
+    }
+  }
 }
 async function choose(page,close=true){await openHistory(page);const picker=page.frameLocator('iframe[title="历史对话"]');await picker.locator('button[data-ref]').first().waitFor();await page.screenshot({path:join(output,'picker-'+cases.length+'.png')});if(close){await picker.locator('button[data-ref="'+encodeURIComponent(JSON.stringify(['127.0.0.1',1]))+'"]').click();await historyClosed(page);}}
 async function closePicker(page){if(await page.locator('iframe[title="历史对话"]').count()){const close=page.frameLocator('iframe[title="历史对话"]').locator('#close');await close.focus();await close.screenshot({path:join(output,'picker-close-'+cases.length+'.png')});await close.press('Enter');await historyClosed(page);}}
@@ -79,6 +94,27 @@ async function restart(action,{closeEngine=false}={}){
 try{
   await control.evaluate(base=>chrome.storage.local.set({profiles:[{id:'worker',api:'openai-completions',baseUrl:base+'/v1',apiKey:'test-only',model:'fixture',thinking:'off',reasoning:false}],providers:[]}),base);
   const a=await browser.newPage(),b=await browser.newPage();await activate(a,base+'/execution');await activate(b,`http://localhost:${server.address().port}/observer`);
+  await assert.rejects(()=>isolated(b,async()=>{await Promise.resolve();throw Object.assign(Error('injected asynchronous read failure'),{code:'TEST_ASYNC_READ'});}),error=>error.code==='TEST_ASYNC_READ'&&error.injectedStack.includes('injected asynchronous read failure'));
+  for(const [code,failures,expectedCalls]of [['RECONNECT_REVIEW_HISTORY',1,2],['RECONNECT_REVIEW_HISTORY',2,2],['TEST_FATAL_READ',1,1]]){
+    await isolated(b,({code,failures})=>{
+      const pi=window.__piTabAgent,original=pi.agent;
+      const probe=window.__readProbe={original,calls:0,failures};
+      pi.agent=function(...args){
+        probe.calls++;const agent=original.apply(this,args),refresh=agent.refreshBinding;
+        agent.refreshBinding=async function(){const value=await refresh.call(this);if(probe.failures-->0)throw Object.assign(Error('injected read completion failure'),{code});return value;};
+        return agent;
+      };
+    },{code,failures});
+    try{
+      if(failures===1&&code==='RECONNECT_REVIEW_HISTORY')await readView(b);
+      else await assert.rejects(()=>readView(b),error=>error.code===code);
+    }finally{
+      const probe=await isolated(b,()=>{const probe=window.__readProbe;window.__piTabAgent.agent=probe.original;delete window.__readProbe;return {calls:probe.calls};});
+      assert.equal(probe.value.calls,expectedCalls);
+    }
+  }
+  assert.equal(requests.length,0,'read failure handling must never submit a message');
+  record('isolated async errors retain diagnostics; only a transient pure read retries once');
   await a.evaluate(()=>document.documentElement.dataset.businessState='kept');
   const identity=await isolated(a,()=>{window.__workerOriginalPi=window.__piTabAgent;const send=chrome.runtime.sendMessage.bind(chrome.runtime);chrome.runtime.sendMessage=(message,callback)=>{if(message.workerEpoch)window.__workerCurrentEpoch=message.workerEpoch;if(!window.__workerOldMessage&&message.type==='continuation-call'&&message.name==='prompt')window.__workerOldMessage=structuredClone(message);return send(message,callback);};return true;});
   await send(a,'WORKER_ORIGINAL_CONTEXT');await choose(b);
@@ -147,4 +183,4 @@ try{
   await c.screenshot({path:join(output,'worker-recovery-close-and-protected-page.png')});record('executor close and protected-page navigation revoke targets; only a new supported-page send writes DOM');
   assert.deepEqual(errors,[]);assert.ok(!requests.some(input=>JSON.stringify(input.messages).includes('UNSENT_AFTER_WORKER')));
 }catch(error){for(const [i,page]of browser.pages().entries()){if(!page.url().startsWith('chrome://'))await page.screenshot({path:join(output,'failure-'+i+'.png')}).catch(()=>{});console.log('FAILURE',page.url(),await ui(page).locator('#chat-messages').innerText({timeout:250}).catch(()=>''),await ui(page).locator('#chat-menu-error').innerText({timeout:250}).catch(()=>''));}throw error;
-}finally{await writeFile(join(output,'worker-recovery.json'),JSON.stringify({browser:browser.browser()?.version(),cases,versions,requests,errors},null,2));await cdp?.detach().catch(()=>{});await browser.close();server.closeAllConnections();await new Promise(done=>server.close(done));await rm(directory,{recursive:true,force:true});}
+}finally{await writeFile(join(output,'worker-recovery.json'),JSON.stringify({browser:browser.browser()?.version(),cases,readAttempts,versions,requests,errors},null,2));await cdp?.detach().catch(()=>{});await browser.close();server.closeAllConnections();await new Promise(done=>server.close(done));await rm(directory,{recursive:true,force:true});}
