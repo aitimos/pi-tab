@@ -38,13 +38,14 @@ const control=await browser.newPage();await control.goto(workerUrl.replace(/work
 const ui=page=>page.locator('[data-pi-overlay]').last(),versions=[];
 const record=name=>{cases.push(name);console.log('PASS',name);};
 async function send(page,text){await ui(page).locator('#message-input').fill(text);await ui(page).locator('#send').click();await ui(page).locator('#abort').waitFor({state:'hidden'});}
-async function continueHere(page){await ui(page).locator('#continue-here:enabled').click();await ui(page).locator('#continuation-panel[data-authorized="true"]').waitFor();}
+async function openHistory(page){await ui(page).locator('#chat-switch').click();await ui(page).locator('#choose-history').click();}
+async function waitUnbound(page){await ui(page).locator('#chat-switch').click();await ui(page).locator('#target-return').waitFor({state:'hidden'});await ui(page).locator('#chat-switch').click();}
 async function activate(page,url){await page.goto(url);const result=await control.evaluate(async url=>{const tab=(await chrome.tabs.query({})).find(tab=>tab.url===url);await chrome.storage.session.set({['active:'+tab.id]:true});return chrome.tabs.sendMessage(tab.id,{type:'activate',openWindow:true});},url);assert.equal(result.ok,true,result.error);await ui(page).locator('#settings:enabled').waitFor();}
 async function isolated(page,func,args){
   const tabId=await control.evaluate(async url=>(await chrome.tabs.query({})).find(tab=>tab.url===url).id,page.url());
   return control.evaluate('(async()=>{const [result]=await chrome.scripting.executeScript({target:{tabId:'+tabId+'},world:"ISOLATED",func:'+func.toString()+',args:['+JSON.stringify(args??null)+']});return {value:result.result,documentId:result.documentId};})()');
 }
-async function choose(page,close=true){await ui(page).locator('#choose-history').click();const picker=page.frameLocator('iframe[title="历史对话"]');await picker.locator('button[data-ref]').first().waitFor();await page.screenshot({path:join(output,'picker-'+cases.length+'.png')});if(close){await picker.locator('button[data-ref="'+encodeURIComponent(JSON.stringify(['127.0.0.1',1]))+'"]').click();await page.locator('iframe[title="历史对话"]').waitFor({state:'detached'});}}
+async function choose(page,close=true){await openHistory(page);const picker=page.frameLocator('iframe[title="历史对话"]');await picker.locator('button[data-ref]').first().waitFor();await page.screenshot({path:join(output,'picker-'+cases.length+'.png')});if(close){await picker.locator('button[data-ref="'+encodeURIComponent(JSON.stringify(['127.0.0.1',1]))+'"]').click();await page.locator('iframe[title="历史对话"]').waitFor({state:'detached'});}}
 async function closePicker(page){if(await page.locator('iframe[title="历史对话"]').count()){await page.frameLocator('iframe[title="历史对话"]').locator('#close').click();await page.locator('iframe[title="历史对话"]').waitFor({state:'detached'});}}
 let cdp;
 async function restart(action,{closeEngine=false}={}){
@@ -68,14 +69,14 @@ try{
   const a=await browser.newPage(),b=await browser.newPage();await activate(a,base+'/execution');await activate(b,`http://localhost:${server.address().port}/observer`);
   await a.evaluate(()=>document.documentElement.dataset.businessState='kept');
   const identity=await isolated(a,()=>{window.__workerOriginalPi=window.__piTabAgent;const send=chrome.runtime.sendMessage.bind(chrome.runtime);chrome.runtime.sendMessage=(message,callback)=>{if(message.workerEpoch)window.__workerCurrentEpoch=message.workerEpoch;if(!window.__workerOldMessage&&message.type==='continuation-call'&&message.name==='prompt')window.__workerOldMessage=structuredClone(message);return send(message,callback);};return true;});
-  await continueHere(a);await send(a,'WORKER_ORIGINAL_CONTEXT');await choose(b);
+  await send(a,'WORKER_ORIGINAL_CONTEXT');await choose(b);
   cdp=await browser.newCDPSession(a);cdp.on('ServiceWorker.workerVersionUpdated',event=>versions.push(...event.versions));await cdp.send('ServiceWorker.enable');
   // A picker open during restart must be closed; its grant cannot be revived.
   await choose(b,false);const before=requests.length;
   // Suppress the startup hint for A to exercise the bounded request fallback.
   await control.evaluate(async url=>{const tab=(await chrome.tabs.query({})).find(tab=>tab.url===url);await chrome.storage.session.set({['active:'+tab.id]:false});},a.url());
   await restart(async()=>{await ui(a).locator('#message-input').fill('UNSENT_AFTER_WORKER');await ui(a).locator('#send').click();});
-  await ui(a).locator('#continuation-panel[data-authorized="false"]').waitFor();await ui(a).locator('#continue-here:enabled').waitFor();
+  await waitUnbound(a);
   await ui(a).locator('#abort').waitFor({state:'hidden'});
   await b.locator('iframe[title="历史对话"]').waitFor({state:'detached'});
   assert.equal(requests.length,before,'restart blindly resubmitted a message');
@@ -91,9 +92,10 @@ try{
     window.__staleWorkerView=window.__piTabAgent.agent(JSON.stringify(['127.0.0.1',1])).ready;
   });
   const delayed=await isolated(a,async()=>{for(let i=0;i<100;i++){if(window.__releaseWorkerView)return true;await new Promise(done=>setTimeout(done,20));}return false;});assert.equal(delayed.value,true);
-  await continueHere(a);
+
+  await send(a,'WORKER_NEW_SEND_AFTER_RESTART');
   await isolated(a,async()=>{window.__releaseWorkerView();await window.__staleWorkerView;delete window.__releaseWorkerView;delete window.__staleWorkerView;});
-  assert.equal(await ui(a).locator('#continuation-panel').getAttribute('data-authorized'),'true','a delayed view must not erase a newer lease');
+  const valid=await isolated(a,()=>window.__piTabAgent.agent(JSON.stringify(['127.0.0.1',1])).authorized);assert.equal(valid.value,true,'a delayed view must not erase a newer lease');
   await send(a,'WRITE_TARGET AFTER_RESTART');await a.locator('#target').filter({hasText:a.url()}).waitFor();
   await ui(b).locator('#chat-messages').filter({hasText:'AFTER_RESTART'}).waitFor();assert.equal(await b.locator('#target').innerText(),'untouched');
   assert.ok(requests.some(input=>JSON.stringify(input.messages).includes('WORKER_ORIGINAL_CONTEXT')&&input.messages.some(message=>message.role==='tool'&&JSON.stringify(message.content).includes(a.url()))));
@@ -105,31 +107,31 @@ try{
   await ui(a).locator('#message-input').fill('QUEUED_WORKER accepted once');await ui(a).locator('#send').click();
   await ui(a).locator('[data-queue-id]').first().waitFor();
   const heldCount=requests.length;
-  await restart(()=>ui(b).locator('#choose-history').click());await closePicker(b);
+  await restart(()=>openHistory(b));await closePicker(b);
   assert.equal(requests.length,heldCount,'an accepted request was replayed');
-  const busy=await isolated(a,async()=>{const agent=window.__piTabAgent.agent(JSON.stringify(['127.0.0.1',1]));await agent.ready;try{await agent.continueHere();return {ok:true};}catch(error){return {ok:false,code:error.code};}});assert.equal(busy.value.code,'CONVERSATION_BUSY');
+  await ui(a).locator('#message-input').fill('BUSY_MUST_NOT_SEND');await ui(a).locator('#send').click();await ui(a).locator('#chat-messages').filter({hasText:'任务正在运行'}).waitFor();assert.equal(await ui(a).locator('#message-input').inputValue(),'BUSY_MUST_NOT_SEND');assert.equal(requests.length,heldCount);await a.screenshot({path:join(output,'busy-draft-preserved.png')});
   held.shift()();await ui(a).locator('#abort').waitFor({state:'hidden'});await ui(a).locator('[data-queue-id]').waitFor({state:'detached'});
   const userContains=(input,text)=>input.messages.at(-1).role==='user'&&JSON.stringify(input.messages.at(-1).content).includes(text);
   assert.equal(requests.filter(input=>userContains(input,'HOLD_WORKER')).length,1);assert.equal(requests.filter(input=>userContains(input,'QUEUED_WORKER')).length,1);
-  await continueHere(a);record('accepted prompt and queue survive worker restart without replay or busy-target switching');
+  record('accepted prompt and queue survive worker restart without replay or busy-target switching');
 
   await ui(a).locator('#message-input').fill('WAIT_TOOL');await ui(a).locator('#send').click();await a.waitForFunction(()=>document.documentElement.dataset.waiting==='yes');
-  await restart(()=>ui(b).locator('#choose-history').click());await closePicker(b);await ui(a).locator('#abort').waitFor({state:'hidden'});await ui(a).locator('#continue-here:enabled').waitFor();
+  await restart(()=>openHistory(b));await closePicker(b);await ui(a).locator('#abort').waitFor({state:'hidden'});await waitUnbound(a);
   record('in-flight tool wait and UI busy state recover after worker termination');
 
-  await restart(()=>ui(a).locator('#choose-history').click(),{closeEngine:true});await closePicker(a);
-  await continueHere(a);await send(a,'WRITE_TARGET AFTER_BOTH_RESTART');await a.locator('#target').filter({hasText:a.url()}).waitFor();
+  await restart(()=>openHistory(a),{closeEngine:true});await closePicker(a);
+  await send(a,'WRITE_TARGET AFTER_BOTH_RESTART');await a.locator('#target').filter({hasText:a.url()}).waitFor();
   assert.ok(requests.some(input=>input.messages.at(-1).role==='user'&&JSON.stringify(input.messages.at(-1).content).includes('AFTER_BOTH_RESTART')&&JSON.stringify(input.messages).includes('WORKER_ORIGINAL_CONTEXT')));
   const same=await isolated(a,()=>window.__workerOriginalPi===window.__piTabAgent);assert.equal(same.documentId,identity.documentId);assert.equal(same.value,true);
-  await a.locator('#spa').click();await ui(a).locator('#continuation-summary').filter({hasText:'未绑定'}).waitFor();await continueHere(a);await send(a,'WRITE_TARGET AFTER_RESTART_SPA');await a.locator('#target').filter({hasText:a.url()}).waitFor();
-  await a.screenshot({path:join(output,'worker-and-engine-recovered-spa.png')});record('worker and offscreen recreation then SPA retain context and require explicit continuation');
-  await a.close();await ui(b).locator('#continuation-summary').filter({hasText:'未绑定'}).waitFor();await continueHere(b);await send(b,'WRITE_TARGET AFTER_EXECUTOR_CLOSE');await b.locator('#target').filter({hasText:b.url()}).waitFor();
+  await a.locator('#spa').click();await waitUnbound(a);await send(a,'WRITE_TARGET AFTER_RESTART_SPA');await a.locator('#target').filter({hasText:a.url()}).waitFor();
+  await a.screenshot({path:join(output,'worker-and-engine-recovered-spa.png')});record('worker and offscreen recreation then SPA retain context and allow only a new user send');
+  await a.close();await waitUnbound(b);await send(b,'WRITE_TARGET AFTER_EXECUTOR_CLOSE');await b.locator('#target').filter({hasText:b.url()}).waitFor();
   const c=await browser.newPage();await activate(c,`http://sub.localhost:${server.address().port}/protected-observer`);await choose(c);
   const protectedTab=await control.evaluate(async url=>(await chrome.tabs.query({})).find(tab=>tab.url===url).id,b.url()),protectedCount=requests.length;
-  await b.goto('chrome://version');await ui(c).locator('#continuation-summary').filter({hasText:'未绑定'}).waitFor();
+  await b.goto('chrome://version');await waitUnbound(c);
   const refused=await control.evaluate(async tabId=>{try{await chrome.scripting.executeScript({target:{tabId},func:()=>document.title});return false;}catch{return true;}},protectedTab);assert.equal(refused,true);assert.equal(requests.length,protectedCount);
-  await continueHere(c);await send(c,'WRITE_TARGET AFTER_PROTECTED_PAGE');await c.locator('#target').filter({hasText:c.url()}).waitFor();
-  await c.screenshot({path:join(output,'worker-recovery-close-and-protected-page.png')});record('executor close and protected-page navigation revoke targets; only explicit supported-page continuation writes DOM');
+  await send(c,'WRITE_TARGET AFTER_PROTECTED_PAGE');await c.locator('#target').filter({hasText:c.url()}).waitFor();
+  await c.screenshot({path:join(output,'worker-recovery-close-and-protected-page.png')});record('executor close and protected-page navigation revoke targets; only a new supported-page send writes DOM');
   assert.deepEqual(errors,[]);assert.ok(!requests.some(input=>JSON.stringify(input.messages).includes('UNSENT_AFTER_WORKER')));
-}catch(error){for(const [i,page]of browser.pages().entries()){if(!page.url().startsWith('chrome://'))await page.screenshot({path:join(output,'failure-'+i+'.png')}).catch(()=>{});console.log('FAILURE',page.url(),await ui(page).locator('#continuation-summary').innerText({timeout:250}).catch(()=>''),await ui(page).locator('#continuation-error').innerText({timeout:250}).catch(()=>''));}throw error;
+}catch(error){for(const [i,page]of browser.pages().entries()){if(!page.url().startsWith('chrome://'))await page.screenshot({path:join(output,'failure-'+i+'.png')}).catch(()=>{});console.log('FAILURE',page.url(),await ui(page).locator('#chat-messages').innerText({timeout:250}).catch(()=>''),await ui(page).locator('#chat-menu-error').innerText({timeout:250}).catch(()=>''));}throw error;
 }finally{await writeFile(join(output,'worker-recovery.json'),JSON.stringify({browser:browser.browser()?.version(),cases,versions,requests,errors},null,2));await cdp?.detach().catch(()=>{});await browser.close();server.closeAllConnections();await new Promise(done=>server.close(done));await rm(directory,{recursive:true,force:true});}

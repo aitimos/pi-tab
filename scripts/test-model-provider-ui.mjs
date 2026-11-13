@@ -61,7 +61,6 @@ try{
     const settings=async()=>{await ui('#settings').click();await ui('#settings-models-tab').click();await ui('[data-model-id="qa-one"]').waitFor();};
     const shot=async name=>{const file=prefix+'-'+name+'.png';await root.screenshot({path:join(directory,file),animations:'disabled'});screenshots.push(file);};
     const send=async text=>{
-      if(worker){if(await ui('#continuation-panel').getAttribute('data-authorized')!=='true')await ui('#continue-here').click();await expect(ui('#continuation-panel')).toHaveAttribute('data-authorized','true');}
       await ui('#message-input').fill(text);await ui('#send').click();await expect(ui('#chat-messages')).toContainText('Provider configuration verified');await expect(ui('#abort')).toBeHidden();
     };
     const edit=async()=>{await ui('[data-model-id="qa-one"] button').first().click();await expect(ui('#model-dialog-title')).toHaveText('Edit model');await expect(ui('#manual-model-id')).toHaveValue('qa-one');await expect(ui('#manual-model-form [type=submit]')).toBeEnabled();};

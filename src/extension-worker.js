@@ -24,7 +24,7 @@ const internal=sender=>!sender.tab && sender.id===chrome.runtime.id;
 async function coordinator(request) {
   await ensureEngine();
   const response=await chrome.runtime.sendMessage({...request,target:'continuations',pageTarget:request.target});
-  if(!response?.ok)throw Object.assign(Error(response?.error||'ENGINE_UNAVAILABLE'),{code:response?.code});
+  if(!response?.ok)throw Object.assign(Error(response?.error||'ENGINE_UNAVAILABLE'),{code:response?.code,notSubmitted:response?.notSubmitted});
   return response.value;
 }
 async function verifyDocument(target) {
@@ -150,6 +150,7 @@ const mcpStore=new McpConfigStore({
 
 chrome.runtime.onMessage.addListener((message,sender,respond) => {
   if(message.target==='engine'||message.type==='shared-config-updated'||message.type==='tab-closed'||message.type==='mcp-update-guard'||message.type==='target-invalidated'||message.target==='continuations')return false;
+  let continuationForwarded=false;
   (async()=>{
     if(message.type==='document-hello') {
       if(sender.id!==chrome.runtime.id||sender.frameId!==0||!sender.documentId||!sender.tab?.id)throw Error('INVALID_TOP_DOCUMENT');
@@ -182,7 +183,17 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
       }else await chrome.tabs.sendMessage(grant.target.tabId,{type:'history-picker-closed',viewId:grant.viewId},{documentId:grant.target.documentId});
       return true;
     }
-    if(message.type==='focus-target'){const target=senderTarget(sender,message.workerEpoch);const ref=conversationRef(message.ref?.ownerSite,message.ref?.conversationId);if(!subscribers.get(refKey(ref))?.has(message.viewId))throw Error('CONVERSATION_NOT_SELECTED');const state=await coordinator({operation:'view',ref});if(!state.target)throw Error('TARGET_INVALIDATED');return chrome.tabs.update(state.target.tabId,{active:true});}
+    if(message.type==='focus-target'){
+      const target=senderTarget(sender,message.workerEpoch);await validTarget(target);
+      const ref=conversationRef(message.ref?.ownerSite,message.ref?.conversationId);
+      const subscription=subscribers.get(refKey(ref))?.get(message.viewId);
+      if(subscription?.documentId!==target.documentId)throw Error('CONVERSATION_NOT_SELECTED');
+      const state=await coordinator({operation:'view',ref});
+      if(!state.target)throw Error('TARGET_INVALIDATED');
+      const tab=await chrome.tabs.update(state.target.tabId,{active:true});
+      await chrome.windows.update(tab.windowId,{focused:true});
+      return true;
+    }
     if(message.type==='continuation-call') {
       const target=senderTarget(sender,message.workerEpoch), ref=conversationRef(message.ref?.ownerSite,message.ref?.conversationId);
       // A source becomes accessible only through its native list or a picker selection.
@@ -190,6 +201,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
       const selected=await chrome.storage.session.get(selectedKey(target.tabId,target.origin));
       if(ref.ownerSite!==siteOf(target.url)&&!selected[selectedKey(target.tabId,target.origin)]?.includes(refKey(ref))&&(!subscription||subscription.documentId!==target.documentId))throw Error('CONVERSATION_NOT_SELECTED');
       subscribe(ref,target,message.viewId);
+      continuationForwarded=true;
       const value=await coordinator({operation:message.operation,ref,args:message.args,name:message.name,expectedVersion:message.expectedVersion,viewId:message.viewId,target,
         authorization:{target,viewId:message.viewId,leaseToken:message.leaseToken},clientRequestId:message.clientRequestId});
       if(message.operation==='continue'){try{await validTarget(target);}catch(error){await chrome.runtime.sendMessage({type:'target-invalidated',tabId:target.tabId});throw error;}}
@@ -305,7 +317,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond) => {
         message.type==='tabs-send'?[message.text,`agent ${message.fromChatId}`]:[message.limit],ref.conversationId);
     }
     throw new Error('未知扩展消息。');
-  })().then(value=>respond({ok:true,value}),error=>respond({ok:false,code:error.code||error.message,error:continuationErrorMessage(error),diagnostics:error.diagnostics}));
+  })().then(value=>respond({ok:true,value}),error=>respond({ok:false,code:error.code||error.message,notSubmitted:error.notSubmitted||(message.type==='continuation-call'&&!continuationForwarded),error:continuationErrorMessage(error),diagnostics:error.diagnostics}));
   return true;
 });
 

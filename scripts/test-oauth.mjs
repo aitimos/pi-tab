@@ -82,7 +82,6 @@ try{
   const root="document.querySelector('[data-pi-overlay]')?.shadowRoot";
   const wait=async expression=>browser('wait','--fn',expression);
   const click=async selector=>{
-    if(mode==='extension'&&(selector==='#send'||selector==='#message-input')){await evaluate(`(()=>{const b=${root}.getElementById('continue-here');if(!b.disabled)b.click();})()`);await wait(`${root}.getElementById('continuation-panel').dataset.authorized==='true'`);}
     const point=await evaluate(`(()=>{const e=${root}.querySelector(${JSON.stringify(selector)});if(!e)return null;e.scrollIntoView({block:'nearest'});const r=e.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2,visible:r.width>0&&r.height>0&&getComputedStyle(e).visibility!=='hidden'}})()`);
     assert.ok(point?.visible,`Click target is not visible: ${selector}`);
     await browser('mouse','move',String(Math.round(point.x)),String(Math.round(point.y)));await browser('mouse','down','left');await browser('mouse','up','left');

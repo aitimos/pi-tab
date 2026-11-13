@@ -8,16 +8,17 @@ import {createI18n} from '../src/i18n.js';
 import {conversationRef,refKey} from '../src/conversation-ref.js';
 async function fixture(){
   const session=new Map(),calls=[],pageCalls=[];
-  const tabs=new Map([[10,{id:10,url:'https://www.example.com/a',title:'A'}],[11,{id:11,url:'https://other.example/b',title:'B'}]]);
-  let onMessage,onUpdated,onRemoved,onClick;const heldTools=new Map();
+  const tabs=new Map([[10,{id:10,windowId:100,url:'https://www.example.com/a',title:'A'}],[11,{id:11,windowId:101,url:'https://other.example/b',title:'B'}]]);
+  let onMessage,onUpdated,onRemoved,onClick,focusTarget=null;const heldTools=new Map();
   const chrome={runtime:{id:'extension',getURL:path=>'chrome-extension://extension/'+path,onMessage:{addListener:f=>onMessage=f},sendMessage:async message=>{
     calls.push(message);
     if(message.method==='listChats')return {ok:true,value:[{id:1,title:'History'}]};
-    if(message.operation==='view')return {ok:true,value:{version:{epoch:'e',seq:0},target:null}};
+    if(message.operation==='view')return {ok:true,value:{version:{epoch:'e',seq:0},target:focusTarget}};
     if(message.operation==='list')return {ok:true,value:{rows:[{ref:{ownerSite:'www.example.com',conversationId:1},title:'History'}],sourceErrors:[]}};
     return {ok:true,value:true};
   }},i18n:{getAcceptLanguages:async()=>['en']},
   action:{onClicked:{addListener:f=>onClick=f},setBadgeText:async()=>{},setTitle:async()=>{}},
+  windows:{update:async(id,change)=>{calls.push({windowId:id,change});}},
   offscreen:{hasDocument:async()=>true},scripting:{executeScript:async()=>{}},
   tabs:{onUpdated:{addListener:f=>onUpdated=f},onRemoved:{addListener:f=>onRemoved=f},query:async()=>[...tabs.values()],get:async id=>tabs.get(id),update:async(id,change)=>Object.assign(tabs.get(id),change),sendMessage:async(id,message,options)=>{pageCalls.push({id,message,options});if(message.type==='execute-tool'&&message.name==='held')return new Promise(resolve=>heldTools.set(message.requestId,resolve));if(message.type==='cancel-tool')heldTools.get(message.requestId)?.({ok:false,error:'cancelled'});return {ok:true,value:'result'};}},
   storage:{onChanged:{addListener(){}},local:{get:async()=>({})},session:{get:async key=>({[key]:session.get(key)}),set:async values=>{for(const [key,value]of Object.entries(values))session.set(key,value);},remove:async key=>session.delete(key)}}};
@@ -28,7 +29,7 @@ async function fixture(){
   const send=(message,from=10)=>new Promise(resolve=>onMessage({workerEpoch:epoch,...message},typeof from==='number'?sender(from):from,resolve));
   const internal={id:'extension',url:'chrome-extension://extension/engine.html'};
   const hello=async id=>{const response=await send({type:'document-hello',nonce:'nonce-'+id,routeEpoch:0,url:tabs.get(id).url},id);epoch=response.value?.workerEpoch;return response.value;};
-  return {send,hello,sender,internal,tabs,calls,pageCalls,onClick,onUpdated,onRemoved,heldTools,boot};
+  return {setFocusTarget:value=>{focusTarget=value;},send,hello,sender,internal,tabs,calls,pageCalls,onClick,onUpdated,onRemoved,heldTools,boot};
 }
 test('native paths share a source engine; document tools use documentId and never follow navigation',async()=>{
   const f=await fixture();const target=await f.hello(10);await f.hello(11);
@@ -100,10 +101,22 @@ test('a new worker requires fresh document proof and restores only persisted vie
   assert.equal((await f.send({type:'picker-select',grant,ref},picker)).ok,true);
   f.boot();const before=f.calls.length;
   const rejected=await f.send({type:'continuation-call',operation:'agent',name:'prompt',ref,viewId:'observer',leaseToken:'old-lease'},11);
-  assert.equal(rejected.code,'DOCUMENT_RECONNECT_REQUIRED');assert.equal(f.calls.length,before);
+  assert.equal(rejected.code,'DOCUMENT_RECONNECT_REQUIRED');assert.equal(rejected.notSubmitted,true);assert.equal(f.calls.length,before);
   const fresh=await f.hello(11);assert.notEqual(fresh.workerEpoch,old.workerEpoch);
   assert.equal((await f.send({type:'continuation-call',operation:'view',ref,viewId:'observer'},11)).ok,true);
   assert.equal((await f.send({type:'picker-list',grant},picker)).ok,false);
   assert.equal((await f.send({type:'continuation-call',operation:'agent',name:'prompt',ref,viewId:'observer',workerEpoch:old.workerEpoch},11)).code,'DOCUMENT_RECONNECT_REQUIRED');
   assert.equal((await f.send({type:'validate-target',target:old},f.internal)).ok,false);
+});
+
+test('return to execution page focuses its existing tab and window without binding or submitting',async()=>{
+  const f=await fixture();await f.hello(10);await f.hello(11);
+  const ref={ownerSite:'www.example.com',conversationId:1};
+  await f.send({type:'continuation-call',operation:'view',ref,viewId:'v'},10);
+  f.setFocusTarget({tabId:11});
+  const before=f.calls.length,result=await f.send({type:'focus-target',ref,viewId:'v'},10);
+  assert.equal(result.ok,true);assert.equal(f.tabs.get(11).active,true);
+  assert.equal(f.calls.at(-1).windowId,101);assert.equal(f.calls.at(-1).change.focused,true);
+  assert.equal(f.calls.slice(before).filter(m=>['continue','agent'].includes(m.operation)).length,0);
+  assert.equal((await f.send({type:'focus-target',ref,viewId:'missing'},10)).ok,false);
 });

@@ -21,9 +21,8 @@ export async function extensionTestRpc({tabId,site,method,args=[],chatId,name}) 
       if(method==='deleteChat'){const value=await pi.deleteChat(key(args[0]));return {...value,replacementId:JSON.parse(value.replacementId)[1]};}
       const agent=pi.agent(key(chatId??JSON.parse(pi.conversation.id)[1]));await agent.ready;
       if(method==='selectChat')return agent.selectChat(key(chatId));
-      if(method==='recoverSource')return agent.recoverSource();
+      if(method==='recoverSource')return agent.recoverSource((await agent.refreshBinding()).recovery?.version);
       if(method==='agent'){
-        if(['prompt','steer','followUp','runTool','reset','changeQueuedMessage'].includes(name)&&!agent.authorized)await agent.continueHere();
         return agent[name](...args);
       }
       if(method==='readAgent'){const history=await agent.history();return history.entries;}

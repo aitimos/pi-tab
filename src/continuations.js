@@ -51,7 +51,7 @@ export class Continuations {
       void task.finally(() => {
         if (row.requests.size > 100) row.requests.delete(row.requests.keys().next().value);
       }).catch(() => {});
-    });
+    }).catch(error=>{error.notSubmitted=true;throw error;});
     return task;
   }
   async stop(ref, work) {

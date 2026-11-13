@@ -67,14 +67,14 @@ try{
     const wait=condition=>browser('wait','--fn',condition);
     const bubbles=()=>evaluate(`[...${root}.querySelectorAll('.message:not([data-queue-id]) .bubble')].map(node=>node.textContent.trim())`);
     async function send(text,steer=false){
-      if(mode==='extension'){await evaluate(`(()=>{const r=${root},b=r.getElementById('continue-here');if(!b.disabled)b.click();})()`);await wait(`${root}.getElementById('continuation-panel').dataset.authorized==='true'`);}
       await evaluate(`(()=>{const r=${root},input=r.getElementById('message-input');input.value=${JSON.stringify(text)};input.dispatchEvent(new Event('input',{bubbles:true}));})()`);
       if(steer){
         await evaluate(`${root}.getElementById('send').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true}))`);
         assert.equal(await evaluate(`${root}.getElementById('send-menu').hidden`),false);
         assert.ok(['优先发送','Send with priority'].includes(await evaluate(`${root}.getElementById('send-steer').textContent`)));
       }
-      await evaluate(`${root}.getElementById(${JSON.stringify(steer?'send-steer':'send')}).click()`);
+      const point=await evaluate(`(()=>{const r=${root}.getElementById(${JSON.stringify(steer?'send-steer':'send')}).getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()`);
+      await browser('mouse','move',String(Math.round(point.x)),String(Math.round(point.y)));await browser('mouse','down','left');await browser('mouse','up','left');
     }
     try{
       const sourcePage=(await browser('open',base)).targetId;

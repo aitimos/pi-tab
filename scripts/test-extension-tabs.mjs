@@ -1,6 +1,6 @@
 import {extensionTestRpc} from './extension-test-rpc.mjs';
 // Real extension + Durable tool execution, with a deterministic local model server.
-import {agentBrowser} from './browser-cli.mjs';
+import {agentBrowser,sendFromOverlay} from './browser-cli.mjs';
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {createHash,generateKeyPairSync} from 'node:crypto';
@@ -56,7 +56,7 @@ try{
   const id=createHash('sha256').update(key).digest('hex').slice(0,32).replace(/[0-9a-f]/g,d=>String.fromCharCode(97+parseInt(d,16)));
   const manifest=JSON.parse(await readFile(join(extension,'manifest.json'),'utf8'));manifest.key=key.toString('base64');
   await writeFile(join(extension,'manifest.json'),JSON.stringify(manifest));
-  await browser('open',url);
+  const sourcePageId=(await browser('open',url)).targetId;
   const controllerPage=(await browser('tab','new',`chrome-extension://${id}/test-controller.html`)).targetId;
   const sourceTab=await evaluate(`(async()=>{const [tab]=await chrome.tabs.query({url:${JSON.stringify(url)}});await chrome.storage.session.set({['active:'+tab.id]:true});const r=await chrome.tabs.sendMessage(tab.id,{type:'activate'});if(!r.ok)throw new Error(r.error);return tab.id})()`);
   const engine=async(method,args=[],chatId,name,site='127.0.0.1',tabId=sourceTab)=>{
@@ -68,7 +68,10 @@ try{
   await engine('agent',[{api:'openai-completions',baseUrl:new URL('/v1',url).href,apiKey:'test-only',model:'test-model',thinking:'off',reasoning:false}],source,'configure');
   const call=async(name,args={})=>{const answer=await engine('agent',[command(name,args)],source,'prompt');try{return JSON.parse(answer);}catch{throw Error('Tool '+name+' returned: '+answer);}};
   const page=()=>command('js_eval',{code:'return {url:location.href,title:document.title}'});
-  const sourcePage=JSON.parse(await engine('agent',[page()],source,'prompt'));
+  await browser('tab',sourcePageId);await browser('reload');await sendFromOverlay(browser,evaluate,page());
+  const history=await engine('agent',[],source,'history');
+  const answer=history.entries.flatMap(entry=>entry.model||[]).findLast(message=>message.role==='assistant'&&message.stopReason==='stop');
+  const sourcePage=JSON.parse(answer.content.filter(part=>part.type==='text').map(part=>part.text).join(''));
   assert.equal(sourcePage.url,url);
   assert.ok(['tab_list','tab_open','tab_send','tab_read'].every(name=>requests[0].tools.some(t=>t.function.name===name)));
   assert.ok(requests[0].messages.some(m=>m.role==='system'&&m.content.includes('当前是 Chrome 扩展模式')));

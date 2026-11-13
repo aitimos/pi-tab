@@ -1,6 +1,6 @@
 import {extensionTestRpc} from './extension-test-rpc.mjs';
 // Real extension + Durable tool execution, with a deterministic local model server.
-import {agentBrowser} from './browser-cli.mjs';
+import {agentBrowser,sendFromOverlay} from './browser-cli.mjs';
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {createHash,generateKeyPairSync} from 'node:crypto';
@@ -86,8 +86,7 @@ try{
   await engine('agent',[{api:'openai-completions',baseUrl:new URL('/v1',url).href,apiKey:'test-only',model:'test-model',thinking:'off',reasoning:false}],source,'configure');
   const root=`document.querySelector('[data-pi-overlay]').shadowRoot`;
   async function start(chatId,text,tabId=sourceTab){
-    await browser('tab',controllerPage);
-    await evaluate(`void (${extensionTestRpc.toString()})(${JSON.stringify({target:'engine',site:'127.0.0.1',tabId,method:'agent',args:[text],chatId,name:'prompt'})})`);
+    assert.equal(tabId,sourceTab);await browser('tab',sourcePage);await sendFromOverlay(browser,evaluate,text,{wait:false});
   }
   async function idle(chatId){for(let i=0;i<30;i++){if(!(await engine('listChats')).find(c=>c.id===chatId)?.busy)return;await new Promise(resolve=>setTimeout(resolve,100));}throw Error('Conversation did not stop');}
   async function waitServer(predicate){for(let i=0;i<100;i++){if(predicate())return;await new Promise(resolve=>setTimeout(resolve,50));}assert.ok(predicate(),'server state reached');}

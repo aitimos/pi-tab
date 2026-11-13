@@ -10,7 +10,7 @@ const compiled=await build({stdin:{contents:"export {HistoryIndex} from './src/h
 const code=compiled.outputFiles[0].text;
 const server=createServer((req,res)=>{res.setHeader('Content-Type','text/html');res.end('<title>History index verification</title><script>globalThis.__piTabDeferredInstall=true;</script><script>'+runtime+'</script><script>'+code+'</script>');});
 await new Promise(r=>server.listen(0,'127.0.0.1',r));
-const browser=await chromium.launch({headless:true}),page=await browser.newPage();
+const browser=await chromium.launch({headless:true,executablePath:process.env.PI_TAB_TEST_CHROME||chromium.executablePath()}),page=await browser.newPage();
 try{
   await page.goto(`http://127.0.0.1:${server.address().port}`);
   const evidence=await page.evaluate(async()=>{

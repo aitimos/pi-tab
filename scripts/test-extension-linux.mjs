@@ -1,6 +1,6 @@
 import {extensionTestRpc} from './extension-test-rpc.mjs';
 // Real extension + Durable tool execution, with a deterministic local model server.
-import {agentBrowser} from './browser-cli.mjs';
+import {agentBrowser,sendFromOverlay} from './browser-cli.mjs';
 import assert from 'node:assert/strict';
 import {execFile} from 'node:child_process';
 import {createHash,generateKeyPairSync} from 'node:crypto';
@@ -69,8 +69,9 @@ try{
   const source=(await engine('listChats'))[0].id;
   await engine('agent',[{api:'openai-completions',baseUrl:new URL('/v1',url).href,apiKey:'test-only',model:'test-model',thinking:'off',reasoning:false,input:['text','image']}],source,'configure');
   await evaluate(`globalThis.toolEvents=[];chrome.runtime.onMessage.addListener(m=>{if(m.type==='engine-event')toolEvents.push(m.event);});`);
+  await browser('tab',sourcePage);await browser('reload');
   const call=async(name,args={},chat=source)=>{
-    await engine('agent',[command(name,args)],chat,'prompt');
+    await browser('tab',sourcePage);await sendFromOverlay(browser,evaluate,command(name,args),{chatId:chat});
     const history=await engine('agent',[],chat,'history');
     const result=history.entries.flatMap(entry=>entry.model||[]).findLast(m=>m.role==='toolResult');
     assert.equal(result.toolName,name);return result;
@@ -148,7 +149,7 @@ try{
   await browser('wait','--fn',`${root}.querySelector('#tool-result-images img')?.naturalWidth===1`);
   await evaluate(`${root}.getElementById('tool-dialog-close').click()`);
   result=await call('read',{path,limit:1});assert.match(text(result),/^one/);
-  await engine('agent',[],second,'reset');
+  await call('bash',{command:'true'},second);await engine('agent',[],second,'reset');
   result=await call('bash',{command:`test ! -e ${quote(path)}`},second);assert.equal(result.isError,false);
   await engine('deleteChat',[child]);
   // Actual guest Wasm trap (not a mocked Worker). Built with pinned clang from:
