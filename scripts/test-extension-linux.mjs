@@ -71,10 +71,16 @@ try{
   await evaluate(`globalThis.toolEvents=[];chrome.runtime.onMessage.addListener(m=>{if(m.type==='engine-event')toolEvents.push(m.event);});`);
   await browser('tab',sourcePage);await browser('reload');
   const call=async(name,args={},chat=source)=>{
+    const before=new Set((await engine('agent',[],chat,'history')).entries.map(entry=>entry.id));
     await browser('tab',sourcePage);await sendFromOverlay(browser,evaluate,command(name,args),{chatId:chat});
-    const history=await engine('agent',[],chat,'history');
-    const result=history.entries.flatMap(entry=>entry.model||[]).findLast(m=>m.role==='toolResult');
-    assert.equal(result.toolName,name);return result;
+    const deadline=Date.now()+120000;
+    while(Date.now()<deadline){
+      const history=await engine('agent',[],chat,'history');
+      const result=history.entries.filter(entry=>!before.has(entry.id)).flatMap(entry=>entry.model||[]).findLast(m=>m.role==='toolResult');
+      if(result){assert.equal(result.toolName,name);return result;}
+      await new Promise(resolve=>setTimeout(resolve,100));
+    }
+    throw Error('No new tool result for '+name);
   };
   const text=result=>result.content.filter(p=>p.type==='text').map(p=>p.text).join('\n');
   let fetched=await call('bash',{command:`curl -fsS '${new URL('/curl-model',url).href}' > fetched.html; cat fetched.html`});

@@ -46,7 +46,7 @@ async function isolated(page,func,args){
   return control.evaluate('(async()=>{const [result]=await chrome.scripting.executeScript({target:{tabId:'+tabId+'},world:"ISOLATED",func:'+func.toString()+',args:['+JSON.stringify(args??null)+']});return {value:result.result,documentId:result.documentId};})()');
 }
 async function choose(page,close=true){await openHistory(page);const picker=page.frameLocator('iframe[title="历史对话"]');await picker.locator('button[data-ref]').first().waitFor();await page.screenshot({path:join(output,'picker-'+cases.length+'.png')});if(close){await picker.locator('button[data-ref="'+encodeURIComponent(JSON.stringify(['127.0.0.1',1]))+'"]').click();await page.locator('iframe[title="历史对话"]').waitFor({state:'detached'});}}
-async function closePicker(page){if(await page.locator('iframe[title="历史对话"]').count()){await page.frameLocator('iframe[title="历史对话"]').locator('#close').click();await page.locator('iframe[title="历史对话"]').waitFor({state:'detached'});}}
+async function closePicker(page){if(await page.locator('iframe[title="历史对话"]').count()){const close=page.frameLocator('iframe[title="历史对话"]').locator('#close');await close.focus();await close.screenshot({path:join(output,'picker-close-'+cases.length+'.png')});await close.press('Enter');await page.locator('iframe[title="历史对话"]').waitFor({state:'detached'});}}
 let cdp;
 async function restart(action,{closeEngine=false}={}){
   const before=(await cdp.send('Target.getTargets')).targetInfos,engine=before.find(target=>target.url.endsWith('/engine.html'));
